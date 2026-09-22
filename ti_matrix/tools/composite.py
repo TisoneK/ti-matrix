@@ -59,6 +59,13 @@ class CompositeEnvironment:
         # The answer belongs to the name the engine used, not to the name the source knows.
         return obs if own.tool == action.tool else Observation(action, obs.ok, obs.text, obs.predicted)
 
+    def close(self) -> None:
+        """Close every environment under this one that has something to close."""
+        for environment in self._envs:
+            closer = getattr(environment, "close", None)
+            if callable(closer):
+                closer()
+
     def _env_for(self, provider: str):
         for e in self._envs:
             if getattr(e, "name", "environment") == provider:

@@ -20,6 +20,7 @@ from typing import Any, Iterable
 # once it has been tried enough times to mean something. Deleting a candidate the model would have tried is a
 # real cost, so the bar is deliberately more than one early failure.
 HOPELESS_TRIES = 3
+REFUSED_TRIES = 3  # how often an action must be proposed-and-predicted before it stops being proposed
 _NEUTRAL_PRIOR = 0.5  # an action nobody has tried yet sits in the middle: worth exploring, not preferred
 _SELECT_WEIGHT = 0.6  # how much of a tool's prior comes from being chosen vs. from the progress it made
 _RECALL_CHARS = 2400  # what a memory answer may cost the model that asked (its evaluator view is 2800)
@@ -79,6 +80,15 @@ class ActionRecord:
     def hopeless(self, min_tries: int = HOPELESS_TRIES) -> bool:
         """Tried enough times to know: never chosen, and never once a real success."""
         return self.probes >= min_tries and self.selections == 0 and self.ok_rate == 0.0
+
+    def refused(self, min_tries: int = REFUSED_TRIES) -> bool:
+        """Proposed over and over and never performed — this engine is not allowed to do it here.
+
+        Not the same as hopeless: nothing was tried, so this says something about permissions rather than about
+        the world. It still earns a place in the same rule, because a proposal that can only ever be predicted
+        costs a model call every time it comes up.
+        """
+        return self.predicted >= min_tries and self.selections == 0 and self.scored == 0
 
     def to_dict(self) -> dict[str, Any]:
         return {"tool": self.tool, "probes": self.probes, "failures": self.failures,
@@ -142,10 +152,13 @@ class Statistics:
         if not isinstance(fp, str) or fp not in self._tools:
             return  # a probe of something no candidate listed: nothing to attribute it to
         if data.get("predicted"):
-            # The engine predicted this action instead of performing it. Remember that it was predicted, and
-            # nothing else: a prediction is not a probe, and its text says nothing about the world.
+            # The engine predicted this action instead of performing it. That is not a fact about the world,
+            # so it moves no probe, failure or score — but it *is* a fact about permission, and counting it on
+            # the tool is what lets a proposal that can only ever be predicted stop being proposed. Measured
+            # live: a model kept proposing an action this engine may not perform, and every proposal cost a
+            # simulation call, which is a model call, until the budget was gone.
             self._predicted.add(fp)
-            self._bump(data, to_tool=False, predicted=1)
+            self._bump(data, predicted=1)
             return
         changes: dict[str, float] = {"probes": 1, "chars": float(data.get("chars") or 0),
                                      "ms": float(data.get("ms") or 0)}
@@ -198,8 +211,11 @@ class Statistics:
     def prior(self, tool: str) -> float:
         return self.record(tool).prior()
 
-    def hopeless_tools(self, min_tries: int = HOPELESS_TRIES) -> set[str]:
-        return {t for t, r in self.by_tool.items() if r.hopeless(min_tries)}
+    def hopeless_tools(self, min_tries: int = HOPELESS_TRIES,
+                       refused_tries: int = REFUSED_TRIES) -> set[str]:
+        """Tools not worth proposing again: tried and always failed, or repeatedly refused and never tried."""
+        return {t for t, r in self.by_tool.items()
+                if r.hopeless(min_tries) or r.refused(refused_tries)}
 
     def avoids(self, *, min_tries: int = 2) -> set[str]:
         """Fingerprints that have failed every time they were really tried — the cross-run avoid list."""

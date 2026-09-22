@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Optional, Sequence
 
 from ti_matrix.protocols import (
     Action,
+    Confirmer,
     Environment,
     Evaluator,
     Goal,
@@ -44,7 +45,8 @@ class EngineBudget:
 class EngineEvent:
     """One step, as a plain record. This is the UI contract: states, actions, outcomes — never reasoning.
 
-    kinds: state | candidates | probe | evaluation | selected | backtrack | needs_confirmation | done | stopped
+    kinds: state | candidates | probe | evaluation | selected | backtrack | confirmation |
+    needs_confirmation | done | stopped
     Tree ids: `state` carries `node` and `parent`; `selected`/`backtrack` name the node they move to.
     """
 
@@ -115,6 +117,7 @@ class StateEngine:
         proposer: Proposer,
         evaluator: Evaluator,
         simulator: Optional[Simulator] = None,
+        confirmer: Optional[Confirmer] = None,
         budget: Optional[EngineBudget] = None,
         terminal_conditions: Sequence[TerminalCondition] = DEFAULT_TERMINAL_CONDITIONS,
     ) -> None:
@@ -122,6 +125,7 @@ class StateEngine:
         self.proposer = proposer
         self.evaluator = evaluator
         self.simulator = simulator
+        self.confirmer = confirmer
         self.budget = budget or EngineBudget()
         self.terminal_conditions = tuple(terminal_conditions)
 
@@ -195,16 +199,30 @@ class StateEngine:
                 known = self.environment.is_read_only(m)
                 if known is None:
                     state = state.with_failed(m.fingerprint())
-                elif not known:
-                    if self.simulator is not None:
-                        predicted[m.fingerprint()] = await self.simulator.predict(state, m)
-                        runnable.append(m)
-                    else:
-                        yield EngineEvent(
-                            "needs_confirmation", {"fp": m.fingerprint(), "move": m.label(), "why": m.why}
-                        )
-                else:
+                    continue
+                if known:
                     runnable.append(m)
+                    continue
+                # An action that changes something. Ask whoever can grant it — a person, a policy — and if
+                # nobody grants it, fall back to predicting it, and failing that, name it and carry on.
+                granted, reason = await self._ask(m)
+                if reason:  # a decision was made, so it belongs in the record like everything else
+                    yield EngineEvent(
+                        "confirmation",
+                        {"fp": m.fingerprint(), "move": m.label(), "granted": granted, "why": reason},
+                    )
+                if granted:
+                    runnable.append(m)
+                elif self.simulator is not None:
+                    predicted[m.fingerprint()] = await self.simulator.predict(state, m)
+                    runnable.append(m)
+                else:
+                    if reason:  # a decision was made against it, so stop proposing it
+                        state = state.with_failed(m.fingerprint())
+                    yield EngineEvent(
+                        "needs_confirmation",
+                        {"fp": m.fingerprint(), "move": m.label(), "why": m.why, "confirmer_said": reason},
+                    )
 
             if not runnable:
                 ctx = self._ctx(state, calls, backtracks, 0, False, 0.0, len(history))
@@ -335,6 +353,16 @@ class StateEngine:
             return state, history, backtracks, None
         parent = state.retreat_to(history[-1])
         return parent, history[:-1], backtracks + 1, EngineEvent("backtrack", {"to_depth": parent.depth})
+
+    async def _ask(self, action: Action) -> tuple[bool, str]:
+        """Ask the confirmer. No confirmer, or one that breaks, is a refusal — never a crash mid-run."""
+        if self.confirmer is None:
+            return False, ""
+        try:
+            granted = bool(await self.confirmer.confirm(action, action.why))
+            return granted, "the confirmer granted it" if granted else "the confirmer refused it"
+        except Exception as exc:  # noqa: BLE001 — a host bug is not a reason to lose the run
+            return False, f"the confirmer raised {type(exc).__name__}: {exc}"
 
     @staticmethod
     def _needs_action(obs: Observation, evaluation, state: AgentState, calls: int) -> EngineEvent:

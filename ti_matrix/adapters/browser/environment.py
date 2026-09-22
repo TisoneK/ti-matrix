@@ -34,6 +34,7 @@ import asyncio
 import hashlib
 import re
 import tempfile
+import threading
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -138,6 +139,7 @@ class BrowserEnvironment:
                              "user_data_dir": user_data_dir, "extra_args": extra_args,
                              "timeout_s": timeout_s}
         self._page = None
+        self._lock = threading.RLock()
         self._owns_chrome = chrome is None
         self.perform = frozenset(READS | set(perform or ()))
         self._actions = _browser_actions(self.perform)
@@ -156,10 +158,10 @@ class BrowserEnvironment:
     async def probe(self, action: Action) -> Observation:
         if action.tool not in self._actions:
             return Observation(action, False, f"no browser action called {action.tool!r}")
-        if not self._actions[action.tool].read_only:
-            return Observation(action, False, (
-                f"{action.tool} would change the page or the browser, and this environment is not allowed to "
-                f"perform it (pass perform={{{action.tool!r}}} to allow it, or confirm it and do it yourself)"))
+        # No guard on `read_only` here, deliberately: that flag answers "may the engine do this *unasked*",
+        # which is the engine's own question to ask. Whether it may be done at all is the host's call —
+        # `perform` says so, and a confirmer may grant one action at the moment it matters. Refusing here as
+        # well made a granted click impossible: the grant was recorded, and the environment threw it away.
         try:
             # The protocol is blocking and the engine probes a fan at once; each call takes the page's lock.
             return Observation(action, *await asyncio.to_thread(self._run, action))
@@ -187,15 +189,22 @@ class BrowserEnvironment:
     # ── the page, started when it is first needed ──
 
     def page(self):
-        if self._page is None:
-            self._chrome = self._chrome or Chrome(**self._chrome_args)
-            self._page = self._chrome.page(url=self.start_url)
-            if self.start_url and self.start_url != "about:blank":
-                # Opening a tab at a URL does not mean the page is there yet. Without this wait the first
-                # read races the load and sees an empty document — which on a live site is not a missing
-                # answer but a wrong one: "this page has no links" about a page full of them.
-                self._page.wait_for_navigation(timeout_s=self.timeout_s)
-        return self._page
+        """The page, started on first use — once, even when three probes ask for it at the same moment.
+
+        The engine probes a fan concurrently, so the first fan has several threads arriving here together. The
+        check-then-create below was not atomic, and each thread that lost the race launched a browser and then
+        dropped its handle: thirty of them were found running on this machine with thirty throwaway profiles.
+        """
+        with self._lock:
+            if self._page is None:
+                self._chrome = self._chrome or Chrome(**self._chrome_args)
+                self._page = self._chrome.page(url=self.start_url)
+                if self.start_url and self.start_url != "about:blank":
+                    # Opening a tab at a URL does not mean the page is there yet. Without this wait the first
+                    # read races the load and sees an empty document — which on a live site is not a missing
+                    # answer but a wrong one: "this page has no links" about a page full of them.
+                    self._page.wait_for_navigation(timeout_s=self.timeout_s)
+            return self._page
 
     def _run(self, action: Action) -> tuple[bool, str]:
         """One action, performed. Raises for a real failure; the caller turns that into an observation."""
@@ -283,11 +292,12 @@ class BrowserEnvironment:
         return True, f"{expression} -> {value}"[:_MAX_OBS]
 
     def _new_tab(self, url: str = "about:blank") -> tuple[bool, str]:
-        self.page()  # a browser has to be running before there is a tab to open
-        if self._page is not None:
-            self._page.close()
-        self._page = self._chrome.page(url=str(url))
-        return True, f"opened a new tab at {self._page.url()}"
+        with self._lock:
+            self.page()  # a browser has to be running before there is a tab to open
+            if self._page is not None:
+                self._page.close()
+            self._page = self._chrome.page(url=str(url))
+            return True, f"opened a new tab at {self._page.url()}"
 
     def _close_tab(self) -> tuple[bool, str]:
         page = self.page()

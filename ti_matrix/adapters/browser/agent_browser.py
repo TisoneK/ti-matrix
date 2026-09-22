@@ -528,11 +528,8 @@ class AgentBrowser:
     async def probe(self, action: Action) -> Observation:
         if action.tool not in self._actions:
             return Observation(action, False, f"no agent-browser action called {action.tool!r}")
-        if not self._actions[action.tool].read_only:
-            return Observation(action, False, (
-                f"{action.tool} would change the page, the browser, or something outside it, and this "
-                f"environment is not allowed to perform it (pass perform={{{action.tool!r}}} to allow it, "
-                f"perform={{'all'}} for everything, or confirm it and do the work yourself)"))
+        # `read_only` is the engine's question — may I do this unasked? — not this method's, so there is no
+        # guard here. See the native environment for what refusing at this level broke.
         try:
             argv = _build(action.tool, action.args)
             stdin = self._stdin(action)

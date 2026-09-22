@@ -29,7 +29,9 @@ Goal ─► State ─► Proposer ─► candidate Actions ─► Environment.pr
 - [Play with it](#play-with-it)
 - [Core concepts](#core-concepts)
 - [Writing an adapter](#writing-an-adapter)
+- [Asking before it acts](#asking-before-it-acts)
 - [Adapters](#adapters)
+- [What happened, afterwards](#what-happened-afterwards)
 - [Layout](#layout)
 - [Status](#status)
 - [**Design notes**](DESIGN.md) — why the engine is shaped this way
@@ -155,6 +157,38 @@ engine = StateEngine(
 
 Rules that keep a run honest: `probe` returns an `Observation` instead of raising (a failed action is information
 the search uses), and an action you mark as not read-only is never performed by the engine.
+
+## Asking before it acts
+
+The engine performs read-only actions freely and will not perform anything else on its own. That used to be a
+dead end: a run that needed a button pressed said so and stopped, and a person had to go and do it. A
+`Confirmer` is the third answer — the engine asks, per action, at the moment it would happen:
+
+```python
+from ti_matrix import StateEngine
+from ti_matrix.adapters.confirm import Granted
+
+engine = StateEngine(env, proposer=..., evaluator=...,
+                     confirmer=Granted(names={"click"}))          # this run may click, when it asks
+confirmer = Granted(fingerprints={Action("click", {"selector": "#buy"}).fingerprint()})
+```
+
+Granting by *name* and granting by *exact action* are different powers, and that is the point: a tool may be
+acceptable in general and one use of it not. The question carries the model's own reason, the answer is an
+`EngineEvent` like everything else — so a run's record shows what it asked and what it was told, not only what
+it did — and a refusal prunes the action so the same question is not asked forever. A confirmer that breaks is
+a refusal with the error in the record, never a crash mid-run.
+
+```
+[confirmation]      click(selector=#go) granted=True  (the confirmer granted it)
+[probe]             click(selector=#go) ok=True  clicked <button> Show the price
+[probe]             page_text() ok=True  Widgets £42.50 Show the price
+[done]              the price is £42.50
+```
+
+From the shell, `--ask click,type` asks at the terminal (a blank answer, or nobody there, is a refusal) and
+`--perform click` says yes in advance. Everything else is unchanged: no confirmer and no grant means an action
+that changes something is predicted, or named, and never performed.
 
 ## Adapters
 
@@ -309,6 +343,43 @@ by default (`prefer="user"`), or the other way round, and a replacement named di
 (`ActionSpec("read_local_file", ..., supersedes="read_file")`). `resolution()` reports what was kept, renamed and
 dropped, so the model's tool list is never a mystery.
 
+From the shell, `--remember FILE` is the whole of it: read the record, order proposals by it, offer `recall`,
+save it back — even when the run fails.
+
+What that buys, measured on a live site with a real hosted model rather than in a benchmark: the record
+accumulates (6 tools known after one run, 10-11 probes added per run), and it changes what gets proposed — a
+model kept proposing an action this engine may not perform, which cost a simulation call every time it came up,
+and after three of those the action left the fan for good. What it did *not* do is make those particular runs
+cheaper: on an open-ended goal ("what does this site offer, and what are its main sections?") every run spent
+its whole budget, because the cost there is the model exploring and the evaluator never judging the goal
+settled. Narrow goals against the same live site settle in **two model calls** — "what are the nav links on
+this page?" and "what price is shown for EUR/USD?" both did, with answers taken from the page. The honest
+summary is that the record's levers are ordering and dropping, and neither bounds exploration; if you want
+open-ended runs to be cheap, the lever is the evaluator's judgment, not the memory.
+
+## What happened, afterwards
+
+Every step of a run is an event, and nothing used to keep them — a run existed while it printed and then it was
+gone. `--record FILE` writes one JSON line per event, and the same module reads it back:
+
+```bash
+python -m ti_matrix.adapters.browser.cli "what is the price?" --url https://example.com --record run.jsonl
+python -m ti_matrix.adapters.run_log run.jsonl
+```
+
+```
+12 events, 2 model calls, 3 probes, 0 backtracks
+settled: the price is £42.50
+probes, in order:
+  ok  click(selector=#go) — clicked <button> Show the price
+  ok  page_text() — Widgets £42.50 Show the price
+facts established (2): …
+```
+
+That is a run's *record*, not its state: resuming a run means saving the state it reached, which is a different
+thing and is not pretended here. What this is for is reading a run after the fact — including a run that failed,
+whose log stops with the reason.
+
 ## Layout
 
 ```
@@ -326,6 +397,9 @@ ti_matrix/            the engine — standard library only, no host application
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
     ├── browser/             a real browser: WebSocket + DevTools Protocol, standard library only
     ├── openai_compat.py     any OpenAI-compatible endpoint
+    ├── confirm.py           answering the engine when it asks to do something that changes the world
+    ├── session.py           what a command carries in and leaves behind: --remember, --record, --ask
+    ├── run_log.py           a run written down, and read back: python -m ti_matrix.adapters.run_log FILE
     ├── stats_file.py        the learning record on disk, as one JSON document
     ├── stats_sqlite.py      the same record in SQLite, for more than one writer
     └── files_cli.py / ledger_cli.py / browser/cli.py   run a goal from the shell
@@ -342,18 +416,18 @@ explains why each piece is shaped the way it is.
 
 **v0.1** — the engine, the search with backtracking, the simulator, five example adapters (a local filesystem, a
 project's Context Ledger, a real browser, a hidden maze, any OpenAI-compatible endpoint), the tool set, the learning
-layer, and
-four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 187 tests cover the state, the loop, the
-terminal conditions, the host boundary, precedence between sources of tools, what the engine learns from its own
-events, the model port, a world that makes it retreat, the WebSocket and DevTools plumbing, the CLI contract against
-the real tool, and the
-playgrounds. Green on Python 3.10 through 3.13, and on Windows with 3.11; the browser tests skip themselves where
-no browser is installed.
+layer, the confirmer, and four playgrounds to drive them from a page. Run end-to-end against real model providers,
+a local filesystem, a real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI — including live
+against a real site with a hosted model, where narrow goals settle in two model calls. 199 tests cover the state,
+the loop, the terminal conditions, the host boundary, what it asks before it acts, precedence between sources of
+tools, what the engine learns from its own events, the model port, a world that makes it retreat, the WebSocket and
+DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10 through 3.13,
+and on Windows with 3.11; the browser tests skip themselves where no browser is installed.
 
-Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
-interface), resuming a run from persisted engine state, executing a confirmed action after simulating it, and a
-role overlay so a ledger run can check in and out like any other session.
+Next, in rough order: **the evaluator's judgment on open-ended goals**, which the live runs said is where the cost
+actually is (the record orders and drops proposals; it cannot bound exploration), then resuming a run from
+persisted state (`--record` is the substrate, and saving the state itself is the missing half), then a wider beam
+(a real search strategy, once a second strategy exists to justify the interface).
 
 ## License
 

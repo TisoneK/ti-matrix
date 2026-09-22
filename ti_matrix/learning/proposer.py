@@ -12,7 +12,9 @@ Three changes, each of which a caller can turn off:
     could reorder the candidates, the useful ones may already be gone. Asking for two more costs output
     tokens inside the same model call, not another call.
   - **Hopeless tools are dropped.** A tool really tried at least ``min_tries`` times here, never chosen and
-    never once a real success does not deserve a slot that a plausible action could use.
+    never once a real success does not deserve a slot that a plausible action could use — and neither does one
+    that keeps being proposed and only ever *predicted*, since this engine cannot perform it at all and every
+    proposal costs a model call.
   - **The rest is ordered by prior** — how often the tool has been chosen, and how much progress it produced,
     with an untried tool sitting neutrally in the middle rather than last, because exploring is not a mistake.
 

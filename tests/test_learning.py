@@ -87,6 +87,16 @@ async def test_it_drops_a_hopeless_tool_so_the_fan_spends_its_slots_on_plausible
 
 
 @pytest.mark.asyncio
+async def test_a_tool_this_engine_may_never_perform_stops_being_proposed():
+    """Live case: `evaluate` is declared a write, so it was predicted every time it came up — and every
+    prediction is a model call. After enough of them it should leave the fan."""
+    stats = Statistics()
+    stats.by_tool["evaluate"] = ActionRecord("evaluate", predicted=3)
+    proposer = LearningProposer(FixedProposer(["evaluate", "snapshot"]), stats)
+    assert [m.tool for m in await proposer.propose(None, 3, set())] == ["snapshot"]
+
+
+@pytest.mark.asyncio
 async def test_it_orders_by_prior_so_a_tool_that_has_paid_off_lands_inside_a_narrow_fan():
     stats = Statistics()
     stats.by_tool["good"] = type(stats.record("good"))("good", probes=2, selections=2, progress=2.0, scored=2)

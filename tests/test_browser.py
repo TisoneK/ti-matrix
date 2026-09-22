@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from ti_matrix import Action, EngineBudget, Evaluation, Goal, StateEngine
+from ti_matrix.adapters.confirm import Granted
 from ti_matrix.adapters.browser import (
     BrowserEnvironment,
     BrowserError,
@@ -276,21 +277,6 @@ def test_the_boundary_is_reads_by_default_and_a_host_can_grant_more():
     assert granted.is_read_only(Action("click", {})) is True
     assert granted.is_read_only(Action("type", {})) is True
     assert granted.is_read_only(Action("evaluate", {})) is False  # not asked for, so still not allowed
-
-
-@pytest.mark.asyncio
-async def test_a_write_action_is_refused_without_touching_a_browser_and_says_how_to_allow_it():
-    """No browser is launched here: the refusal happens before anything is started."""
-    env = BrowserEnvironment("https://example.com")
-    obs = await env.probe(Action("click", {"selector": "#buy"}))
-    assert obs.ok is False and "would change the page" in obs.text and "perform={'click'}" in obs.text
-    assert env._page is None and env._chrome is None  # nothing was started to find that out
-
-    unknown = await env.probe(Action("teleport", {}))
-    assert unknown.ok is False and "no browser action called" in unknown.text
-
-
-# ─── a real browser, a real page, and the engine in the loop ────────────────
 
 
 @pytest.fixture()
@@ -600,3 +586,31 @@ def test_an_actions_hint_is_a_shape_not_a_value():
     offenders = [spec.name for spec in everything
                  if re.search(r"https?://[a-z0-9-]+\.[a-z]{2,}", spec.args_hint or "")]
     assert not offenders, f"these hints contain a URL a model can copy verbatim: {offenders}"
+
+
+@WITH_BROWSER
+@pytest.mark.asyncio
+async def test_a_confirmer_can_grant_one_click_and_the_page_really_changes(page_server, tmp_path):
+    """The flow that was broken: the engine asks, is told yes, and performs it.
+
+    Found by running it rather than by a test: both browser environments refused any action their table
+    marked read-only, so a granted click was recorded and then thrown away by the environment itself.
+    """
+    env = BrowserEnvironment(page_server, headless=True, screenshot_dir=tmp_path)  # reads only, no perform
+    confirmer = Granted(names={"click"})
+    try:
+        engine = StateEngine(env,
+                             proposer=ReadsThePage(("click", {"selector": "#go"}), ("page_text", {})),
+                             evaluator=KnowsTheAnswer("£42.50", partial="clicked"),
+                             confirmer=confirmer, budget=EngineBudget(max_model_calls=6))
+        events = [e async for e in engine.run(Goal("what is the price?"))]
+
+        decision = next(e for e in events if e.kind == "confirmation")
+        assert decision.data["granted"] is True and decision.data["move"] == "click(selector=#go)"
+        click = next(e for e in events if e.kind == "probe" and e.data["move"] == "click(selector=#go)")
+        assert click.data["ok"] is True and click.data["predicted"] is False  # really performed
+        assert events[-1].kind == "done" and events[-1].data["answer"] == "£42.50"
+        assert env.page().find("#price")["text"] == "£42.50"  # and the page really changed
+        assert confirmer.asked[0][0] == "click(selector=#go)"
+    finally:
+        env.close()

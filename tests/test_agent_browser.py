@@ -15,6 +15,7 @@ import pytest
 from ti_matrix import Action, CompositeEnvironment, EngineBudget, Evaluation, Goal, StateEngine
 from ti_matrix.adapters.browser import BrowserEnvironment
 from ti_matrix.adapters.browser.agent_browser import READS, AgentBrowser
+from ti_matrix.adapters.confirm import Granted
 
 HAS_CLI = shutil.which("agent-browser") is not None
 FAKE_CLI = '''#!{python}
@@ -232,14 +233,6 @@ def test_the_boundary_matches_the_native_environment():
 
 
 @pytest.mark.asyncio
-async def test_a_write_is_refused_before_anything_is_run(fake_cli):
-    env = AgentBrowser(command=fake_cli)
-    obs = await env.probe(Action("click", {"selector": "@e3"}))
-    assert obs.ok is False and "would change the page" in obs.text and "perform={'click'}" in obs.text
-    assert (await env.probe(Action("teleport", {}))).ok is False
-
-
-@pytest.mark.asyncio
 async def test_a_cli_that_is_not_installed_says_so_rather_than_failing_oddly():
     env = AgentBrowser(command="definitely-not-a-real-browser-cli")
     assert env.available() is False
@@ -277,6 +270,24 @@ async def test_a_long_answer_is_truncated_to_what_a_model_can_read(fake_cli):
 
     empty = await env.probe(Action("read", {"url": "quiet"}))  # the fake prints nothing for this
     assert empty.ok and empty.text == "ok (no output)"
+
+
+@pytest.mark.asyncio
+async def test_a_granted_write_really_reaches_the_cli(fake_cli):
+    """The other half of the boundary: refused without a grant (the test above), run with one.
+
+    The fake echoes the arguments it was given, so this proves the click command was actually executed rather
+    than merely recorded as permitted.
+    """
+    env = AgentBrowser(command=fake_cli, session="t4")
+    engine = StateEngine(env, proposer=OneMove("click", {"selector": "@e1"}),
+                         evaluator=Until("argv: t4 click"), confirmer=Granted(names={"click"}),
+                         budget=EngineBudget(max_model_calls=4))
+    events = [e async for e in engine.run(Goal("press it"))]
+
+    assert any(e.kind == "confirmation" and e.data["granted"] is True for e in events)
+    probe = next(e for e in events if e.kind == "probe")
+    assert probe.data["ok"] is True and "argv: t4 click" in probe.data["excerpt"]
 
 
 # ─── the engine over the CLI, and over both sources at once ─────────────────
@@ -404,8 +415,11 @@ async def test_the_real_cli_reads_a_real_page(tmp_path):
         text = await env.probe(Action("read", {}))
         assert text.ok or "30 days" in text.text  # `read` fetches by URL; either way it must not crash
 
-        refused = await env.probe(Action("click", {"selector": "#buy"}))
-        assert refused.ok is False and "would change the page" in refused.text
+        # Asked directly, this performs what it is told: the boundary belongs to the engine, which asks a
+        # confirmer or refuses, and to the host, which says what a run may do unasked. See
+        # test_a_run_that_would_need_a_click_is_stopped_rather_than_clicking for the refusal itself.
+        clicked = await env.probe(Action("click", {"selector": "#buy"}))
+        assert clicked.ok, clicked.text
     finally:
         # closing is a write, so the host has to grant it — the same rule as everywhere else
         closer = AgentBrowser(session=f"ti-matrix-test-{os.getpid()}", perform={"close"})
