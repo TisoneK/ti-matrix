@@ -104,7 +104,27 @@ def test_the_engine_core_reads_no_ambient_configuration():
     assert not offenders, f"the engine core reads ambient configuration: {offenders}"
 
 
-@pytest.mark.parametrize("module", ["ti_matrix", "ti_matrix.state", "ti_matrix.search", "ti_matrix.model", "ti_matrix.protocols", "ti_matrix.simulator"])
+CORE_MODULES = [
+    "ti_matrix",
+    "ti_matrix.state",
+    "ti_matrix.search",
+    "ti_matrix.model",
+    "ti_matrix.protocols",
+    "ti_matrix.simulator",
+    # the tool set and the learning layer are core too: their rules and their counters are the engine's,
+    # and the persistence that makes them survive a run lives in adapters, where every other file does.
+    "ti_matrix.tools",
+    "ti_matrix.tools.registry",
+    "ti_matrix.tools.composite",
+    "ti_matrix.tools.engine_tools",
+    "ti_matrix.learning",
+    "ti_matrix.learning.statistics",
+    "ti_matrix.learning.proposer",
+    "ti_matrix.learning.cache",
+]
+
+
+@pytest.mark.parametrize("module", CORE_MODULES)
 def test_every_core_module_imports_without_a_host_on_the_path(module):
     import importlib
 

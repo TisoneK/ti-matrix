@@ -29,10 +29,19 @@ Nothing in this package knows what an environment is. Adapters supply one:
     async for event in engine.run(Goal("how many python files are under ~/code?")):
         print(event.to_dict())
 
-The public surface is the contracts (``protocols``), the state (``state``), the loop (``search``), and the
-model's two jobs (``model``). If you are writing an adapter, you need ``Environment``, a ``ModelPort``, and
-``build_engine`` (or the ``StateEngine`` constructor directly).
+Two optional layers extend that picture without changing it, and both are wrappers rather than engine
+features — a run that uses neither behaves exactly as before:
+
+    tools      several sources of actions resolved into one tool set (``ToolSet``), and the engine's own
+               memory tool wrapped around any environment (``EngineTools``) — see ``ti_matrix.tools``
+    learning   what previous runs established, counted from the events they emitted (``Statistics``), and
+               the two wrappers that spend it: ``LearningProposer`` and ``CachingEnvironment``
+
+The public surface is the contracts (``protocols``), the state (``state``), the loop (``search``), the model's
+two jobs (``model``), the tool set (``tools``), and what the engine learns from its own runs (``learning``).
+If you are writing an adapter, you need ``Environment``, a ``ModelPort``, and the ``StateEngine`` constructor.
 """
+from ti_matrix.learning import ActionRecord, CachingEnvironment, LearningProposer, Statistics
 from ti_matrix.model import LLMEvaluator, LLMMoveProposer, ModelPort, parse_json
 from ti_matrix.protocols import (
     Action,
@@ -60,6 +69,15 @@ from ti_matrix.search import (
 )
 from ti_matrix.simulator import LLMSimulator
 from ti_matrix.state import AgentState
+from ti_matrix.tools import (
+    CompositeEnvironment,
+    EngineTools,
+    Memory,
+    Resolution,
+    ToolSet,
+    ToolSetError,
+    ToolSource,
+)
 
 __all__ = [
     # contracts
@@ -73,4 +91,8 @@ __all__ = [
     "DEFAULT_TERMINAL_CONDITIONS", "BudgetExhausted", "NoRunnableActions", "NothingImproves",
     # model layer
     "ModelPort", "LLMMoveProposer", "LLMEvaluator", "LLMSimulator", "parse_json",
+    # tool sets
+    "CompositeEnvironment", "EngineTools", "Memory", "Resolution", "ToolSet", "ToolSetError", "ToolSource",
+    # what the engine learns from its own runs
+    "ActionRecord", "CachingEnvironment", "LearningProposer", "Statistics",
 ]

@@ -42,12 +42,19 @@ class ActionSpec:
 
     ``read_only`` is the safety boundary: an action that is not read-only is never performed as a probe —
     it is predicted by a Simulator when one is configured, and otherwise surfaced for confirmation.
+
+    ``supersedes`` is how several sources of actions coexist without ambiguity when two of them offer the
+    same thing (see ``ti_matrix.tools``): the name of the tool this one is meant to replace, so a
+    replacement does not have to be named identically to what it replaces. It never reaches the model's
+    prompt — it is a resolution input, not a description. The source that supplies a tool is the
+    ``ToolSource`` holding it, which is the one place that fact is stated.
     """
 
     name: str
     description: str
     args_hint: str = ""
     read_only: bool = True
+    supersedes: str = ""
 
 
 def render_action_specs(specs: Sequence[ActionSpec] | dict[str, ActionSpec]) -> str:
@@ -58,7 +65,13 @@ def render_action_specs(specs: Sequence[ActionSpec] | dict[str, ActionSpec]) -> 
 
 @dataclass(frozen=True)
 class Action:
-    """Something the engine could do next. ``tool == "finish"`` is the settled-goal action."""
+    """Something the engine could do next.
+
+    No action name is reserved, and no action settles a goal: the evaluator's ``done`` does that, and it
+    requires an answer grounded in real facts. That is deliberate — a model able to *propose* finishing
+    would hold the one decision the search exists to keep honest. A proposal named ``finish`` is simply an
+    action no environment knows, and is remembered as a failed move like any other.
+    """
 
     tool: str
     args: dict = field(default_factory=dict)
