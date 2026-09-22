@@ -214,12 +214,30 @@ env = CompositeEnvironment(BrowserEnvironment("about:blank"), AgentBrowser(sessi
 print(env.resolution().to_text())   # both offer click, screenshot and find: this says who won each
 ```
 
-`AgentBrowser` exposes the CLI's surface as 38 actions — the accessibility-tree `snapshot` with its `@eN` refs,
-`find` by role or text instead of markup, `get` and `is` for element state, tabs, cookies, storage, console and
-page errors, axe-core audits, Web Vitals, PDF — and holds the same boundary: 23 of them read, 15 change
-something and are refused unless `perform` names them. It installs nothing on its behalf: a missing CLI is a
-failed probe that says how to get one, and every action runs in a session of its own so a run cannot navigate
-away from a page you left open.
+`AgentBrowser` exposes the CLI's whole surface as 76 actions and holds the same boundary: **39 read** and are
+performed, **37 change something** and are refused unless you say so. `perform={"all"}` says so for everything
+— and that word is doing real work, since it is the difference between an engine that can look at a page and
+one you have handed the machine. `only={"snapshot", "get", "click"}` narrows the other way, which matters when
+a run needs four tools and not seventy-six.
+
+What is in there: the accessibility-tree `snapshot` with its `@eN` refs and `find` by role or text rather than
+markup; `get` and `is` for element state; tabs, navigation, waiting, screenshots, PDF; `network_requests` and
+full request bodies, HAR recording, mocking or blocking a route; cookies and storage; console output and page
+errors; axe-core audits and Core Web Vitals; trace, profiler and video recording; the React component tree and
+render profiling; the CLI's own `confirm`/`deny` queue, which is the same idea as the engine's
+`needs_confirmation` one layer down. It installs nothing on its behalf — a missing CLI is a failed probe that
+says how to get one — and every action runs in a session of its own, so a run cannot navigate away from a page
+you left open.
+
+The classification is the one question this project asks everywhere else: does performing it hand the run
+something to observe, or does it change the world it is observing? A HAR file, a trace and a screenshot are
+reads. So are a page comparison and a console dump. Not reads: the mouse, the clipboard, `batch` (whatever it
+contains), `eval`, anything that configures the browser rather than observing it, anything that reaches
+outside it — `plugin_add` and `plugin_run` install and execute external code; `auth_save` and `auth_login`
+write credentials — and `confirm`/`deny`, because approving an action is not observing one.
+
+A password never travels through an action's arguments. `auth_save` takes the *name* of an environment variable
+and pipes the value in on stdin, so it reaches neither the model, nor the event log, nor `ps`.
 
 This is what the tool registry is for rather than an alternative to it. The package does not reimplement
 axe-core, the React DevTools protocol or network interception; it exposes what you already have as actions an
@@ -392,9 +410,9 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
 project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 161 tests cover the state, the loop, the terminal conditions, the
+real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 165 tests cover the state, the loop, the terminal conditions, the
 host boundary, precedence between sources of tools, what the engine learns from its own events, the WebSocket
-and DevTools plumbing, the CLI contract, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
+and DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
 themselves where no browser is installed.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the

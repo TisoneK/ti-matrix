@@ -69,7 +69,61 @@ def test_every_action_becomes_the_command_it_says():
         ("pdf", {"path": "p.pdf"}, "pdf p.pdf"),
         ("tabs", {"action": "list"}, "tab list"),
         ("cookies_get", {}, "cookies get"),
-        ("storage_get", {"action": "local"}, "storage local"),
+        ("storage_get", {"kind": "local"}, "storage local"),
+        ("storage_get", {"kind": "session", "key": "token"}, "storage session token"),
+        ("storage_set", {"kind": "local", "key": "t", "value": "v"}, "storage local set t v"),
+        ("storage_clear", {"kind": "session"}, "storage session clear"),
+        ("vitals", {"url": "https://x.test"}, "vitals https://x.test"),
+        ("a11y", {"tags": "wcag2a,wcag2aa", "selector": "#main"}, "a11y --tags wcag2a,wcag2aa --selector #main"),
+        ("network_requests", {"filter": "**/api/**", "status": "4xx"}, "network requests --filter **/api/** --status 4xx"),
+        ("network_request", {"id": "r42"}, "network request r42"),
+        ("network_route", {"url": "**/api/users", "body": '{"users":[]}'}, 'network route **/api/users --body {"users":[]}'),
+        ("network_route", {"url": "**/track", "abort": True}, "network route **/track --abort"),
+        ("network_unroute", {"url": "**/api/**"}, "network unroute **/api/**"),
+        ("har", {"action": "stop", "path": "/tmp/t.har"}, "network har stop /tmp/t.har"),
+        ("trace", {"action": "start"}, "trace start"),
+        ("profiler", {"action": "stop", "path": "p.json"}, "profiler stop p.json"),
+        ("record", {"action": "start", "path": "run.webm", "url": "https://x.test"}, "record start run.webm https://x.test"),
+        ("react", {"action": "renders", "id": "stop"}, "react renders stop"),
+        ("react", {"action": "suspense", "only_dynamic": True}, "react suspense --only-dynamic"),
+        ("webmcp_list", {}, "webmcp list"),
+        ("webmcp_result", {"id": "i1"}, "webmcp result i1"),
+        ("webmcp_invoke", {"tool": "search", "params": '{"q":"x"}', "detach": True},
+         'webmcp invoke search --params {"q":"x"} --detach'),
+        ("session", {"action": "list"}, "session list"),
+        ("plugins", {}, "plugin list"),
+        ("plugin_show", {"name": "vault"}, "plugin show vault"),
+        ("plugin_add", {"ref": "agent-browser-plugin-vault", "name": "vault"},
+         "plugin add agent-browser-plugin-vault --name vault"),
+        ("plugin_run", {"name": "c", "request": "c.solve", "payload": "{}"}, "plugin run c c.solve --payload {}"),
+        ("diff_snapshot", {"baseline": "b.txt"}, "diff snapshot --baseline b.txt"),
+        ("diff_screenshot", {"baseline": "b.png"}, "diff screenshot --baseline b.png"),
+        ("diff_url", {"first": "https://a", "second": "https://b"}, "diff url https://a https://b"),
+        ("configure", {"setting": "viewport", "value": 1920, "second": 1080}, "set viewport 1920 1080"),
+        ("configure", {"setting": "offline", "value": "on"}, "set offline on"),
+        ("mouse", {"action": "move", "x": 0, "y": 100}, "mouse move 0 100"),
+        ("mouse", {"action": "wheel", "dy": 600}, "mouse wheel 600"),
+        ("mouse", {"action": "down", "button": "right"}, "mouse down right"),
+        ("cookies_set", {"name": "s", "value": "v", "domain": ".x.test", "secure": True, "http_only": True},
+         "cookies set s v --domain .x.test --httpOnly --secure"),
+        ("cookies_clear", {}, "cookies clear"),
+        ("auth_list", {}, "auth list"),
+        ("auth_show", {"name": "app"}, "auth show app"),
+        ("auth_save", {"name": "app", "username": "me", "password_env": "APP_PW"},
+         "auth save app --username me --password-stdin"),
+        ("auth_login", {"name": "app", "credential_provider": "vault", "item": "My App"},
+         "auth login app --credential-provider vault --item My App"),
+        ("auth_delete", {"name": "app"}, "auth delete app"),
+        ("clipboard_read", {}, "clipboard read"),
+        ("clipboard_write", {"text": "hi there"}, "clipboard write hi there"),
+        ("clipboard_paste", {}, "clipboard paste"),
+        ("removeinitscript", {"id": "s1"}, "removeinitscript s1"),
+        ("batch", {"commands": ["open https://x", "snapshot -i"], "bail": True},
+         "batch --bail open https://x snapshot -i"),
+        ("confirm", {"id": "c_123"}, "confirm c_123"),
+        ("deny", {"id": "c_123"}, "deny c_123"),
+        ("pushstate", {"url": "/settings"}, "pushstate /settings"),
+        ("highlight", {"selector": "@e5"}, "highlight @e5"),
         ("diff_snapshot", {}, "diff snapshot"),
         ("open", {"url": "about:blank"}, "open about:blank"),
         ("scroll", {"direction": "down", "pixels": 600}, "scroll down 600"),
@@ -102,6 +156,50 @@ def test_no_action_can_smuggle_an_argument_into_the_command():
     assert argv[-1] == "@e1; rm -rf / #"  # one argv entry, not a shell string
     assert argv.count("@e1; rm -rf / #") == 1 and " " not in argv[-2]
     assert argv == ["agent-browser", "--session", "ti-matrix", "click", "@e1; rm -rf / #"]
+
+
+def test_the_read_set_and_the_table_agree():
+    """Two invariants that a 76-row table invites breaking.
+
+    A name in READS with no spec is unreachable — a read nothing can call. And an action whose name is not
+    mapped to a subcommand reaches the CLI as `auth_save`, which it does not know: with no arguments, the only
+    tokens left after the session are subcommand tokens, and the CLI's subcommands never contain an
+    underscore.
+    """
+    env = AgentBrowser()
+    offered = set(env.tools())
+    assert set(READS) <= offered, f"declared as reads but not offered: {sorted(set(READS) - offered)}"
+    for name in sorted(offered):
+        after_binary = env.argv(name, {})[3:]  # drop the binary, --session and its value
+        assert after_binary, f"{name} produces no subcommand"
+        assert "_" not in " ".join(after_binary), f"{name} is not mapped to a real subcommand: {after_binary}"
+
+
+def test_a_grant_widens_and_the_only_set_narrows():
+    base = AgentBrowser()
+    assert sum(1 for s in base.tools().values() if s.read_only) == len(READS)
+    assert base.is_read_only(Action("click", {})) is False
+
+    one = AgentBrowser(perform={"click"})
+    assert one.is_read_only(Action("click", {})) is True
+    assert one.is_read_only(Action("fill", {})) is False  # a grant is specific, never a mood
+
+    everything = AgentBrowser(perform={"all"})
+    assert all(spec.read_only for spec in everything.tools().values())
+    assert len(everything.tools()) == len(base.tools())  # the same surface, all of it performable
+
+    narrow = AgentBrowser(only={"snapshot", "get", "click"})
+    assert sorted(narrow.tools()) == ["click", "get", "snapshot"]
+    assert narrow.is_read_only(Action("click", {})) is False  # narrowing does not grant
+
+
+def test_the_cli_keeps_its_own_confirmation_queue_and_a_host_can_answer_it():
+    """`--confirm-actions` makes the CLI hold certain actions; confirm and deny answer it. Same idea as the
+    engine's needs_confirmation, one layer down, and a host running the CLI that way needs these."""
+    env = AgentBrowser(perform={"confirm", "deny"})
+    assert env.argv("confirm", {"id": "c_8f3a1234"})[3:] == ["confirm", "c_8f3a1234"]
+    assert env.argv("deny", {"id": "c_8f3a1234"})[3:] == ["deny", "c_8f3a1234"]
+    assert AgentBrowser().is_read_only(Action("confirm", {})) is False  # approving is not a read
 
 
 # ─── the boundary, the same rule as the native environment ──────────────────
@@ -298,6 +396,71 @@ async def test_the_real_cli_reads_a_real_page(tmp_path):
         refused = await env.probe(Action("click", {"selector": "#buy"}))
         assert refused.ok is False and "would change the page" in refused.text
     finally:
-        await env.probe(Action("open", {"url": "about:blank"}))
-        AgentBrowser(session=f"ti-matrix-test-{os.getpid()}")._run(Action("close", {}), [])
+        # closing is a write, so the host has to grant it — the same rule as everywhere else
+        closer = AgentBrowser(session=f"ti-matrix-test-{os.getpid()}", perform={"close"})
+        closed = await closer.probe(Action("close", {}))
+        assert closed.ok, closed.text
+        server.shutdown()
+
+
+# The argv forms are written from the CLI's own help output, which is exactly where a wrong guess hides: a
+# flag named `--same-site` instead of `--sameSite` reads perfectly and fails at run time. So every read action
+# is fired at the real CLI and checked for the four things it says when it does not know what it was told.
+_SYNTAX_MARKERS = ("Unknown command", "Unknown subcommand", "Valid options:", "Missing arguments for")
+_READ_ARGS: dict[str, dict] = {
+    "read": {"url": "{url}"}, "get": {"what": "text", "selector": "h1"},
+    "is_state": {"what": "visible", "selector": "#buy"}, "find": {"locator": "text", "value": "Refunds"},
+    "wait": {"target": "200"}, "tabs": {"action": "list"}, "highlight": {"selector": "#buy"},
+    "network_request": {"id": "r1"}, "har": {"action": "start"}, "trace": {"action": "start"},
+    "profiler": {"action": "start"}, "react": {"action": "tree"}, "webmcp_list": {},
+    "webmcp_result": {"id": "i1"}, "session": {"action": "list"}, "plugins": {},
+    "plugin_show": {"name": "nope"}, "diff_snapshot": {}, "diff_url": {"first": "{url}", "second": "{url}"},
+    "open": {"url": "{url}"}, "scroll": {"direction": "down", "pixels": 100}, "scroll_to": {"selector": "#buy"},
+    "vitals": {"url": "{url}"}, "a11y": {"url": "{url}"}, "storage_get": {"kind": "local"},
+    "auth_show": {"name": "nope"}, "screenshot": {"path": "{tmp}/s.png"}, "pdf": {"path": "{tmp}/s.pdf"},
+    "record": {"action": "start", "path": "{tmp}/r.webm"},
+    "diff_screenshot": {"baseline": "{tmp}/s.png"},
+}
+
+
+@pytest.mark.skipif(not HAS_CLI, reason="agent-browser is not installed")
+def test_every_read_action_is_a_command_the_real_cli_accepts(tmp_path):
+    """The whole read surface, checked against the tool rather than against my reading of its docs."""
+    import functools
+    import http.server
+    import socketserver
+    import subprocess
+    import threading
+
+    directory = tmp_path / "site"
+    directory.mkdir()
+    (directory / "index.html").write_text(
+        "<!doctype html><html><body><h1>Refunds</h1><button id=\"buy\">Buy</button></body></html>")
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(directory))
+
+    class Quiet(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    server = Quiet(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+
+    env = AgentBrowser(session=f"ti-matrix-sweep-{os.getpid()}")
+    replaced = {"url": url, "tmp": str(tmp_path)}
+    try:
+        subprocess.run(env.argv("open", {"url": url}), capture_output=True, text=True, timeout=120)
+        rejected = []
+        for name in sorted(READS):
+            args = {k: (v.format(**replaced) if isinstance(v, str) else v)
+                    for k, v in _READ_ARGS.get(name, {}).items()}
+            done = subprocess.run(env.argv(name, args), capture_output=True, text=True, timeout=180)
+            said = (done.stdout or "") + (done.stderr or "")
+            hit = next((marker for marker in _SYNTAX_MARKERS if marker in said), None)
+            if hit:
+                rejected.append(f"{name}: {' '.join(env.argv(name, args)[3:])} -> {hit}")
+        assert not rejected, "the CLI did not recognise these:\n" + "\n".join(rejected)
+    finally:
+        closing = AgentBrowser(session=f"ti-matrix-sweep-{os.getpid()}", perform={"close"})
+        subprocess.run(closing.argv("close", {}), capture_output=True, text=True, timeout=120)
         server.shutdown()
