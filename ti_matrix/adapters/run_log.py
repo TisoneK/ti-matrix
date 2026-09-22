@@ -62,6 +62,9 @@ def summarize(events: Iterable[dict], *, excerpt: int = 200) -> str:
     else:
         lines.append(f"NOT settled: {ending.get('reason')}"
                      + (f" (it would need: {ending['needs']})" if ending.get("needs") else ""))
+        if ending.get("partial_answer"):
+            lines.append(f"best answer from what it read — {ending.get('answer_basis')}:")
+            lines.append(f"  {str(ending['partial_answer'])[:excerpt * 2]}")
     for event in decided:
         lines.append(f"  {'granted' if event.get('granted') else 'refused'}: {event.get('move')}"
                      f" — {str(event.get('why'))[:120]}")

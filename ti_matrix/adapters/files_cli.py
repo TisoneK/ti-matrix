@@ -25,6 +25,7 @@ async def _main(goal_text: str, base_url: str, model: str, api_key_env: str, as_
         env,
         proposer=session.proposer(port, env.tools()),
         evaluator=LLMEvaluator(port),
+        synthesizer=session.synthesizer(port),
         budget=EngineBudget(max_model_calls=max_calls),
     )
     try:

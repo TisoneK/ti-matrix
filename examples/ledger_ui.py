@@ -204,8 +204,12 @@ function outcome(o) {
   const facts = (o.facts || lastFacts).map(f => '<li>' + esc(f) + '</li>').join('');
   if (o.settled) return '<h2>Settled</h2><pre>' + esc(o.answer) + '</pre>' +
                         '<h2>Facts it established</h2><ul>' + (facts || '<li class="dim">nothing</li>') + '</ul>';
+  const partial = o.partial_answer
+    ? '<h2>Best answer from what it read</h2><pre>' + esc(o.partial_answer) + '</pre>' +
+      '<div class="dim">' + esc(o.answer_basis || 'not verified') + '</div>'
+    : '';
   return '<h2>Not settled</h2><div class="bad">The goal was not settled: ' + esc(o.reason) + '.</div>' +
-         (o.needs ? '<div>It would need: <b>' + esc(o.needs) + '</b></div>' : '') +
+         (o.needs ? '<div>It would need: <b>' + esc(o.needs) + '</b></div>' : '') + partial +
          '<h2>What it did establish</h2><ul>' + (facts || '<li class="dim">nothing</li>') + '</ul>';
 }
 

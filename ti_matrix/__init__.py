@@ -42,7 +42,7 @@ two jobs (``model``), the tool set (``tools``), and what the engine learns from 
 If you are writing an adapter, you need ``Environment``, a ``ModelPort``, and the ``StateEngine`` constructor.
 """
 from ti_matrix.learning import ActionRecord, CachingEnvironment, LearningProposer, Statistics
-from ti_matrix.model import LLMEvaluator, LLMMoveProposer, ModelPort, parse_json
+from ti_matrix.model import LLMEvaluator, LLMMoveProposer, LLMSynthesizer, ModelPort, parse_json
 from ti_matrix.protocols import (
     Action,
     ActionSpec,
@@ -90,7 +90,7 @@ __all__ = [
     # terminal conditions
     "DEFAULT_TERMINAL_CONDITIONS", "BudgetExhausted", "NoRunnableActions", "NothingImproves",
     # model layer
-    "ModelPort", "LLMMoveProposer", "LLMEvaluator", "LLMSimulator", "parse_json",
+    "ModelPort", "LLMMoveProposer", "LLMEvaluator", "LLMSimulator", "LLMSynthesizer", "parse_json",
     # tool sets
     "CompositeEnvironment", "EngineTools", "Memory", "Resolution", "ToolSet", "ToolSetError", "ToolSource",
     # what the engine learns from its own runs

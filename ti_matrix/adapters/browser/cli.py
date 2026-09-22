@@ -51,6 +51,7 @@ async def _main(a) -> int:
         evaluator=LLMEvaluator(port),
         simulator=LLMSimulator(port),  # so a refused click is judged instead of only reported
         confirmer=session.confirmer(env.tools()),
+        synthesizer=session.synthesizer(port),
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
     # The state a run renders says nothing about where the browser is, so a model with no fact yet will

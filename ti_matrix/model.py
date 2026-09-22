@@ -123,3 +123,31 @@ class LLMEvaluator:
                 ev = Evaluation(ev.progress, False, "", "done without a grounded answer")
             out.append(ev)
         return out
+
+
+_SYNTH_CHARS = 1200  # room for a short answer, not an essay
+
+
+class LLMSynthesizer:
+    """Asks the model what the facts a run established amount to, when it stopped without settling.
+
+    Plain text rather than JSON, because this is the last thing a run says: it is read by a person, or by
+    whatever called the run, and the engine never parses it. The prompt's one hard rule is that the answer comes
+    from the facts shown and says what is missing when they are not enough — an answer invented here would be
+    the single thing this engine exists to prevent.
+    """
+
+    def __init__(self, model: ModelPort) -> None:
+        self._model = model
+
+    async def answer(self, state: AgentState) -> str:
+        constraints = f"CONSTRAINTS: {'; '.join(state.goal.constraints)}\n" if state.goal.constraints else ""
+        facts = "\n".join(f"- {fact}" for fact in state.facts) or "- (the run established nothing)"
+        prompt = (
+            f"GOAL: {state.goal.text}\n{constraints}\n"
+            "The run has stopped without settling the goal. Using ONLY these facts, answer the goal as far as "
+            "they allow, and if they cannot answer it say plainly what is missing. Do not invent anything that "
+            "is not in them, and do not claim the goal is settled.\n\n"
+            f"FACTS:\n{facts}\n\nAnswer:"
+        )
+        return " ".join((await self._model.complete(prompt, max_chars=_SYNTH_CHARS)).split())

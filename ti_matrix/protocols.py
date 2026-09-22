@@ -169,6 +169,19 @@ class Confirmer(Protocol):
 
 
 @runtime_checkable
+class Synthesizer(Protocol):
+    """Answers from what a run established, when it stops with facts and no settled answer.
+
+    The engine can only end with an answer if the model declares ``done``, so a run that reads its way to ten
+    useful facts and runs out of calls reports the facts and no answer. This is asked once, on the way out, to
+    turn those facts into the best answer they support — and its answer is reported as a *stop*, never as
+    ``done``, because it was not verified against the world.
+    """
+
+    async def answer(self, state: Any) -> str: ...
+
+
+@runtime_checkable
 class Proposer(Protocol):
     """Proposes up to ``n`` candidate actions, never one already in ``avoid`` (fingerprints)."""
 
@@ -213,6 +226,7 @@ class TerminalContext:
     best_progress: float
     state_progress: float
     history_len: int
+    answer_reserve: int = 0  # 1 when a stop with facts could be answered, so the budget keeps room for it
 
 
 # There is deliberately no ``SearchStrategy`` protocol yet. The loop in ``search.py`` IS the search

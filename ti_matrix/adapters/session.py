@@ -22,7 +22,7 @@ from typing import Any, Optional, TextIO
 from ti_matrix.adapters import run_log, stats_file
 from ti_matrix.adapters.confirm import Ask
 from ti_matrix.learning import LearningProposer, Statistics
-from ti_matrix.model import LLMMoveProposer
+from ti_matrix.model import LLMMoveProposer, LLMSynthesizer
 from ti_matrix.protocols import Action, ActionSpec, Confirmer, Environment, Proposer
 
 __all__ = ["Session"]
@@ -67,6 +67,10 @@ class Session:
         """The model's proposals, ordered by what this world has actually rewarded — when there is a record."""
         inner = LLMMoveProposer(port, specs)
         return LearningProposer(inner, self.statistics) if self.remember else inner
+
+    def synthesizer(self, port: Any) -> LLMSynthesizer:
+        """Answers from the facts when a run stops unsettled. Costs no extra call: the budget reserved one."""
+        return LLMSynthesizer(port)
 
     def confirmer(self, available: dict[str, ActionSpec]) -> Optional[Confirmer]:
         """The confirmer, having checked its names against the actions that exist.

@@ -357,6 +357,31 @@ this page?" and "what price is shown for EUR/USD?" both did, with answers taken 
 summary is that the record's levers are ordering and dropping, and neither bounds exploration; if you want
 open-ended runs to be cheap, the lever is the evaluator's judgment, not the memory.
 
+## When it stops with something to say
+
+A run could end with an answer only if the model declared `done`, which left a specific hole: a run that read
+its way to ten useful facts and ran out of calls reported the facts and no answer. Four runs did exactly that
+on a live site — progress climbing the whole way (0.7, 0.85, 0.95, 0.98), so nothing had stalled; the budget
+had run out holding the answer.
+
+So the budget now pays for the report as well as the search. One call proposes a fan, one scores it, and the
+**last call belongs to the answer** when there is anything to answer from — a fan that would spend it is not
+proposed. With a `Synthesizer` (`LLMSynthesizer` over any `ModelPort`; every CLI has one), a stop that has
+facts is asked once what they amount to:
+
+```
+[stopped]  reason: budget · settled: false · model_calls: 7 (budget 8)
+           partial_answer: "Based only on the facts provided… CryptonicHub is presented as a Forex &
+                            Binary Trading Platform…"
+           answer_basis:   synthesised from 6 fact(s) established by real readings; NOT verified
+```
+
+An answer with an honest label, and deliberately not `done`: the field is `partial_answer` rather than
+`answer`, `settled` stays false, and the basis says how many readings it came from. A run that answered on the
+way out has to be distinguishable from one that earned it — that distinction is the reason this engine can be
+left unattended. A synthesizer that breaks or returns nothing leaves the stop exactly as it was, with a note
+saying so, and costs nothing.
+
 ## What happened, afterwards
 
 Every step of a run is an event, and nothing used to keep them — a run existed while it printed and then it was
@@ -418,16 +443,18 @@ explains why each piece is shaped the way it is.
 project's Context Ledger, a real browser, a hidden maze, any OpenAI-compatible endpoint), the tool set, the learning
 layer, the confirmer, and four playgrounds to drive them from a page. Run end-to-end against real model providers,
 a local filesystem, a real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI — including live
-against a real site with a hosted model, where narrow goals settle in two model calls. 199 tests cover the state,
+against a real site with a hosted model, where narrow goals settle in two model calls. 206 tests cover the state,
 the loop, the terminal conditions, the host boundary, what it asks before it acts, precedence between sources of
 tools, what the engine learns from its own events, the model port, a world that makes it retreat, the WebSocket and
 DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10 through 3.13,
 and on Windows with 3.11; the browser tests skip themselves where no browser is installed.
 
-Next, in rough order: **the evaluator's judgment on open-ended goals**, which the live runs said is where the cost
-actually is (the record orders and drops proposals; it cannot bound exploration), then resuming a run from
-persisted state (`--record` is the substrate, and saving the state itself is the missing half), then a wider beam
-(a real search strategy, once a second strategy exists to justify the interface).
+Next, in rough order: **making an open-ended goal settle rather than merely get answered** — the label is honest
+and the facts are there, but a `done` would be better whenever the facts really are enough, and that is the
+evaluator's bar rather than the search's (it sits behind a model's judgment: the same goal, same site, same tools
+settled in two calls under a reasoning model and never settled under a chat model). Then resuming a run from
+persisted state (`--record` is the substrate; saving the state itself is the missing half), then a wider beam (a
+real search strategy, once a second strategy exists to justify the interface).
 
 ## License
 
