@@ -35,7 +35,8 @@ async def _main(a) -> int:
     reads = sum(1 for spec in env.tools().values() if spec.read_only)
     print(f"# {reads} of {len(env.tools())} actions may be performed unasked; "
           f"the rest are refused unless --perform names them", file=sys.stderr)
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None)
+    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
+                                 timeout_s=a.timeout)
     engine = StateEngine(
         env,
         proposer=LLMMoveProposer(port, env.tools()),
@@ -67,6 +68,8 @@ def _args(argv=None):
     ap.add_argument("--model", default="qwen2.5:7b")
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--timeout", type=float, default=120.0,
+                    help="seconds to wait on one model call; raise it for a big local model")
     ap.add_argument("--budget-calls", type=int, default=12)
     return ap.parse_args(argv)
 

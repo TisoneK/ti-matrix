@@ -382,6 +382,32 @@ class Page:
                 raise CdpError(f"nothing matched {selector!r} within {timeout_ms} ms")
             time.sleep(_POLL_S)
 
+    def current(self) -> tuple[str, str]:
+        """Where the tab is and how far it has loaded, in one round trip."""
+        value = self.evaluate("(() => [location.href, document.readyState])()")
+        if isinstance(value, list) and len(value) == 2:
+            return str(value[0]), str(value[1])
+        return "", ""
+
+    def wait_for_navigation(self, *, timeout_s: Optional[float] = None) -> str:
+        """Wait until the tab has left `about:blank` and finished loading.
+
+        Waiting for `readyState == "complete"` is not enough on its own: a tab that has not started
+        navigating is *already* complete, so the first read after opening a URL can see the blank page it was
+        replacing. On a live site that is not a missing answer but a wrong one.
+        """
+        deadline = time.monotonic() + (timeout_s or self.timeout_s)
+        while True:
+            try:
+                href, state = self.current()
+                if href and href != "about:blank" and state == "complete":
+                    return href
+            except CdpError:
+                pass  # a navigation in flight destroys the execution context; ask again
+            if time.monotonic() >= deadline:
+                raise CdpError("the page did not finish loading")
+            time.sleep(_POLL_S)
+
     def wait_for_load(self, *, timeout_s: Optional[float] = None) -> None:
         deadline = time.monotonic() + (timeout_s or self.timeout_s)
         while True:

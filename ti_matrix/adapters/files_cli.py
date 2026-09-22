@@ -14,9 +14,10 @@ from ti_matrix.adapters.files import FilesEnvironment
 from ti_matrix.adapters.openai_compat import OpenAICompatModel
 
 
-async def _main(goal_text: str, base_url: str, model: str, api_key_env: str, as_json: bool, max_calls: int) -> None:
+async def _main(goal_text: str, base_url: str, model: str, api_key_env: str, as_json: bool, max_calls: int,
+                timeout_s: float = 120.0) -> None:
     env = FilesEnvironment()
-    port = OpenAICompatModel(base_url, model, api_key_env=api_key_env or None)
+    port = OpenAICompatModel(base_url, model, api_key_env=api_key_env or None, timeout_s=timeout_s)
     engine = StateEngine(
         env,
         proposer=LLMMoveProposer(port, env.tools()),
@@ -34,10 +35,12 @@ def _args(argv=None):
     ap.add_argument("--model", default="qwen2.5:7b")
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY", help="the NAME of the env var holding the key")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--timeout", type=float, default=120.0,
+                    help="seconds to wait on one model call; raise it for a big local model")
     ap.add_argument("--budget-calls", type=int, default=12)
     return ap.parse_args(argv)
 
 
 if __name__ == "__main__":
     a = _args()
-    asyncio.run(_main(a.goal, a.base_url, a.model, a.api_key_env, a.json, a.budget_calls))
+    asyncio.run(_main(a.goal, a.base_url, a.model, a.api_key_env, a.json, a.budget_calls, a.timeout))

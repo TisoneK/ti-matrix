@@ -181,6 +181,11 @@ class BrowserEnvironment:
         if self._page is None:
             self._chrome = self._chrome or Chrome(**self._chrome_args)
             self._page = self._chrome.page(url=self.start_url)
+            if self.start_url and self.start_url != "about:blank":
+                # Opening a tab at a URL does not mean the page is there yet. Without this wait the first
+                # read races the load and sees an empty document — which on a live site is not a missing
+                # answer but a wrong one: "this page has no links" about a page full of them.
+                self._page.wait_for_navigation(timeout_s=self.timeout_s)
         return self._page
 
     def _run(self, action: Action) -> tuple[bool, str]:

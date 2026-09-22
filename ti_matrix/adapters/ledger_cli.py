@@ -29,7 +29,8 @@ async def _main(a) -> int:
         print(f"no Context Ledger at {env.vault} — bootstrap one first, or point --vault at a project "
               f"that has `.context_ledger/`", file=sys.stderr)
         return 2
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None)
+    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
+                                 timeout_s=a.timeout)
     engine = StateEngine(
         env,
         proposer=LLMMoveProposer(port, env.tools()),
@@ -57,6 +58,8 @@ def _args(argv=None):
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY", help="the NAME of the env var holding the key")
     ap.add_argument("--agent", default="Ti Matrix", help="the name this run is recorded under")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--timeout", type=float, default=120.0,
+                    help="seconds to wait on one model call; raise it for a big local model")
     ap.add_argument("--budget-calls", type=int, default=12)
     ap.add_argument("--no-record", action="store_true", help="do not write the run back into the ledger")
     ap.add_argument("--dry-run", action="store_true", help="print what would be written, write nothing")

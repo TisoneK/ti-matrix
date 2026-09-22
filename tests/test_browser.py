@@ -429,6 +429,54 @@ async def test_the_dynamic_page_and_the_screenshot_both_work_through_the_environ
 
 @WITH_BROWSER
 @pytest.mark.asyncio
+async def test_a_first_read_waits_for_the_page_it_was_opened_at(tmp_path):
+    """A tab opened at a URL is not a loaded page.
+
+    Found on a live site: the first read raced the load and answered "this page has no links" about a page
+    full of them — not a missing answer, a wrong one. The server below is slow on purpose, so the race happens
+    every time instead of occasionally, and waiting only for `readyState` is not enough on its own: a tab that
+    has not started navigating is already complete.
+    """
+    import socketserver
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler
+
+    class Slow(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            time.sleep(1.2)  # long enough that a racing read always loses
+            body = (b"<!doctype html><html><head><title>Slow page</title></head><body>"
+                    b'<a href="/x">A link</a></body></html>')
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    class Quiet(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    server = Quiet(("127.0.0.1", 0), Slow)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/slow"
+
+    env = BrowserEnvironment(url, headless=True)
+    try:
+        links = await env.probe(Action("links", {}))  # the very first thing a run does
+        assert links.ok and "A link" in links.text, links.text
+        title = await env.probe(Action("title_and_url", {}))
+        assert title.ok and "Slow page" in title.text, title.text
+    finally:
+        env.close()
+        server.shutdown()
+        server.server_close()
+
+
+@WITH_BROWSER
+@pytest.mark.asyncio
 async def test_navigating_away_and_back_through_the_environment(page_server, tmp_path):
     env = BrowserEnvironment(page_server, headless=True, screenshot_dir=tmp_path)
     try:
