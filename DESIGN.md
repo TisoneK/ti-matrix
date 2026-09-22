@@ -52,17 +52,32 @@ a dead end cost one probe instead of one per turn — sameness at the resolution
 name the node they move to. The engine emits a tree with parent links and never searches it — the beam of one walks
 a line while the log describes a graph, which is why a game-tree explorer is something anyone can build on top.
 
-**A maze is what a space looks like made concrete**: positions, corridors, dead ends, an exit, and routes that meet
-at the same junction. The engine already carries the whole vocabulary — `AgentState`, `Action`, `backtrack`,
-`done`, `EngineBudget` — so a maze is not a new mechanism, it is the problem the mechanism was built for. It is
-also the first world that would make the engine *search*.
+**A maze is what a space looks like made concrete**, and it is built: `ti_matrix.adapters.maze`. Positions,
+corridors, dead ends, an exit, and routes that meet at the same junction. The engine already carried the whole
+vocabulary — `AgentState`, `Action`, `backtrack`, `done`, `EngineBudget` — so no new mechanism was needed, only a
+world that uses it.
 
-That last point is the recheck this design earns. Every shipped world is shallow: a filesystem goal is answered in a
-probe or two, a ledger goal is a handful of reads, the browser reads a page. None needs a second route, and none has
-ever made the engine retreat. `backtrack` appears in the engine's own tests and in the playgrounds' event
-vocabulary, and **in no adapter at all** — so the beam and the backtrack have been exercised against scripted
-problems, never against a problem that requires a space. A maze would be the first, and it is the cheapest way to
-find out whether the sameness question has teeth before a wider beam is built on top of it.
+That was the recheck this design earned. Every other shipped world is shallow: a filesystem goal is answered in a
+probe or two, a ledger goal is a handful of reads, the browser reads a page. None needs a second route and none
+ever made the engine retreat — `backtrack` appeared in the engine's own tests and in the playgrounds' vocabulary,
+and in no adapter. So the beam and the backtrack had only ever been exercised against scripted problems. The
+default maze fixes that: two routes from `S` reach `E`, five steps down the left column or twenty-one the long way
+round, rejoining at `1,5`, with two dead ends hanging off the long route and the exit itself sealed at the end of
+the short one.
+
+It also answers the sameness question, and the answer is the unflattering one. Driving a run down the short route
+to `1,5`, east to `2,5`, and then west again pays a probe to re-learn `1,5` — a cell already sitting in the state's
+facts. Nothing objects, and nothing can: the record has no word for a place it knows, and the same cell is learned
+twice. That is `tests/test_maze_adapter.py`'s last test, asserted rather than fixed, because the honest state of the
+design is that sameness of knowledge is still undetected. What the maze changes is that the claim is now measured
+rather than assumed — so a wider beam can be built knowing that a run will re-walk ground it has already covered,
+and the cost of that is a probe per revisit instead of a supposition.
+
+The maze's own design carries one decision worth naming, because it came from the same hazard as the browser's
+`goto`: a walker whose *position* the world tracked would be clobbered by a fan probed all at once, since three
+sibling steps would move it three times. So the world tracks no position at all — only the monotonic set of cells
+that have been entered, which siblings can only add to. Where the run is, is the engine's business, which is the
+thesis the whole design is built on.
 
 ## The loop
 

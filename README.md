@@ -45,8 +45,9 @@ Python 3.10+, **no runtime dependencies** — the engine is standard library onl
 
 ## Run a goal
 
-The repo ships four adapters that need nothing but Python: a read-only local filesystem, a project's Context
-Ledger, a real browser, and any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI, DeepSeek, Groq, OpenRouter, …).
+The repo ships five adapters that need nothing but Python: a read-only local filesystem, a project's Context
+Ledger, a real browser, a hidden maze, and any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI, DeepSeek, Groq,
+OpenRouter, …).
 
 ```bash
 # a local model, no API key, no other program installed
@@ -163,6 +164,29 @@ the search uses), and an action you mark as not read-only is never performed by 
 `find_files`). Every action reads; nothing here can change a filesystem. It takes whatever path it is handed, since
 an adapter does not get to decide where a host's world begins — confine it in your own wrapper if you need to
 (that is what `examples/files_ui.py` does).
+
+### The maze
+
+`ti_matrix.adapters.maze.MazeEnvironment` — four read-only actions (`grid`, `entry`, `look`, `step`) over a maze
+written as ASCII, the way a person draws one. **A run is never shown the map**: it learns a cell by stepping into
+it, and `step` hands back the far side, so a route has to be walked rather than read off. Walking counts as a read
+for the same reason the browser's `goto` does — it changes what the run can see, not the world.
+
+```python
+from ti_matrix.adapters.maze import MazeEnvironment
+
+env = MazeEnvironment()                       # the maze in the module, or pass your own ASCII
+env = MazeEnvironment("""
+    #########
+    #S..#...#
+    #.#####.#
+    #E##.##.#
+    #########
+""")                                          # '#' is wall, '.' is floor, 'S' is the entry, 'E' the exit
+```
+
+It is the first world here that makes the engine *search* — the others are answered in a probe or two and never
+make it retreat — which is why it exists. `DESIGN.md` says what it settled.
 
 ### The Context Ledger
 
@@ -298,6 +322,7 @@ ti_matrix/            the engine — standard library only, no host application
 ├── learning/         what previous runs established, and the wrappers that spend it
 └── adapters/         host-free environments and hosts:
     ├── files.py             a read-only local filesystem
+    ├── maze.py              a hidden maze — the one world that makes the engine search
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
     ├── browser/             a real browser: WebSocket + DevTools Protocol, standard library only
     ├── openai_compat.py     any OpenAI-compatible endpoint
@@ -315,12 +340,14 @@ explains why each piece is shaped the way it is.
 
 ## Status
 
-**v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
-project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
+**v0.1** — the engine, the search with backtracking, the simulator, five example adapters (a local filesystem, a
+project's Context Ledger, a real browser, a hidden maze, any OpenAI-compatible endpoint), the tool set, the learning
+layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 180 tests cover the state, the loop, the
+real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 187 tests cover the state, the loop, the
 terminal conditions, the host boundary, precedence between sources of tools, what the engine learns from its own
-events, the model port, the WebSocket and DevTools plumbing, the CLI contract against the real tool, and the
+events, the model port, a world that makes it retreat, the WebSocket and DevTools plumbing, the CLI contract against
+the real tool, and the
 playgrounds. Green on Python 3.10 through 3.13, and on Windows with 3.11; the browser tests skip themselves where
 no browser is installed.
 
