@@ -6,10 +6,13 @@ taught. If it ever stops being true, that test fails and the claim in the README
 """
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from ti_matrix import (
     Action,
+    ActionRecord,
     ActionSpec,
     CachingEnvironment,
     EngineBudget,
@@ -20,6 +23,7 @@ from ti_matrix import (
     StateEngine,
 )
 from ti_matrix.adapters import stats_file
+from ti_matrix.adapters.stats_sqlite import SqliteStore
 
 
 def mv(tool, **args):
@@ -274,3 +278,112 @@ async def test_the_record_survives_on_disk_so_the_next_process_starts_warm(tmp_p
     assert warm_stats.record("dead").probes == 1  # the record crossed the boundary intact
     warm = await run_one("what is the answer?", world, order, stats=warm_stats, n=2)
     assert warm[-1].kind == "done"
+
+
+# ─── the same record, in a database ─────────────────────────────────────────
+
+
+def record_for(tool, **counters):
+    """A one-tool record, for asking the stores what they do with counters."""
+    stats = Statistics()
+    stats.by_tool[tool] = ActionRecord(tool, **counters)
+    return stats
+
+
+def rich_record():
+    """A record with everything a store has to carry: tools, exact actions, counters and facts."""
+    stats = Statistics()
+    stats.by_tool["open_notes"] = ActionRecord("open_notes", probes=4, selections=2, progress=2.0, scored=2, ms=12)
+    stats.by_tool["legacy_dump"] = ActionRecord("legacy_dump", probes=3, failures=3, ms=9)
+    stats.by_fingerprint["abc123"] = ActionRecord("open_notes", probes=2, selections=1, progress=1.0, scored=1)
+    stats.by_fingerprint["def456"] = ActionRecord("legacy_dump", probes=3, failures=3, predicted=1)
+    stats.add_facts(["open_notes() -> ok: the queue holds one row", "legacy_dump() -> FAILED: unsupported"])
+    return stats
+
+
+def test_both_stores_carry_the_same_record(tmp_path):
+    """Two stores, one contract: a host can switch between them and keep its learning."""
+    record = rich_record()
+    stats_file.save(tmp_path / "record.json", record)
+    with SqliteStore(tmp_path / "record.db") as store:
+        store.save(record)
+        from_sql = store.load()
+
+    assert from_sql.to_dict() == stats_file.load(tmp_path / "record.json").to_dict() == record.to_dict()
+
+
+def test_a_database_record_survives_a_close_and_reopen_like_the_file_one(tmp_path):
+    path = tmp_path / "record.db"
+    with SqliteStore(path) as store:
+        store.save(rich_record())
+    with SqliteStore(path) as reopened:  # as a later process would
+        assert reopened.load().record("legacy_dump").failures == 3
+    assert SqliteStore(path).load().to_dict() == rich_record().to_dict()
+
+
+def test_adding_from_two_writers_at_once_keeps_both_learnings_where_a_file_would_lose_one(tmp_path):
+    """The reason to prefer this store: `add` composes, and a JSON save is last-writer-wins."""
+    path = tmp_path / "record.db"
+    with SqliteStore(path) as first, SqliteStore(path) as second:  # two connections, as two processes
+        first.add(record_for("read", probes=2, failures=1))
+        second.add(record_for("read", probes=1, selections=1))
+        combined = first.load().record("read")
+    assert (combined.probes, combined.failures, combined.selections) == (3, 1, 1)
+
+
+def test_adding_the_same_increments_twice_counts_them_twice_and_saving_replaces(tmp_path):
+    """`add` is for increments and `save` is for the whole picture — the difference nothing can infer."""
+    path = tmp_path / "record.db"
+    with SqliteStore(path) as store:
+        store.add(record_for("read", probes=2))
+        store.add(record_for("read", probes=2))
+        assert store.load().record("read").probes == 4
+        store.save(record_for("read", probes=2))  # replaces, so no longer 6
+        assert store.load().record("read").probes == 2
+
+
+def test_facts_are_deduplicated_kept_in_order_and_queryable_without_loading_everything(tmp_path):
+    with SqliteStore(tmp_path / "record.db") as store:
+        stats = Statistics()
+        stats.add_facts(["the queue holds one row", "a second fact", "the queue is empty"])
+        store.add(stats)
+        store.add(stats)  # a repeated save must not duplicate the facts
+        assert store.load().facts == ["the queue holds one row", "a second fact", "the queue is empty"]
+        assert store.search_facts("queue") == ["the queue holds one row", "the queue is empty"]
+        assert store.search_facts("queue", limit=1) == ["the queue is empty"]
+        assert store.search_facts("nothing like this") == []
+        assert store.search_facts("   ") == []
+
+
+def test_a_query_treats_the_callers_text_literally(tmp_path):
+    with SqliteStore(tmp_path / "record.db") as store:
+        stats = Statistics()
+        stats.add_facts(["progress is 40% done", "a_under_score", "nothing else"])
+        store.add(stats)
+        assert store.search_facts("40%") == ["progress is 40% done"]  # % is not a wildcard here
+        assert store.search_facts("a_under") == ["a_under_score"]  # nor is _ a single character
+        assert store.search_facts("%") == ["progress is 40% done"]
+
+
+def test_top_tools_asks_the_database_the_question_the_prior_asks(tmp_path):
+    with SqliteStore(tmp_path / "record.db") as store:
+        store.save(rich_record())
+        assert [r.tool for r in store.top_tools()] == ["open_notes", "legacy_dump"]
+        assert store.top_tools(limit=1)[0].tool == "open_notes"
+
+
+def test_counts_answers_how_much_is_stored_without_reading_it(tmp_path):
+    with SqliteStore(tmp_path / "record.db") as store:
+        store.save(rich_record())
+        assert store.counts() == {"tools": 2, "actions": 2, "facts": 2}
+
+
+def test_a_file_that_is_not_a_database_is_reported_rather_than_read_as_empty(tmp_path):
+    """Where the JSON store shrugs and starts cold, a broken database is worth knowing about."""
+    path = tmp_path / "not-a-db.db"
+    path.write_text("this is not a sqlite file, whatever it is")
+    with pytest.raises(sqlite3.DatabaseError, match="not a usable SQLite database"):
+        SqliteStore(path)
+    path.write_bytes(b"")  # an empty file is a new database, not an error
+    with SqliteStore(path) as store:
+        assert store.counts() == {"tools": 0, "actions": 0, "facts": 0}

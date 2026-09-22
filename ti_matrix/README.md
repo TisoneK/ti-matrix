@@ -226,10 +226,20 @@ within one: `Observation.ok` is trusted, and `Evaluation.reason` is not even rea
   model's best idea, because "nothing is worth trying" is a worse answer than a long shot.
 - **`CachingEnvironment`** — a repeated read-only probe of an unchanged world is not asked again. Only reads,
   only successes, and `version=` is your word for what "unchanged" means (a file's mtime, a commit hash).
-- **Persistence is an adapter**: `ti_matrix.adapters.stats_file` writes the record to JSON, and a missing or
-  unreadable file is a cold start rather than a crash.
+- **Persistence is an adapter**, and there are two because the record has two shapes of use.
+  `adapters.stats_file` writes one JSON document — readable, diffable, right for a single writer, and a missing
+  or unreadable file is a cold start rather than a crash. `adapters.stats_sqlite` keeps the same record in a
+  real database: `save` replaces, `add` composes, so two runs that finish at once both keep their learning
+  where a JSON save is last-writer-wins, and facts are queryable without loading them. Both are stdlib only —
+  `sqlite3` ships with Python — and both carry the same record, so switching is a one-line change.
 
 `EngineTools(memory=statistics)` is what lets a *model* spend it too: `recall` answers from the same record.
+
+A note for whoever is tempted to move a *project's* memory into SQLite next: `.context_ledger/` stays
+markdown, and that is a decision rather than an oversight. That memory has to be read by people, diffed in a
+review, and merged across machines and agents — git does that for text and for nothing else. The engine's
+record is the opposite kind of data: counters nothing reviews, that only this engine reads, where "merging two
+versions" means adding them. Two datasets, two stores, and the word "store" is all they share.
 
 [`benchmarks/bench.py`](benchmarks/bench.py) measures whether that pays for itself — eight goals, one fixed
 world, an uninformed proposer order, and a control that holds the fan fixed so only the learning varies:
@@ -267,7 +277,8 @@ ti_matrix/            the engine — standard library only, no host application
     ├── files.py             a read-only local filesystem
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
     ├── openai_compat.py     any OpenAI-compatible endpoint
-    ├── stats_file.py        the learning record on disk
+    ├── stats_file.py        the learning record on disk, as one JSON document
+    ├── stats_sqlite.py      the same record in SQLite, for more than one writer
     └── files_cli.py / ledger_cli.py   run a goal from the shell
 benchmarks/           does the learning layer pay for itself? measured, with a control
 tests/                the engine's behaviour, plus a guard that fails the build if the core ever
@@ -282,8 +293,8 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, three example adapters (a local filesystem,
 a project's Context Ledger, any OpenAI-compatible endpoint), the tool set, and the learning layer. Run
 end-to-end against real model providers, against a local filesystem, and against a real `.context_ledger/`
-vault; 101 tests cover the state, the loop, the terminal conditions, the host boundary, precedence between
-sources of tools, and what the engine learns from its own events.
+vault; 110 tests cover the state, the loop, the terminal conditions, the host boundary, precedence between
+sources of tools, and what the engine learns from its own events. Green on Python 3.10 through 3.13.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
 interface), resuming a run from persisted engine state (the record says what a run *established*; the state

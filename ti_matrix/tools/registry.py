@@ -60,7 +60,7 @@ class ToolSet:
 
     # ── the resolution ──
 
-    def _claims(self, ) -> dict[str, list[tuple[int, ToolSource, str, ActionSpec]]]:
+    def _claims(self) -> dict[str, list[tuple[int, ToolSource, str, ActionSpec]]]:
         """The name each tool contests, and who is contesting it.
 
         A tool contests exactly one name — the one it supersedes if it supersedes anything, otherwise its
@@ -86,8 +86,9 @@ class ToolSet:
         so the outcome never depends on dictionary ordering."""
         dropped: list[tuple[str, str]] = []
         renamed: list[tuple[str, str]] = []
-        for name in sorted(self._claims()):
-            entries = self._claims()[name]
+        claims = self._claims()
+        for name in sorted(claims):
+            entries = claims[name]
             winner = min(entries, key=lambda e: self._rank(e, self.prefer))
             _i, source, own_name, spec = winner
             self._tools[name] = spec
