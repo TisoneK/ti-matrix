@@ -27,8 +27,11 @@ async def _main(a) -> int:
         print("no Chrome or Chromium found — install one, or point --binary/--attach at a browser you have",
               file=sys.stderr)
         return 2
+    offered = {name.strip() for name in (a.only or "").split(",") if name.strip()}
     env = BrowserEnvironment(
-        a.url, perform={name.strip() for name in (a.perform or "").split(",") if name.strip()},
+        a.url,
+        perform={name.strip() for name in (a.perform or "").split(",") if name.strip()},
+        only=offered or None,
         headless=a.headless != "off", attach_to=a.attach, binary=a.binary, screenshot_dir=a.shots,
         user_data_dir=a.profile,
     )
@@ -58,6 +61,8 @@ def _args(argv=None):
     ap.add_argument("goal")
     ap.add_argument("--url", default="about:blank", help="the page to start on")
     ap.add_argument("--perform", default="", help="actions this run may carry out: click,type,press,evaluate")
+    ap.add_argument("--only", default="", help="offer only these actions, comma separated. Every tool in the "
+                                              "prompt costs a local model time on every single call")
     ap.add_argument("--headless", default="on", help="'off' to watch the browser work")
     ap.add_argument("--attach", default=None, help="drive a browser already listening at host:port")
     ap.add_argument("--binary", default=None, help="the browser to start, if it is not where we look")

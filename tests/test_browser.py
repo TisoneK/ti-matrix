@@ -507,7 +507,9 @@ def test_closing_really_closes_a_browser_and_cleans_up_after_it(tmp_path):
     assert profile.is_dir() and processes_using(str(profile)), "the browser did not start"
     env.close()
 
-    deadline = time.monotonic() + 8
+    # Generous, because this is a real browser shutting down on a machine that may be busy: it was 8s, and
+    # that failed under load while passing in isolation. A genuine leak never clears, so the bound still bites.
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline and processes_using(str(profile)):
         time.sleep(0.25)
     assert not processes_using(str(profile)), f"a browser is still running with {profile}"

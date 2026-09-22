@@ -114,6 +114,7 @@ class BrowserEnvironment:
         url: Optional[str] = None,
         *,
         perform: Optional[set[str] | tuple[str, ...]] = None,
+        only: Optional[set[str] | tuple[str, ...]] = None,
         chrome: Optional[Chrome] = None,
         binary: Optional[str] = None,
         headless: bool = True,
@@ -134,6 +135,8 @@ class BrowserEnvironment:
         self._owns_chrome = chrome is None
         self.perform = frozenset(READS | set(perform or ()))
         self._actions = _browser_actions(self.perform)
+        if only:  # every action in the prompt costs a model time on every call, so a host can trim it
+            self._actions = {name: spec for name, spec in self._actions.items() if name in set(only)}
 
     # ── the contract ──
 
