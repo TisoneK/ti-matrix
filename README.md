@@ -367,7 +367,7 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
 project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, and real Chrome; 146 tests cover the state, the loop, the terminal conditions, the
+real `.context_ledger/` vault, and real Chrome; 148 tests cover the state, the loop, the terminal conditions, the
 host boundary, precedence between sources of tools, what the engine learns from its own events, the WebSocket
 and DevTools plumbing, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
 themselves where no browser is installed.

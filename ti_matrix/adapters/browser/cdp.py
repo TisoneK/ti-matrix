@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -174,18 +175,44 @@ class Chrome:
             raise BrowserError(f"nothing is speaking DevTools on {self.host}:{self.port}: {exc}") from exc
 
     def close(self) -> None:
-        """Stop the browser this object started, and forget its throwaway profile."""
+        """Stop the browser this object started, and forget its throwaway profile.
+
+        Asking the browser to quit over its own protocol comes first, because the process this object spawned
+        is not reliably the one that owns the browser — a signal can leave a browser running with no one
+        holding its handle, which is exactly the leak nobody notices until the machine is full of them. The
+        signal below is the fallback for a browser that is wedged or was never really ours.
+        """
         with self._lock:
-            proc, profile = self._proc, self._profile
+            proc, profile, host, port = self._proc, self._profile, self.host, self.port
             self._proc, self._profile = None, None
+        self._ask_to_quit(host, port)
         if proc is not None and proc.poll() is None:
             proc.terminate()
             try:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
         if profile is not None and str(profile).startswith(tempfile.gettempdir()):
             _remove_tree(profile)
+
+    def _ask_to_quit(self, host: str, port: int) -> None:
+        """`Browser.close` over the browser-level socket: the protocol's own way of saying goodbye."""
+        try:
+            with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=5) as response:
+                endpoint = json.loads(response.read().decode("utf-8")).get("webSocketDebuggerUrl")
+            if not endpoint:
+                return
+            socket = WebSocket(endpoint, timeout_s=5.0)
+            try:
+                socket.send_text(json.dumps({"id": 1, "method": "Browser.close"}))
+            finally:
+                socket.close()
+        except Exception:  # noqa: BLE001 — a browser already gone is the outcome we wanted anyway
+            pass
 
     def __enter__(self) -> "Chrome":
         return self
@@ -237,12 +264,13 @@ class Chrome:
 
 
 def _remove_tree(path: Path) -> None:
-    try:
-        for child in sorted(path.rglob("*"), reverse=True):
-            child.unlink(missing_ok=True) if child.is_file() else child.rmdir()
-        path.rmdir()
-    except OSError:
-        pass  # a leftover profile in /tmp is not worth failing a run over
+    """Delete a throwaway profile.
+
+    `shutil.rmtree`, because a profile is not a tree of files: Chrome leaves a `SingletonLock` symlink, and
+    walking it by hand has to decide per entry whether it is a file — which a broken symlink is not, so the
+    walk fails on it and every profile this adapter ever made stays in /tmp.
+    """
+    shutil.rmtree(path, ignore_errors=True)
 
 
 class Page:

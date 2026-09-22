@@ -101,6 +101,10 @@ class BrowserEnvironment:
     ``perform`` names the actions this engine is allowed to *do* rather than only reason about. It defaults to
     the reads. Pass ``perform={"click"}`` and a click becomes an ordinary action; pass a name that is not an
     action and nothing happens, because an unknown tool is not silently accepted.
+
+    Without arguments each run starts a browser in a throwaway profile and :meth:`close` deletes it. Pass
+    ``user_data_dir`` to keep one instead — which is what you want for a site you are signed in to — and it
+    becomes yours to look after, because this cleans up only after itself.
     """
 
     name = "browser"
@@ -114,6 +118,7 @@ class BrowserEnvironment:
         binary: Optional[str] = None,
         headless: bool = True,
         attach_to: Optional[str | int] = None,
+        user_data_dir: Optional[str | Path] = None,
         screenshot_dir: Optional[str | Path] = None,
         extra_args: tuple[str, ...] = (),
         timeout_s: float = 30.0,
@@ -123,7 +128,8 @@ class BrowserEnvironment:
         self.screenshot_dir = Path(screenshot_dir).expanduser() if screenshot_dir else None
         self._chrome = chrome
         self._chrome_args = {"binary": binary, "headless": headless, "attach_to": attach_to,
-                             "extra_args": extra_args, "timeout_s": timeout_s}
+                             "user_data_dir": user_data_dir, "extra_args": extra_args,
+                             "timeout_s": timeout_s}
         self._page = None
         self._owns_chrome = chrome is None
         self.perform = frozenset(READS | set(perform or ()))

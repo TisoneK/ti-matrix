@@ -21,6 +21,7 @@ import http.server
 import os
 import socketserver
 import struct
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -439,6 +440,40 @@ async def test_navigating_away_and_back_through_the_environment(page_server, tmp
         assert back.ok and page_server in back.text  # back where it started
     finally:
         env.close()
+
+
+def processes_using(profile: str) -> list[str]:
+    """Any browser process still holding this profile — asked of the process table, not of our handle."""
+    out = subprocess.run(["ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
+    return [line for line in out.splitlines()
+            if profile in line and not line.lstrip().split(None, 1)[1].startswith("/bin/")]
+
+
+@WITH_BROWSER
+def test_closing_really_closes_a_browser_and_cleans_up_after_it(tmp_path):
+    """Both of these were bugs: the browser survived `close()` (asking the protocol to quit is what works),
+    and every throwaway profile stayed in the temp directory (a `SingletonLock` symlink broke the walk)."""
+    env = BrowserEnvironment("about:blank", headless=True)
+    env.page()  # start it
+    profile = Path(env._chrome._profile)
+    assert profile.is_dir() and processes_using(str(profile)), "the browser did not start"
+    env.close()
+
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and processes_using(str(profile)):
+        time.sleep(0.25)
+    assert not processes_using(str(profile)), f"a browser is still running with {profile}"
+    assert not profile.exists(), f"{profile} survived close()"
+
+
+@WITH_BROWSER
+def test_a_profile_you_supplied_is_never_deleted(tmp_path):
+    """`close()` cleans up after itself, not after you: a profile the host named is the host's."""
+    mine = tmp_path / "my-profile"
+    env = BrowserEnvironment("about:blank", headless=True, user_data_dir=mine)
+    env.page()
+    env.close()
+    assert mine.is_dir() and any(mine.iterdir()), "the host's own profile directory was removed"
 
 
 @WITH_BROWSER

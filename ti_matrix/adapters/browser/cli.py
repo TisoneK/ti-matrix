@@ -10,6 +10,7 @@ out — which is a real decision, so it is a flag you have to type rather than a
     --headless off     watch the browser work instead of hiding it
     --attach 127.0.0.1:9222   drive a browser you started yourself
     --shots DIR        where screenshots go (they are for you: the engine reads text)
+    --profile DIR      keep a browser profile between runs, so a signed-in site stays signed in
 """
 import argparse
 import asyncio
@@ -29,6 +30,7 @@ async def _main(a) -> int:
     env = BrowserEnvironment(
         a.url, perform={name.strip() for name in (a.perform or "").split(",") if name.strip()},
         headless=a.headless != "off", attach_to=a.attach, binary=a.binary, screenshot_dir=a.shots,
+        user_data_dir=a.profile,
     )
     reads = sum(1 for spec in env.tools().values() if spec.read_only)
     print(f"# {reads} of {len(env.tools())} actions may be performed unasked; "
@@ -59,6 +61,8 @@ def _args(argv=None):
     ap.add_argument("--attach", default=None, help="drive a browser already listening at host:port")
     ap.add_argument("--binary", default=None, help="the browser to start, if it is not where we look")
     ap.add_argument("--shots", default=None, help="where screenshots are written")
+    ap.add_argument("--profile", default=None,
+                    help="a browser profile to keep between runs (logins survive; you delete it)")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--model", default="qwen2.5:7b")
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY")
