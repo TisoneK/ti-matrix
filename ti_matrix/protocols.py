@@ -155,6 +155,20 @@ class Simulator(Protocol):
 
 
 @runtime_checkable
+class Confirmer(Protocol):
+    """Decides whether one action that changes something may actually be performed.
+
+    The engine performs only read-only actions, so an action that is not one is either predicted (when a
+    Simulator is configured) or named for a person to deal with afterwards. A Confirmer is the third way: the
+    engine asks, per action, at the moment it would be performed — and a grant is for that action alone. The
+    decision is an ``EngineEvent`` like everything else, so a run's record shows what it asked and what it was
+    told rather than only what it did.
+    """
+
+    async def confirm(self, action: Action, reason: str) -> bool: ...
+
+
+@runtime_checkable
 class Proposer(Protocol):
     """Proposes up to ``n`` candidate actions, never one already in ``avoid`` (fingerprints)."""
 

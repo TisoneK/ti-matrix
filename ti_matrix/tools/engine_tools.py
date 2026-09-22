@@ -55,6 +55,12 @@ class EngineTools:
     def is_read_only(self, action: Action) -> Optional[bool]:
         return True if action.tool == "recall" else self._env.is_read_only(action)
 
+    def close(self) -> None:
+        """Give back what the wrapped environment holds. A wrapper that hid this would leak a browser."""
+        closer = getattr(self._env, "close", None)
+        if callable(closer):
+            closer()
+
     async def probe(self, action: Action) -> Observation:
         if action.tool != "recall":
             return await self._env.probe(action)

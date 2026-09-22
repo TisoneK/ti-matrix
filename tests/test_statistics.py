@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from ti_matrix import Statistics
-from ti_matrix.learning.statistics import ActionRecord, HOPELESS_TRIES
+from ti_matrix.learning.statistics import HOPELESS_TRIES, ActionRecord
 
 
 def events(*specs):
@@ -58,16 +58,21 @@ def test_it_counts_what_really_happened_against_both_keys():
     assert stats.by_fingerprint["f2"].failures == 1
 
 
-def test_a_predicted_outcome_is_remembered_as_a_prediction_and_never_as_evidence():
-    """The engine predicted a write instead of performing it: it may remember predicting, not that it worked."""
+def test_a_predicted_outcome_is_evidence_about_permission_and_never_about_the_world():
+    """The engine predicted a write instead of performing it, so nothing was learned about the world.
+
+    A prediction does not touch probes, failures or scores — but it is counted as a prediction, on the tool as
+    well as the exact action, because "this engine may not do that here" is worth knowing and worth acting on.
+    """
     stats = observe(Statistics(), *events(("fp", "add_row")),
                     probe("fp", ok=True, ms=1, chars=40, predicted=True), evaluation("fp", 0.9))
 
     assert stats.by_fingerprint["fp"].predicted == 1  # the prediction is on record
     assert stats.by_fingerprint["fp"].probes == 0  # but nothing was probed, so nothing was learned
     assert stats.by_fingerprint["fp"].scored == 0
-    assert "add_row" not in stats.by_tool  # the tool's record stays empty, i.e. neutral
-    assert stats.record("add_row").prior() == 0.5  # still worth trying
+    assert stats.record("add_row").probes == 0 and stats.record("add_row").scored == 0
+    assert stats.record("add_row").predicted == 1  # permission, not the world
+    assert stats.record("add_row").prior() == 0.5  # still neutral: nothing was tried
     assert stats.avoids() == set()  # and never an avoid entry, however the prediction was scored
 
 
@@ -90,6 +95,18 @@ def test_a_tool_that_worked_but_was_never_chosen_is_scored_by_the_progress_it_ma
     stats = observe(Statistics(), *events(("f1", "partial")), probe("f1", ok=True), evaluation("f1", 0.4))
     record = stats.record("partial")
     assert record.selections == 0 and record.prior() == pytest.approx(0.16)  # 0.6*0 + 0.4*0.4
+
+
+def test_an_action_proposed_and_only_ever_predicted_stops_being_proposed():
+    """Found live: a model kept proposing an action this engine could not perform, and every proposal cost a
+    simulation call — a model call — until the budget was gone."""
+    stats = Statistics()
+    stats.by_tool["evaluate"] = ActionRecord("evaluate", predicted=2)
+    assert stats.hopeless_tools() == set()  # twice is not yet a pattern
+
+    stats.by_tool["evaluate"] = ActionRecord("evaluate", predicted=3)
+    assert stats.hopeless_tools() == {"evaluate"}
+    assert stats.record("evaluate").hopeless() is False  # and this is not the same rule as hopeless
 
 
 def test_avoiding_lists_actions_that_failed_every_real_try_and_nothing_else():

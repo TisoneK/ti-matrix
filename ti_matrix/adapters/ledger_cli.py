@@ -18,9 +18,10 @@ import asyncio
 import json
 import sys
 
-from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMMoveProposer, StateEngine
+from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMSimulator, StateEngine
 from ti_matrix.adapters.context_ledger import LedgerEnvironment, LedgerRecorder
 from ti_matrix.adapters.openai_compat import OpenAICompatModel
+from ti_matrix.adapters.session import Session
 
 
 async def _main(a) -> int:
@@ -29,18 +30,26 @@ async def _main(a) -> int:
         print(f"no Context Ledger at {env.vault} — bootstrap one first, or point --vault at a project "
               f"that has `.context_ledger/`", file=sys.stderr)
         return 2
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
-                                 timeout_s=a.timeout)
+    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None, timeout_s=a.timeout)
+    session = Session(remember=a.remember, record=a.record, ask=a.ask)
+    env = session.environment(env)
     engine = StateEngine(
         env,
-        proposer=LLMMoveProposer(port, env.tools()),
+        proposer=session.proposer(port, env.tools()),
         evaluator=LLMEvaluator(port),
+        simulator=LLMSimulator(port),  # the vault's write actions are declared: judge them, do not perform
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
     recorder = LedgerRecorder(env.vault, agent=a.agent, model=a.model)
-    async for ev in engine.run(Goal(a.goal)):
-        recorder.observe(ev)
-        print(json.dumps(ev.to_dict(), ensure_ascii=False) if a.json else f"[{ev.kind}] {ev.data}")
+    try:
+        async for ev in engine.run(Goal(a.goal)):
+            recorder.observe(ev)
+            session.observe(ev)
+            print(json.dumps(ev.to_dict(), ensure_ascii=False) if a.json else f"[{ev.kind}] {ev.data}")
+    finally:
+        note = session.save()
+        if note:
+            print(note, file=sys.stderr)
     if not a.no_record:
         write = recorder.record(dry_run=a.dry_run)
         print(write.to_text() if not a.json else json.dumps(
@@ -63,6 +72,12 @@ def _args(argv=None):
     ap.add_argument("--budget-calls", type=int, default=12)
     ap.add_argument("--no-record", action="store_true", help="do not write the run back into the ledger")
     ap.add_argument("--dry-run", action="store_true", help="print what would be written, write nothing")
+    ap.add_argument("--remember", default=None,
+                    help="a file of what earlier runs learned here: read it, learn into it, save it back")
+    ap.add_argument("--record", default=None, help="write every event to this file, one JSON line each")
+    # No --ask here on purpose: this environment's write actions are declared so the engine can reason about
+    # them, and LedgerRecorder performs them after the run — not the engine. There is nothing to ask about,
+    # and a flag that cannot change anything is a lie in the help text.
     return ap.parse_args(argv)
 
 

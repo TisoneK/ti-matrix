@@ -10,6 +10,9 @@ out — which is a real decision, so it is a flag you have to type rather than a
     --headless off     watch the browser work instead of hiding it
     --attach 127.0.0.1:9222   drive a browser you started yourself
     --shots DIR        where screenshots go (they are for you: the engine reads text)
+    --remember FILE    learn across runs: read the record, order proposals by it, offer `recall`, save it back
+    --record FILE      write the run down, then read it: python -m ti_matrix.adapters.run_log FILE
+    --ask click,type   ask me before these actions — per action, with the model's reason, at the moment
     --profile DIR      keep a browser profile between runs, so a signed-in site stays signed in
 """
 import argparse
@@ -17,9 +20,10 @@ import asyncio
 import json
 import sys
 
-from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMMoveProposer, LLMSimulator, StateEngine
+from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMSimulator, StateEngine
 from ti_matrix.adapters.browser import BrowserEnvironment, find_browser
 from ti_matrix.adapters.openai_compat import OpenAICompatModel
+from ti_matrix.adapters.session import Session
 
 
 async def _main(a) -> int:
@@ -38,13 +42,15 @@ async def _main(a) -> int:
     reads = sum(1 for spec in env.tools().values() if spec.read_only)
     print(f"# {reads} of {len(env.tools())} actions may be performed unasked; "
           f"the rest are refused unless --perform names them", file=sys.stderr)
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
-                                 timeout_s=a.timeout)
+    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None, timeout_s=a.timeout)
+    session = Session(remember=a.remember, record=a.record, ask=a.ask)
+    env = session.environment(env)
     engine = StateEngine(
         env,
-        proposer=LLMMoveProposer(port, env.tools()),
+        proposer=session.proposer(port, env.tools()),
         evaluator=LLMEvaluator(port),
         simulator=LLMSimulator(port),  # so a refused click is judged instead of only reported
+        confirmer=session.confirmer(env.tools()),
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
     # The state a run renders says nothing about where the browser is, so a model with no fact yet will
@@ -54,9 +60,13 @@ async def _main(a) -> int:
                    f"unless the goal needs it",) if a.url and a.url != "about:blank" else ()
     try:
         async for event in engine.run(Goal(a.goal, constraints)):
+            session.observe(event)
             print(json.dumps(event.to_dict(), ensure_ascii=False) if a.json
                   else f"[{event.kind}] {event.data}")
     finally:
+        note = session.save()
+        if note:
+            print(note, file=sys.stderr)
         env.close()  # the browser this started stops with the run
     return 0
 
@@ -81,6 +91,12 @@ def _args(argv=None):
     ap.add_argument("--timeout", type=float, default=120.0,
                     help="seconds to wait on one model call; raise it for a big local model")
     ap.add_argument("--budget-calls", type=int, default=12)
+    ap.add_argument("--remember", default=None,
+                    help="a file of what earlier runs learned here: read it, learn into it, save it back")
+    ap.add_argument("--record", default=None, help="write every event to this file, one JSON line each")
+    ap.add_argument("--ask", default=None,
+                    help="ask before performing these actions, comma separated; nobody at the terminal, or a "
+                         "blank answer, is a refusal")
     return ap.parse_args(argv)
 
 
