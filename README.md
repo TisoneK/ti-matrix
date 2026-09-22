@@ -25,8 +25,9 @@ Python 3.10+, **no runtime dependencies** — the engine is standard library onl
 
 ## Run a goal
 
-The repo ships three adapters that need nothing but Python: a read-only local filesystem, a project's
-[Context Ledger](#remembering-across-runs-a-projects-context-ledger), and any OpenAI-compatible endpoint
+The repo ships four adapters that need nothing but Python: a read-only local filesystem, a project's
+[Context Ledger](#remembering-across-runs-a-projects-context-ledger), a
+[real browser](#driving-a-browser-reads-run-clicks-wait-to-be-asked), and any OpenAI-compatible endpoint
 (Ollama, vLLM, OpenAI, DeepSeek, Groq, OpenRouter, …).
 
 ```bash
@@ -58,7 +59,7 @@ async for event in engine.run(Goal("which of my python files changed most recent
 
 ## Play with it
 
-`examples/` holds three playgrounds — one file each, standard library plus this package, no build step and
+`examples/` holds four playgrounds — one file each, standard library plus this package, no build step and
 nothing to install. Each starts a page on loopback, runs real goals against a model endpoint you configure, and
 shows every step as it happens: the candidates the model proposed, the probes that really ran, the scores, the
 selection, the backtracks, and the honest stop when the goal cannot be settled.
@@ -67,6 +68,7 @@ selection, the backtracks, and the honest stop when the goal cannot be settled.
 python examples/files_ui.py  --root ~/code                            # your filesystem, read-only under there
 python examples/ledger_ui.py --vault ~/code/my-project                # a project's Context Ledger
 python examples/tools_ui.py  --vault ~/code/my-project --root ~/code  # several worlds, one tool set
+python examples/browser_ui.py --url https://example.com               # a real browser, reads only
 ```
 
 - **files** — the smallest useful world: four read-only actions. Relative paths resolve under your root and an
@@ -78,9 +80,12 @@ python examples/tools_ui.py  --vault ~/code/my-project --root ~/code  # several 
 - **tools** — the tool set: two shipped environments and one of your own, resolved by declared rules. One tool
   in that file deliberately replaces one of ours, so the resolution it prints is worth reading — change
   `prefer` and watch the roles reverse.
+- **browser** — a real browser. Eleven of its seventeen actions read; the six that change something are refused
+  unless you name them in the box, so a goal needing a click stops and names the click. Each run starts and
+  closes its own browser, and unticking "headless" lets you watch it work.
 
-Each is a single file on purpose: copy one anywhere and it still runs. The three share a byte-identical shell,
-and a test holds it that way, so the duplication cannot drift.
+Each is a single file on purpose: copy one anywhere and it still runs. They share a byte-identical shell and a
+test holds it that way, so the duplication cannot drift.
 
 ## How it works
 
@@ -159,6 +164,47 @@ recorder.record()                # what it learned, into the vault
 A run that does *not* settle its goal records that too. The ledger's most valuable entries are the traps and
 the dead ends — "which approach already failed" is the thing the next agent cannot re-derive — so a run that
 says plainly what it tried and could not do is worth more than one that sounds confident.
+
+## Driving a browser: reads run, clicks wait to be asked
+
+`ti_matrix.adapters.browser` puts a real browser behind the engine's `Environment`, and the engine's own
+boundary turns out to be exactly the right shape for one. Eleven of the seventeen actions read: a page's text,
+its links, its markup, whether a selector matches, a screenshot. Six can change the world — `click`, `type`,
+`press`, `evaluate`, opening and closing tabs — and a run may not perform any of them unless the host says so:
+
+```python
+from ti_matrix.adapters.browser import BrowserEnvironment
+
+env = BrowserEnvironment("https://example.com")                     # reads only
+env = BrowserEnvironment("https://example.com", perform={"click"})   # this engine may click here
+```
+
+So a run that only needs to read looks anywhere and changes nothing, and a run that needs a button pressed
+stops and names the button — with the prediction it made, and `settled: false`, the same honest ending it gives
+any goal it cannot reach:
+
+```text
+[probe]    click(selector=#go) -> the price would appear on the page   (predicted, not performed)
+[stopped]  reason: needs_action · needs: click(selector=#go) · settled: false
+```
+
+Grant the action and the same goal settles from the page itself: click, then read what the page says now.
+
+```bash
+python -m ti_matrix.adapters.browser.cli "what does this page cost?" --url https://example.com
+python -m ti_matrix.adapters.browser.cli "search for widgets" --url https://example.com --perform click,type
+```
+
+There is nothing to install for this. Chrome's DevTools Protocol is JSON over a WebSocket, and neither is in
+the standard library — so `websocket.py` (RFC 6455: the handshake, the frames, ping and close) and `cdp.py`
+(start Chrome, find its pages, drive one) are part of this package rather than dependencies of it. A launch is
+a `subprocess` call and discovery is an HTTP GET. Pass `attach_to="127.0.0.1:9222"` to drive a browser you
+started yourself, which is what you want when you would rather watch.
+
+Two limits stated plainly. **A screenshot is for a person**: the evaluator is a text model, so a screenshot's
+fact is its path and size — a multimodal host can read the file, and nothing here pretends a PNG is text. And
+**do not put a browser behind the cache** without a version token taken from the page: a page moves, and a
+remembered probe would answer about a page that no longer exists.
 
 ## Core concepts
 
@@ -302,10 +348,11 @@ ti_matrix/            the engine — standard library only, no host application
 └── adapters/         host-free environments and hosts:
     ├── files.py             a read-only local filesystem
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
+    ├── browser/             a real browser: WebSocket + DevTools Protocol, standard library only
     ├── openai_compat.py     any OpenAI-compatible endpoint
     ├── stats_file.py        the learning record on disk, as one JSON document
     ├── stats_sqlite.py      the same record in SQLite, for more than one writer
-    └── files_cli.py / ledger_cli.py   run a goal from the shell
+    └── files_cli.py / ledger_cli.py / browser/cli.py   run a goal from the shell
 examples/             three single-file playgrounds — a page, a real run, your endpoint and your world
 benchmarks/           does the learning layer pay for itself? measured, with a control
 tests/                the engine's behaviour, plus a guard that fails the build if the core ever
@@ -317,11 +364,13 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 
 ## Status
 
-**v0.1** — the engine, the search with backtracking, the simulator, three example adapters (a local filesystem,
-a project's Context Ledger, any OpenAI-compatible endpoint), the tool set, and the learning layer. Run
-end-to-end against real model providers, against a local filesystem, and against a real `.context_ledger/`
-vault; 123 tests cover the state, the loop, the terminal conditions, the host boundary, precedence between
-sources of tools, what the engine learns from its own events, and the three playgrounds. Green on Python 3.10 through 3.13.
+**v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
+project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
+four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
+real `.context_ledger/` vault, and real Chrome; 146 tests cover the state, the loop, the terminal conditions, the
+host boundary, precedence between sources of tools, what the engine learns from its own events, the WebSocket
+and DevTools plumbing, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
+themselves where no browser is installed.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
 interface), resuming a run from persisted engine state (the record says what a run *established*; the state

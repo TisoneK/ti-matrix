@@ -25,6 +25,8 @@ from ti_matrix import Action
 
 EXAMPLES = pathlib.Path(__file__).resolve().parent.parent / "examples"
 SHELL_MARKER = "# ═══ the playground shell"
+# Every example in the directory, so a new one cannot quietly skip the guards below.
+EXAMPLE_NAMES = sorted(p.stem for p in EXAMPLES.glob("*_ui.py"))
 
 
 def load(name: str):
@@ -129,7 +131,7 @@ def run_to_end(base: str, config: dict, *, timeout_s: float = 15.0) -> dict:
 # ─── the page and its state ─────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("page", ["ledger_ui"], indirect=True)
+@pytest.mark.parametrize("page", EXAMPLE_NAMES, indirect=True)
 def test_it_serves_the_page_and_the_state_the_page_polls(page):
     module, base = page
     status, html = get(base + "/")
@@ -175,17 +177,18 @@ def test_the_page_reads_exactly_what_the_state_provides():
     assert read <= provided, f"the page reads {sorted(read - provided)}, which the state does not provide"
 
 
-def test_the_three_examples_share_one_shell():
+def test_the_examples_share_one_shell():
     """Self-containment is the point, so the duplication is deliberate — and held still by this test."""
+    assert len(EXAMPLE_NAMES) >= 3, f"expected several examples, found {EXAMPLE_NAMES}"
     shells = {}
-    for name in ("files_ui", "ledger_ui", "tools_ui"):
+    for name in EXAMPLE_NAMES:
         text = (EXAMPLES / f"{name}.py").read_text()
         assert SHELL_MARKER in text, f"{name} does not use the shared shell"
         shells[name] = text[text.index(SHELL_MARKER):]
     assert len(set(shells.values())) == 1, "the examples' shared shell has drifted apart"
 
 
-@pytest.mark.parametrize("name", ["files_ui", "ledger_ui", "tools_ui"])
+@pytest.mark.parametrize("name", EXAMPLE_NAMES)
 def test_every_example_says_what_it_does_and_names_its_own_parts(name):
     module = load(name)
     doc = (EXAMPLES / f"{name}.py").read_text().split('"""')[1]
@@ -243,6 +246,16 @@ def test_the_tools_example_runs_a_goal_through_the_tool_your_source_provided(pag
     assert "tool(s) the model will see" in notes  # the resolution, printed under the button
     assert "count_files" in notes  # your tool is in the set the model was given
     assert "shadowed by mine:search_memory" in notes  # and yours replaced one of ours, as declared
+
+
+@pytest.mark.parametrize("page", ["browser_ui"], indirect=True)
+def test_the_browser_example_offers_its_own_fields_and_starts_nothing_until_a_run(page):
+    """Its page must be servable with no browser on the machine: nothing is launched until a goal runs."""
+    module, base = page
+    fields = [f["name"] for f in state(base)["fields"]]
+    assert fields[:3] == ["url", "headless", "perform"]
+    assert module.epilogue is None  # a run leaves the page it read; there is nothing to write back
+    assert "refused" in module.ENV_NOTE.lower()  # the note says what a run may not do, up front
 
 
 def test_running_while_a_run_is_going_is_refused_rather_than_interleaved(tmp_path):

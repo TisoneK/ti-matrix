@@ -1,111 +1,55 @@
-"""Play with the engine driving several worlds at once — in a browser, from one file.
+"""Watch the engine drive a real browser — from a page in a browser.
 
-    python examples/tools_ui.py --vault ~/code/my-project --root ~/code
+    python examples/browser_ui.py --url https://example.com
+    # then open http://127.0.0.1:8765
 
-Three sources of actions, resolved into the one set the model is shown: a project's Context Ledger (ours), the
-engine's own `recall` (the engine's), and the tools in this file marked as yours — one of which deliberately
-replaces one of ours, so the panel shows a real resolution: what was kept, what was shadowed, what was renamed.
-Change `prefer` to "builtin" and watch the roles reverse.
+Type a goal about the page, and watch the run: which selector it looked for, what the page said, what it
+concluded, and — when the goal needs a button pressed — the honest stop that names the button instead of
+pressing it.
 
-That resolution is what this example is about. A name decides (two tools sharing one are the same tool to any
-model), preference is declared rather than guessed, and the outcome is a record you can read instead of
-wondering which tool the model was actually given.
+That refusal is the point of this example. Eleven of the seventeen browser actions read: text, links, markup,
+a selector's existence, a screenshot for you to look at. Six change something — `click`, `type`, `press`,
+`evaluate`, opening and closing tabs — and a run may not perform any of them unless you name it in the box. So
+by default the engine can look anywhere and change nothing, and the box is where you decide otherwise.
+
+Two things to know:
+
+  - **Each run starts its own browser** and closes it at the end, so nothing a run did lingers — untick
+    "headless" to watch it work, or run it headless and read the events instead.
+  - **What it reads goes to your model endpoint.** A page's text is not private just because the browser is
+    local; point this at a local model if you would rather nothing left the machine.
 """
 from __future__ import annotations
 
-from pathlib import Path
+from ti_matrix.adapters.browser import BrowserEnvironment, find_browser
 
-from ti_matrix import Action, ActionSpec, Observation
-from ti_matrix.adapters.context_ledger import LedgerEnvironment, LedgerVault
-from ti_matrix.tools import CompositeEnvironment, EngineTools
-
-TITLE = "Ti Matrix — several worlds, one tool set"
-ENV_NOTE = ("Two shipped environments and one of your own, resolved into a single tool set by declared rules. "
-            "The tools below marked *yours* replace one of ours on purpose, and the resolution is printed under "
-            "the button after each run. Everything here reads: no action in this example can change anything.")
+TITLE = "Ti Matrix — driving a browser"
+ENV_NOTE = ("Eleven of the seventeen actions read a page; the six that change something are refused unless you "
+            "name them below. So a run can look anywhere and change nothing, and a goal that needs a click "
+            "stops and names the click. Chrome is started per run and closed at the end.")
 FIELDS = [
-    {"name": "vault", "label": "Project holding .context_ledger/", "default": ".",
-     "placeholder": "~/code/my-project", "group": "env"},
-    {"name": "root", "label": "Your tools count files under", "default": "~/code",
-     "placeholder": "/home/you/code", "group": "env"},
-    {"name": "prefer", "label": "When two sources offer one tool, prefer: user | builtin",
-     "default": "user", "placeholder": "user", "group": "env"},
+    {"name": "url", "label": "Start at", "default": "https://example.com", "group": "env"},
+    {"name": "headless", "label": "Run headless — untick to watch the browser work",
+     "default": "on", "type": "checkbox", "group": "env"},
+    {"name": "perform", "label": "Also let the run perform these, comma separated (click, type, press, "
+                                 "evaluate, new_tab, close_tab)", "default": "", "group": "env"},
 ]
 
 
-class MyTools:
-    """The seam: your own adapter, as a tool source. Two tools, one of them a deliberate collision.
-
-    `count_files` is a capability neither shipped environment has. `search_memory` is the interesting one: it
-    supersedes the ledger's own search with a stricter one — case-sensitive, exact substring, over the whole
-    memory including closed offices — so the resolution below has something real to report. Point `prefer` at
-    "builtin" and the ledger's search wins instead, and this source's tool is dropped entirely, because a tool
-    declared to replace another was not meant to sit beside it.
-    """
-
-    name = "mine"
-
-    def __init__(self, root: str, vault: LedgerVault) -> None:
-        self.root = Path(root).expanduser()
-        self._vault = vault
-        self._tools = {
-            "count_files": ActionSpec("count_files", "Count the files (not directories) under a directory.",
-                                      '{"path": "<dir>"}'),
-            "search_memory": ActionSpec("search_memory",
-                                        "Search a project's memory for an EXACT, case-sensitive substring, "
-                                        "including closed offices under history/.",
-                                        '{"text": "<substring>"}', supersedes="search_memory"),
-        }
-
-    def tools(self) -> dict[str, ActionSpec]:
-        return self._tools
-
-    def is_read_only(self, action: Action):
-        return None if action.tool not in self._tools else True
-
-    async def probe(self, action: Action) -> Observation:
-        try:
-            return Observation(action, *getattr(self, f"_{action.tool}")(**action.args))
-        except TypeError as exc:
-            return Observation(action, False, f"bad arguments for {action.tool}: {exc}")
-        except Exception as exc:  # noqa: BLE001 — a failed probe is an observation, never a crash
-            return Observation(action, False, f"{type(exc).__name__}: {exc}"[:400])
-
-    def _count_files(self, path: str = ".") -> tuple[bool, str]:
-        directory = (self.root / str(path)).resolve()
-        if not directory.is_dir():
-            return False, f"not a directory: {directory}"
-        return True, f"{sum(1 for p in directory.rglob('*') if p.is_file())} file(s) under {directory}"
-
-    def _search_memory(self, text: str = "") -> tuple[bool, str]:
-        if not str(text).strip():
-            return False, "search_memory needs a non-empty 'text'"
-        hits, _total = self._vault.search(str(text), scope="all")
-        exact = [(rel, line_no, line) for rel, line_no, line in hits if str(text) in line]
-        if not exact:
-            return True, f"no exact (case-sensitive) line contains {text!r}"
-        return True, (f"{len(exact)} exact line(s):\n"
-                      + "\n".join(f"{rel}:{n}: {line}" for rel, n, line in exact[:15]))
-
-
-def build_environment(config: dict[str, str], stats) -> CompositeEnvironment:
-    """This example's world: several sources of actions, resolved into one set."""
-    vault = LedgerVault(config.get("vault") or ".")
-    if not vault.exists():
-        raise RuntimeError(f"no Context Ledger at {vault} — bootstrap one in that project first, or point "
-                           f"--vault at a project that has .context_ledger/")
-    prefer = "builtin" if str(config.get("prefer", "")).strip().lower().startswith("b") else "user"
-    return CompositeEnvironment(
-        EngineTools(LedgerEnvironment(vault), memory=stats),   # ours, plus the engine's own recall
-        MyTools(config.get("root") or "~", vault),             # yours
-        prefer=prefer,
+def build_environment(config: dict[str, str], stats):
+    """This example's world: a real browser, on the URLs it is told to visit."""
+    if find_browser() is None:
+        raise RuntimeError("no Chrome or Chromium on this machine — install one, or point the adapter at a "
+                           "browser you started yourself with attach_to=")
+    allowed = {name.strip() for name in (config.get("perform") or "").split(",") if name.strip()}
+    return BrowserEnvironment(
+        config.get("url") or "about:blank",
+        perform=allowed or None,
+        headless=config.get("headless") != "off",
     )
 
 
-def epilogue(play, env, config: dict[str, str]) -> None:
-    """Show the decision the tool set made — the thing this example exists to make visible."""
-    play.note(f"prefer={config.get('prefer', 'user')}")
-    play.note(*env.inner.resolution().to_text().splitlines())  # env is the cache wrapped round the composite
+epilogue = None  # nothing to write back: the run's results live in the page it left behind
 
 
 # ═══ the playground shell ════════════════════════════════════════════════════════════════════════════════

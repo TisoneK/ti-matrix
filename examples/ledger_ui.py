@@ -315,18 +315,26 @@ class Play:
             simulator=LLMSimulator(port),
             budget=EngineBudget(max_model_calls=_int(config.get("budget_calls"), 12)),
         )
-        async for event in engine.run(Goal(config.get("goal", "").strip())):
-            self._emit(event.kind, event.data)
-            self.raw.append(event)
-            self.stats.observe(event)  # the record grows as the run goes, for the next one
-            if event.kind in ("done", "stopped"):
-                # `stopped` carries settled=false; a `done` payload does not carry it at all, and the page
-                # should not have to know which event it is looking at.
-                self.outcome = {"settled": event.kind == "done", **event.data}
-        self.note(f"probes: {env.stats()}")
-        self.note("what this session has learned: " + _summary(self.stats))
-        if self.epilogue is not None:
-            self.epilogue(self, env, config)
+        try:
+            async for event in engine.run(Goal(config.get("goal", "").strip())):
+                self._emit(event.kind, event.data)
+                self.raw.append(event)
+                self.stats.observe(event)  # the record grows as the run goes, for the next one
+                if event.kind in ("done", "stopped"):
+                    # `stopped` carries settled=false; a `done` payload does not carry it at all, and the page
+                    # should not have to know which event it is looking at.
+                    self.outcome = {"settled": event.kind == "done", **event.data}
+            self.note(f"probes: {env.stats()}")
+            self.note("what this session has learned: " + _summary(self.stats))
+            if self.epilogue is not None:
+                self.epilogue(self, env, config)
+        finally:
+            # An environment may hold something a run has to give back — a browser, a connection, a file. The
+            # engine's protocol says nothing about it, so this asks politely and does nothing when there is
+            # nothing to ask.
+            closer = getattr(getattr(env, "inner", env), "close", None)
+            if callable(closer):
+                closer()
 
 
 def _int(value: Any, default: int) -> int:
