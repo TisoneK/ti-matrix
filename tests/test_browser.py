@@ -498,7 +498,17 @@ def browsers_using(profile: str) -> list[str]:
 
     Asked of the process table rather than of our handle, because that is where a leak shows up. Helpers
     (`--type=…`, renderers, GPU) are children that the OS reaps; a browser still running is the leak.
+
+    Two ways to ask, because Windows has no `ps -Ao`: the `ps` in Git Bash rejects it, so a helper that only
+    knew that form would return an empty list for every run and report "no leak" even when one leaked.
     """
+    if os.name == "nt":
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine } | "
+             "ForEach-Object { $_.CommandLine }"],
+            capture_output=True, text=True).stdout
+        return [line for line in out.splitlines() if profile in line and " --type=" not in line]
     out = subprocess.run(["ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
     return [line for line in out.splitlines()
             if profile in line and " --type=" not in line

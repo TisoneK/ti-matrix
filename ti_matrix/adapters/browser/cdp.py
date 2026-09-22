@@ -110,6 +110,8 @@ class Chrome:
         self.binary = binary
         self._proc: Optional[subprocess.Popen] = None
         self._profile: Optional[Path] = None
+        # Whether the profile is one we made and may therefore delete — ownership, not location (see close()).
+        self._own_profile = False
         self._stderr: deque[str] = deque(maxlen=200)
         self._lock = threading.Lock()
         self.host, self.port = "127.0.0.1", 0
@@ -130,6 +132,7 @@ class Chrome:
         self.binary = self.binary or find_browser()
         if not self.binary:
             raise BrowserError("no Chrome or Chromium found — install one, or pass binary=/path/to/chrome")
+        self._own_profile = user_data_dir is None
         self._profile = Path(user_data_dir).expanduser() if user_data_dir else Path(
             tempfile.mkdtemp(prefix="ti-matrix-browser-"))
         args = [
@@ -183,7 +186,8 @@ class Chrome:
             raise BrowserError(f"nothing is speaking DevTools on {self.host}:{self.port}: {exc}") from exc
 
     def close(self) -> None:
-        """Stop the browser this object started, and forget its throwaway profile.
+        """Stop the browser this object started, and delete the throwaway profile it made — never one the host
+        supplied.
 
         Asking the browser to quit over its own protocol comes first, because the process this object spawned
         is not reliably the one that owns the browser — a signal can leave a browser running with no one
@@ -192,7 +196,8 @@ class Chrome:
         """
         with self._lock:
             proc, profile, host, port = self._proc, self._profile, self.host, self.port
-            self._proc, self._profile = None, None
+            own_profile = self._own_profile
+            self._proc, self._profile, self._own_profile = None, None, False
         self._ask_to_quit(host, port)
         if proc is not None and proc.poll() is None:
             proc.terminate()
@@ -204,7 +209,9 @@ class Chrome:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     pass
-        if profile is not None and str(profile).startswith(tempfile.gettempdir()):
+        # Asked of ownership, not of where the profile sits: a host's profile under the temp directory is still
+        # the host's, and deleting it costs whatever was signed in to it.
+        if profile is not None and own_profile:
             _remove_tree(profile)
 
     def _ask_to_quit(self, host: str, port: int) -> None:

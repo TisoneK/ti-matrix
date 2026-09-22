@@ -410,10 +410,10 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
 project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 165 tests cover the state, the loop, the terminal conditions, the
-host boundary, precedence between sources of tools, what the engine learns from its own events, the WebSocket
-and DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
-themselves where no browser is installed.
+real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 178 tests cover the state, the loop, the terminal conditions, the
+host boundary, precedence between sources of tools, what the engine learns from its own events, the model port, the
+WebSocket and DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10
+through 3.13, and on Windows with 3.11; the browser tests skip themselves where no browser is installed.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
 interface), resuming a run from persisted engine state (the record says what a run *established*; the state

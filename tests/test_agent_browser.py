@@ -40,11 +40,22 @@ else:
 
 @pytest.fixture()
 def fake_cli(tmp_path):
-    """A script that behaves enough like the CLI to test how this adapter calls it."""
+    """A script that behaves enough like the CLI to test how this adapter calls it.
+
+    Windows will not execute a shebang script (it wants a real executable, or a `.cmd` naming one), so there the
+    script is written as a module with a `.cmd` shim beside it. Either way the adapter is handed one `command`
+    and runs it argv-style, which is the contract under test."""
     import sys
 
+    body = FAKE_CLI.format(python=sys.executable)
+    if os.name == "nt":
+        script = tmp_path / "fake-agent-browser.py"
+        script.write_text(body)
+        shim = tmp_path / "fake-agent-browser.cmd"
+        shim.write_text(f'@echo off\r\n"{sys.executable}" "%~dp0{script.name}" %*\r\n')
+        return str(shim)
     path = tmp_path / "fake-agent-browser"
-    path.write_text(FAKE_CLI.format(python=sys.executable))
+    path.write_text(body)
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return str(path)
 

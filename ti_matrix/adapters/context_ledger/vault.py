@@ -79,7 +79,11 @@ class LedgerVault:
         return text[:max_chars] + ("\n… (truncated)" if len(text) > max_chars else "")
 
     def _files(self, scope: str) -> list[tuple[str, Path]]:
-        """The readable files of a scope, as (path relative to the ledger dir, absolute path)."""
+        """The readable files of a scope, as (path relative to the ledger dir, absolute path).
+
+        The relative path is POSIX (`memory/office/tasks/backlog.md`), never the host's separator: this text
+        goes to the model and comes back as an argument to `read_memory`, and the ledger's own files and docs
+        name paths that way. On Windows `str(Path)` would otherwise hand the model backslashes to echo."""
         base = {"office": self.office, "memory": self.memory, "history": self.history, "all": self.dir}.get(scope)
         if base is None or not base.is_dir():
             return []
@@ -88,7 +92,7 @@ class LedgerVault:
             if not p.is_file() or _ARCHIVE_DIR in p.parts or ".git" in p.parts:
                 continue
             if p.suffix in _TEXT_SUFFIXES or p.name in _PLAIN_TEXT_NAMES:
-                out.append((str(p.relative_to(self.dir)), p))
+                out.append((p.relative_to(self.dir).as_posix(), p))
         return out
 
     def search(self, needle: str, *, scope: str = "memory", limit: int = 25) -> tuple[list[tuple[str, int, str]], int]:
