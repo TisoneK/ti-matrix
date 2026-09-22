@@ -1,5 +1,8 @@
 # Design notes
 
+> In Python everything is an object. Here, everything the engine knows is a state — and everything else is a
+> transition into one, or a pure function that reads one.
+
 Why Ti Matrix is shaped the way it is. The [README](README.md) says what it does and how to use it; this says what
 each choice was made *against*. It is the long form of reasoning that would otherwise live in commit messages.
 
