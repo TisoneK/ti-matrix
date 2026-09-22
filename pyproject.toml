@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ti-matrix"   # the product; the import package stays `ti_matrix` (no branding baked into code)
+version = "0.1.0"
+description = "A state-driven agent engine — environment-agnostic: it searches a state space, the model proposes and scores."
+requires-python = ">=3.10"
+license = "MIT"            # SPDX (PEP 639); the full text is in LICENSE
+license-files = ["LICENSE"]
+dependencies = []          # the engine is standard library only; adapters bring their own clients
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+include = ["ti_matrix*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
