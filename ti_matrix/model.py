@@ -1,4 +1,10 @@
-"""The model's two jobs: propose actions, and judge outcomes. It never owns the state.
+"""The model's two jobs: propose actions, and judge outcomes — over a ``ModelPort``. It never owns the state.
+
+Both are *seats*, not ingredients: ``StateEngine`` takes any object with ``propose`` or ``evaluate``, and the
+engine's own tests drive it with plain classes and no model at all. What a model buys in a seat is judgment
+about a world you cannot enumerate in code; what it costs is a round trip per round. Put your own rule in
+either seat and that seat becomes instant and free — which is the whole difference between an engine that can
+only drive slow, unstructured worlds and one that can drive a spread check.
 
 Both are written against a ``ModelPort`` — anything that can answer a prompt with text:
 

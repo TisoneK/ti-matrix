@@ -34,7 +34,13 @@ from ti_matrix.state import AgentState
 
 @dataclass(frozen=True)
 class EngineBudget:
-    """What a run may spend. Every dimension is a hard stop, and each stop is reported honestly."""
+    """What a run may spend. Every dimension is a hard stop, and each stop is reported honestly.
+
+    ``max_model_calls`` is named for what those calls cost when a model sits in the seats. Nothing requires one
+    to: a rule-based run counts its consultations of the seats the same way, and there the budget is not what
+    binds — depth and branches are. The engine reports the number it counted either way rather than pretending
+    a rule was a model.
+    """
 
     max_depth: int = 6
     max_branches: int = 3
@@ -120,7 +126,13 @@ DEFAULT_TERMINAL_CONDITIONS: tuple[TerminalCondition, ...] = (BudgetExhausted(),
 
 
 class StateEngine:
-    """A state-driven agent run. Construct with an environment and the model's two jobs."""
+    """A state-driven agent run. Construct with an environment and the two seats that decide.
+
+    The seats take anything: a model, or your own rule. Only a proposer and an evaluator are required — the
+    simulator, confirmer and synthesizer are optional — so a run with no model in it is an ordinary
+    configuration rather than a degenerate one, and it is what you want in a world where a round trip per round
+    is too slow or too expensive.
+    """
 
     def __init__(
         self,

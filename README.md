@@ -89,6 +89,47 @@ async for event in engine.run(Goal("which of my python files changed most recent
     print(event.to_dict())        # every step: states, actions, outcomes — never hidden reasoning
 ```
 
+## The model is a seat, not an ingredient
+
+`proposer` and `evaluator` are two seats an object sits in, and nothing says a model has to sit in either. Put
+your own logic there and the engine runs with no model at all — no latency floor, no token cost, no endpoint:
+
+```python
+class ByThreshold:                       # a proposer that decides by rule
+    def __init__(self, tools): self.tools = tools
+    async def propose(self, state, n, avoid):
+        return [Action("read_tick")] if state.progress < 1.0 else []
+
+class ByRule:                            # an evaluator that decides by rule
+    async def evaluate(self, state, outcomes):
+        return [Evaluation(1.0, True, "the exit condition was met", "rule")
+                if "exit" in o.text else Evaluation(0.3, False, "", "still watching")
+                for o in outcomes]
+
+StateEngine(env, proposer=ByThreshold(env.tools()), evaluator=ByRule(), budget=EngineBudget(max_model_calls=2))
+```
+
+The engine's own tests run this way — `ScriptedProposer`, `FixedProposer`, `KnowsTheAnswer` — so it is a
+first-class configuration rather than a trick, and it is what makes the tool usable in worlds an LLM round trip
+would be too slow or too expensive for: a threshold rule, a state machine, a spread check across two APIs, a
+lookup table. The run above takes about a millisecond and makes no network call of any kind.
+
+One naming note: `EngineBudget` counts "model calls" whether or not a model is there — it is counting
+consultations of the two seats, which is what they cost when a model fills them. A rule-based run reports the
+same number, and what binds it there is depth and branches rather than the call budget. What the engine still gives you there is everything except the judgment: the search and the
+backtrack, the frozen read-only boundary, the hard budget, the honest stop, and the record of what was read.
+
+What each seat buys, so you can choose rather than inherit:
+
+| in the seat | you get | you pay |
+|---|---|---|
+| a model (`LLMMoveProposer`, `LLMEvaluator`) | judgment about a world you cannot enumerate in code | seconds and tokens per round |
+| your own logic | speed, no cost, exact behaviour | you have to write the rule |
+
+They mix: a model proposing while a rule scores, or a rule proposing while a model judges outcomes, are both
+ordinary configurations — and the `Simulator`, `Confirmer` and `Synthesizer` seats are all optional, so a
+model-free run simply leaves them empty.
+
 ## Play with it
 
 `examples/` holds four playgrounds — one file each, standard library plus this package, no build step and nothing
