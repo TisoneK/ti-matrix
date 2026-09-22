@@ -13,7 +13,7 @@ import json
 import pytest
 
 from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMMoveProposer, StateEngine
-from ti_matrix.adapters.maze import DEFAULT_MAZE, MazeEnvironment
+from ti_matrix.adapters.maze import MazeEnvironment
 from ti_matrix.protocols import Action
 
 # Two routes from S to E that meet again: south down the left column (5 steps) or the long way round (21),
