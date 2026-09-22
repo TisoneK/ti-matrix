@@ -6,6 +6,7 @@
 Why Ti Matrix is shaped the way it is. The [README](README.md) says what it does and how to use it; this says what
 each choice was made *against*. It is the long form of reasoning that would otherwise live in commit messages.
 
+- [What this began as, and what of it survived](#what-this-began-as-and-what-of-it-survived)
 - [The loop](#the-loop)
 - [The state is the engine's](#the-state-is-the-engines)
 - [Ending honestly](#ending-honestly)
@@ -15,6 +16,53 @@ each choice was made *against*. It is the long form of reasoning that would othe
 - [Learning across runs, as arithmetic](#learning-across-runs-as-arithmetic)
 - [Two stores, and the one word they share](#two-stores-and-the-one-word-they-share)
 - [The benchmark, and its control](#the-benchmark-and-its-control)
+
+## What this began as, and what of it survived
+
+It began as a space: many moves, taken in parallel, unbounded, and convergent — routes that meet. What got built is
+a walk through that space on a leash. Two of those three properties survive, and the third is the one that has to
+be argued about rather than assumed.
+
+**Parallel breadth, serial depth.** A fan is probed all at once — `asyncio.gather` over the runnable candidates —
+and then only the best outcome is applied. The engine looks at several moves simultaneously and takes one step. The
+parallelism is real enough to have a cost: a `goto` sharing a fan leaves its siblings reading whichever page they
+happened to catch, which is why navigating asks to be proposed on its own.
+
+**The infinite is fenced, not denied.** `EngineBudget` is four hard stops — depth, branches, model calls,
+backtracks — each reported honestly rather than silently obeyed.
+
+**"Even the same" needs care, because it can mean three different things.**
+
+*The same answer is not the same state.* Two methods reach one answer; two routes reach one destination; neither
+route is invalidated by the other. That is not a property to collapse. `AgentState` holds the facts, the failed
+actions, the actions tried, the trail, the progress and the depth, so two states that settle one goal the same way
+are still different states — and merging them would discard exactly the part that records what has been ruled out.
+
+*The same knowledge is the honest form of confluence.* Two states holding the same facts cannot usefully disagree
+about what to do next: the world they have observed is the same world, and the only difference left is the pruning
+history, which unions cleanly. Sameness of what is **known** — not of what was answered, not of how it was reached
+— is the version worth detecting, and it is not detected today. Every fingerprint in the engine belongs to an
+action, never to a state, so the engine knows "this move was already tried" and cannot know "we are back where we
+were."
+
+*The same action is what the search can actually act on.* A failed move's fingerprint is kept, which is what makes
+a dead end cost one probe instead of one per turn — sameness at the resolution that changes a decision.
+
+**The event record still describes the space.** `state` carries `node` and `parent`; `selected` and `backtrack`
+name the node they move to. The engine emits a tree with parent links and never searches it — the beam of one walks
+a line while the log describes a graph, which is why a game-tree explorer is something anyone can build on top.
+
+**A maze is what a space looks like made concrete**: positions, corridors, dead ends, an exit, and routes that meet
+at the same junction. The engine already carries the whole vocabulary — `AgentState`, `Action`, `backtrack`,
+`done`, `EngineBudget` — so a maze is not a new mechanism, it is the problem the mechanism was built for. It is
+also the first world that would make the engine *search*.
+
+That last point is the recheck this design earns. Every shipped world is shallow: a filesystem goal is answered in a
+probe or two, a ledger goal is a handful of reads, the browser reads a page. None needs a second route, and none has
+ever made the engine retreat. `backtrack` appears in the engine's own tests and in the playgrounds' event
+vocabulary, and **in no adapter at all** — so the beam and the backtrack have been exercised against scripted
+problems, never against a problem that requires a space. A maze would be the first, and it is the cheapest way to
+find out whether the sameness question has teeth before a wider beam is built on top of it.
 
 ## The loop
 
