@@ -56,6 +56,32 @@ async for event in engine.run(Goal("which of my python files changed most recent
     print(event.to_dict())        # every step: states, actions, outcomes — never hidden reasoning
 ```
 
+## Play with it
+
+`examples/` holds three playgrounds — one file each, standard library plus this package, no build step and
+nothing to install. Each starts a page on loopback, runs real goals against a model endpoint you configure, and
+shows every step as it happens: the candidates the model proposed, the probes that really ran, the scores, the
+selection, the backtracks, and the honest stop when the goal cannot be settled.
+
+```bash
+python examples/files_ui.py  --root ~/code                            # your filesystem, read-only under there
+python examples/ledger_ui.py --vault ~/code/my-project                # a project's Context Ledger
+python examples/tools_ui.py  --vault ~/code/my-project --root ~/code  # several worlds, one tool set
+```
+
+- **files** — the smallest useful world: four read-only actions. Relative paths resolve under your root and an
+  absolute path that escapes it is refused, so a curious model cannot roam. Every observation is sent to the
+  endpoint you choose, which the page says plainly.
+- **ledger** — nine read actions over a project's memory, plus `recall`. Tick the box and the run's results are
+  appended back into the vault; leave it unticked and nothing is written. The box names the two files it would
+  touch.
+- **tools** — the tool set: two shipped environments and one of your own, resolved by declared rules. One tool
+  in that file deliberately replaces one of ours, so the resolution it prints is worth reading — change
+  `prefer` and watch the roles reverse.
+
+Each is a single file on purpose: copy one anywhere and it still runs. The three share a byte-identical shell,
+and a test holds it that way, so the duplication cannot drift.
+
 ## How it works
 
 ```
@@ -280,6 +306,7 @@ ti_matrix/            the engine — standard library only, no host application
     ├── stats_file.py        the learning record on disk, as one JSON document
     ├── stats_sqlite.py      the same record in SQLite, for more than one writer
     └── files_cli.py / ledger_cli.py   run a goal from the shell
+examples/             three single-file playgrounds — a page, a real run, your endpoint and your world
 benchmarks/           does the learning layer pay for itself? measured, with a control
 tests/                the engine's behaviour, plus a guard that fails the build if the core ever
                       reaches for a host application, an external record system, or ambient configuration
@@ -293,8 +320,8 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, three example adapters (a local filesystem,
 a project's Context Ledger, any OpenAI-compatible endpoint), the tool set, and the learning layer. Run
 end-to-end against real model providers, against a local filesystem, and against a real `.context_ledger/`
-vault; 110 tests cover the state, the loop, the terminal conditions, the host boundary, precedence between
-sources of tools, and what the engine learns from its own events. Green on Python 3.10 through 3.13.
+vault; 123 tests cover the state, the loop, the terminal conditions, the host boundary, precedence between
+sources of tools, what the engine learns from its own events, and the three playgrounds. Green on Python 3.10 through 3.13.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
 interface), resuming a run from persisted engine state (the record says what a run *established*; the state

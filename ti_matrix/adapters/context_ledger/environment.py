@@ -63,12 +63,16 @@ LEDGER_ACTIONS: dict[str, ActionSpec] = {**LEDGER_READ_ACTIONS, **LEDGER_WRITE_A
 
 class LedgerEnvironment:
     """Every action reads a Context Ledger vault. Nothing here can change one — including the writes it
-    declares, which exist so the engine can reason about them and stop rather than perform one."""
+    declares, which exist so the engine can reason about them and stop rather than perform one.
+
+    Takes the project directory, the ledger directory, or a ``LedgerVault`` already built — the same three
+    things ``LedgerRecorder`` accepts, because a host holding a vault should not have to unwrap it.
+    """
 
     name = "context-ledger"
 
-    def __init__(self, root: str | Path, actions: Optional[dict[str, ActionSpec]] = None) -> None:
-        self.vault = LedgerVault(root)
+    def __init__(self, root: str | Path | LedgerVault, actions: Optional[dict[str, ActionSpec]] = None) -> None:
+        self.vault = root if isinstance(root, LedgerVault) else LedgerVault(root)
         self._actions = actions if actions is not None else LEDGER_ACTIONS
 
     def tools(self) -> dict[str, ActionSpec]:
