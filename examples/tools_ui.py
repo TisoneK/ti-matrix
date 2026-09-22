@@ -139,11 +139,12 @@ PAGE = """<!doctype html>
 :root{--bg:#0e1015;--panel:#161a22;--line:#242a36;--fg:#e6e8ef;--dim:#98a1b0;--blue:#2f81f7;
       --ok:#3fb950;--bad:#f85149;--sel:#d29922;--bt:#a371f7}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
-header{padding:14px 20px;border-bottom:1px solid var(--line)}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;
+     display:flex;flex-direction:column;height:100vh;overflow:hidden}
+header{flex:0 0 auto;padding:14px 20px;border-bottom:1px solid var(--line)}
 h1{margin:0 0 4px;font-size:15px;font-weight:600}
 .note{color:var(--dim);font-size:12px;max-width:100ch}
-main{display:grid;grid-template-columns:minmax(300px,360px) 1fr;height:calc(100vh - 78px)}
+main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(300px,360px) 1fr}
 .col{overflow:auto;padding:16px 20px}
 .left{border-right:1px solid var(--line)}
 label{display:block;margin:12px 0 4px;color:var(--dim);font-size:12px}
@@ -263,12 +264,14 @@ function outcome(o) {
 }
 
 function render(s, append) {
-  if (s.outcome) $('outcome').innerHTML = outcome(s.outcome);
+  // Events first, then the outcome: the outcome of a settled run is drawn from the facts the last state
+  // event carried, and both arrive in the same snapshot.
   if (append && s.events.length) {
     if (seen === 0) $('events').innerHTML = '';
     for (const e of s.events) if (e.kind === 'state' && e.data.fact_list) lastFacts = e.data.fact_list;
     $('events').insertAdjacentHTML('beforeend', s.events.map(evRow).join(''));
   }
+  if (s.outcome) $('outcome').innerHTML = outcome(s.outcome);
   seen = s.next;
   $('status').textContent = s.status;
   $('notes').innerHTML = (s.notes || []).map(n => '<div>' + esc(n) + '</div>').join('');
