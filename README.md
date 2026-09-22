@@ -311,8 +311,7 @@ tests/                the engine's behaviour, plus a guard that fails the build 
 ```
 
 The dependency runs one way: an adapter imports the engine; the engine imports nothing of the adapter. `DESIGN.md`
-explains why each piece is shaped the way it is; [`ti_matrix/README.md`](ti_matrix/README.md) is the package's own
-notes.
+explains why each piece is shaped the way it is.
 
 ## Status
 
