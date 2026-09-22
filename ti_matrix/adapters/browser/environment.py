@@ -98,9 +98,9 @@ def _browser_actions(perform: frozenset[str]) -> dict[str, ActionSpec]:
 class BrowserEnvironment:
     """Actions on a real browser. Reads run; anything that changes the world waits to be asked.
 
-    ``perform`` names the actions this engine is allowed to *do* rather than only reason about. It defaults to
-    the reads. Pass ``perform={"click"}`` and a click becomes an ordinary action; pass a name that is not an
-    action and nothing happens, because an unknown tool is not silently accepted.
+    ``perform`` names what this run may *do* rather than only reason about, on top of the reads, which are
+    always allowed. Pass ``perform={"click"}`` and a click becomes an ordinary action. A name that is not an
+    action is ignored rather than silently accepted as one.
 
     Without arguments each run starts a browser in a throwaway profile and :meth:`close` deletes it. Pass
     ``user_data_dir`` to keep one instead — which is what you want for a site you are signed in to — and it
