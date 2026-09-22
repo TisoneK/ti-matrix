@@ -170,7 +170,7 @@ def test_no_action_can_smuggle_an_argument_into_the_command():
 
 
 def test_the_read_set_and_the_table_agree():
-    """Two invariants that a 76-row table invites breaking.
+    """Two invariants that a 78-row table invites breaking.
 
     A name in READS with no spec is unreachable — a read nothing can call. And an action whose name is not
     mapped to a subcommand reaches the CLI as `auth_save`, which it does not know: with no arguments, the only

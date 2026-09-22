@@ -244,8 +244,8 @@ env = CompositeEnvironment(BrowserEnvironment("about:blank"), AgentBrowser(sessi
 print(env.resolution().to_text())   # both offer click, screenshot and find: this says who won each
 ```
 
-`AgentBrowser` exposes the CLI's whole surface as 76 actions and holds the same boundary: **39 read** and are
-performed, **37 change something** and are refused unless you say so. `perform={"all"}` says so for everything;
+`AgentBrowser` exposes the CLI's whole surface as 78 actions and holds the same boundary: **39 read** and are
+performed, **39 change something** and are refused unless you say so. `perform={"all"}` says so for everything;
 `only={"snapshot", "get", "click"}` narrows the other way, which matters when a run needs four tools and not
 seventy-six. The CLI is not installed on the adapter's behalf — a missing one is a failed probe that says how to get
 it. A password never travels through an action's arguments: `auth_save` takes the *name* of an environment variable
@@ -318,7 +318,7 @@ explains why each piece is shaped the way it is.
 **v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
 project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 178 tests cover the state, the loop, the
+real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 180 tests cover the state, the loop, the
 terminal conditions, the host boundary, precedence between sources of tools, what the engine learns from its own
 events, the model port, the WebSocket and DevTools plumbing, the CLI contract against the real tool, and the
 playgrounds. Green on Python 3.10 through 3.13, and on Windows with 3.11; the browser tests skip themselves where

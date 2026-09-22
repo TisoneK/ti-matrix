@@ -111,7 +111,7 @@ it, anything that reaches outside it — `plugin_add` and `plugin_run` install a
 and `auth_login` write credentials — and `confirm`/`deny`, because approving an action is not observing one.
 
 That is why `BrowserEnvironment` performs eleven of seventeen actions and refuses the other six unless the host
-grants them by name, and why the `agent-browser` CLI's 76 actions split **39 read / 37 change something** with the
+grants them by name, and why the `agent-browser` CLI's 78 actions split **39 read / 39 change something** with the
 same rule. `perform={"all"}` is the difference between an engine that can look at a page and one you have handed the
 machine.
 
