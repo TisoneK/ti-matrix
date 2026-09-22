@@ -18,6 +18,11 @@ Two things to know:
     "headless" to watch it work, or run it headless and read the events instead.
   - **What it reads goes to your model endpoint.** A page's text is not private just because the browser is
     local; point this at a local model if you would rather nothing left the machine.
+
+If you already drive a browser with the `agent-browser` CLI, the engine can use that instead — or as well.
+`ti_matrix.adapters.browser.AgentBrowser` exposes its whole surface (accessibility-tree snapshots with `@eN`
+refs, semantic locators, tabs, cookies, console, audits) as actions, under the same read/write boundary, and
+`CompositeEnvironment` will put both sources in one tool set and report which one won each name they share.
 """
 from __future__ import annotations
 

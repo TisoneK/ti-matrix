@@ -201,6 +201,31 @@ the standard library — so `websocket.py` (RFC 6455: the handshake, the frames,
 a `subprocess` call and discovery is an HTTP GET. Pass `attach_to="127.0.0.1:9222"` to drive a browser you
 started yourself, which is what you want when you would rather watch.
 
+### Two sources, and they compose
+
+The environment above is this package's own and covers reading a page and acting on it. If you already drive a
+browser with the `agent-browser` CLI, the engine can use that instead — or as well:
+
+```python
+from ti_matrix import CompositeEnvironment
+from ti_matrix.adapters.browser import AgentBrowser, BrowserEnvironment
+
+env = CompositeEnvironment(BrowserEnvironment("about:blank"), AgentBrowser(session="run-7"))
+print(env.resolution().to_text())   # both offer click, screenshot and find: this says who won each
+```
+
+`AgentBrowser` exposes the CLI's surface as 38 actions — the accessibility-tree `snapshot` with its `@eN` refs,
+`find` by role or text instead of markup, `get` and `is` for element state, tabs, cookies, storage, console and
+page errors, axe-core audits, Web Vitals, PDF — and holds the same boundary: 23 of them read, 15 change
+something and are refused unless `perform` names them. It installs nothing on its behalf: a missing CLI is a
+failed probe that says how to get one, and every action runs in a session of its own so a run cannot navigate
+away from a page you left open.
+
+This is what the tool registry is for rather than an alternative to it. The package does not reimplement
+axe-core, the React DevTools protocol or network interception; it exposes what you already have as actions an
+engine can search over, judge, refuse and learn from — and keeps its own dependency-free environment for
+everything that does not need them.
+
 Two limits stated plainly. **A screenshot is for a person**: the evaluator is a text model, so a screenshot's
 fact is its path and size — a multimodal host can read the file, and nothing here pretends a PNG is text. And
 **do not put a browser behind the cache** without a version token taken from the page: a page moves, and a
@@ -367,9 +392,9 @@ is what lets the same engine drive different worlds — and what `tests/test_bou
 **v0.1** — the engine, the search with backtracking, the simulator, four example adapters (a local filesystem, a
 project's Context Ledger, a real browser, any OpenAI-compatible endpoint), the tool set, the learning layer, and
 four playgrounds to drive them from a page. Run end-to-end against real model providers, a local filesystem, a
-real `.context_ledger/` vault, and real Chrome; 148 tests cover the state, the loop, the terminal conditions, the
+real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI; 161 tests cover the state, the loop, the terminal conditions, the
 host boundary, precedence between sources of tools, what the engine learns from its own events, the WebSocket
-and DevTools plumbing, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
+and DevTools plumbing, the CLI contract, and the playgrounds. Green on Python 3.10 through 3.13; the browser tests skip
 themselves where no browser is installed.
 
 Next, in rough order: a wider beam (a real search strategy, once a second strategy exists to justify the
