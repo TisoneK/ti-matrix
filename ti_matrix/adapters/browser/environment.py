@@ -23,6 +23,10 @@ Two consequences worth knowing before you wire this in:
   - **A screenshot is for a person.** The engine's evaluator is a text model, so a screenshot's *fact* is its
     path and size — evidence a human can look at, not knowledge the search can reason over. A multimodal host
     can read the file itself; nothing here pretends a PNG is text.
+  - **One navigation per fan.** A fan is probed all at once, so a `goto` sharing one with other reads leaves
+    those reads reporting whichever page they caught — half the old one, half the new. Navigating is a read,
+    because a run has to be able to look around; the actions say to propose it on its own, and the CLI tells
+    the model where the browser already is so it navigates less.
 """
 from __future__ import annotations
 
@@ -61,8 +65,10 @@ def _browser_actions(perform: frozenset[str]) -> dict[str, ActionSpec]:
     """
     specs = [
         # ── reads: performed by the search, on any page ──
-        ActionSpec("goto", "Load a URL and wait for it to finish loading.",
-                   '{"url": "https://example.com/docs"}'),
+        ActionSpec("goto", "Load a URL and wait for it to finish loading. Propose this ON ITS OWN: a fan is "
+                           "probed all at once, so navigating while other actions read the page leaves them "
+                           "reading whichever page they happened to catch.",
+                   '{"url": "<the full URL to load>"}'),
         ActionSpec("page_text", "The visible text of the page, or of one element.",
                    '{"selector": "main"}'),
         ActionSpec("html", "The markup of the page or one element, truncated.",

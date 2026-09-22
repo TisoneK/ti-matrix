@@ -22,6 +22,7 @@ import os
 import socketserver
 import struct
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -31,6 +32,8 @@ import pytest
 from ti_matrix import Action, EngineBudget, Evaluation, Goal, StateEngine
 from ti_matrix.adapters.browser import (
     BrowserEnvironment,
+    BrowserError,
+    Chrome,
     WebSocket,
     WebSocketClosed,
     WebSocketError,
@@ -490,11 +493,16 @@ async def test_navigating_away_and_back_through_the_environment(page_server, tmp
         env.close()
 
 
-def processes_using(profile: str) -> list[str]:
-    """Any browser process still holding this profile — asked of the process table, not of our handle."""
+def browsers_using(profile: str) -> list[str]:
+    """The *browser* processes holding this profile — not its helpers.
+
+    Asked of the process table rather than of our handle, because that is where a leak shows up. Helpers
+    (`--type=…`, renderers, GPU) are children that the OS reaps; a browser still running is the leak.
+    """
     out = subprocess.run(["ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
     return [line for line in out.splitlines()
-            if profile in line and not line.lstrip().split(None, 1)[1].startswith("/bin/")]
+            if profile in line and " --type=" not in line
+            and not line.lstrip().split(None, 1)[1].startswith("/bin/")]
 
 
 @WITH_BROWSER
@@ -504,16 +512,40 @@ def test_closing_really_closes_a_browser_and_cleans_up_after_it(tmp_path):
     env = BrowserEnvironment("about:blank", headless=True)
     env.page()  # start it
     profile = Path(env._chrome._profile)
-    assert profile.is_dir() and processes_using(str(profile)), "the browser did not start"
+    assert profile.is_dir() and browsers_using(str(profile)), "the browser did not start"
     env.close()
 
     # Generous, because this is a real browser shutting down on a machine that may be busy: it was 8s, and
     # that failed under load while passing in isolation. A genuine leak never clears, so the bound still bites.
     deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and processes_using(str(profile)):
+    while time.monotonic() < deadline and browsers_using(str(profile)):
         time.sleep(0.25)
-    assert not processes_using(str(profile)), f"a browser is still running with {profile}"
+    assert not browsers_using(str(profile)), f"a browser is still running with {profile}"
     assert not profile.exists(), f"{profile} survived close()"
+@WITH_BROWSER
+def test_a_launch_that_fails_stops_the_browser_it_started(tmp_path, monkeypatch):
+    """A browser that starts and never answers must not be abandoned.
+
+    Found on this machine, twice over: thirty browsers had accumulated with throwaway profiles, because a
+    launch that timed out raised while the process it had started was still running and nothing held it any
+    more. The launch is made to fail here rather than be raced, so the check is about the contract and not
+    about timing.
+    """
+    started: dict = {}
+
+    def never_answers(self):
+        started["proc"] = self._proc  # the process this launch started, before the failure unwinds
+        raise BrowserError("the browser did not report a DevTools URL within 1s:")
+
+    monkeypatch.setattr(Chrome, "_await_devtools_url", never_answers)
+    with pytest.raises(BrowserError):
+        # a stand-in for a browser: it ignores what Chrome passes it and simply stays alive
+        Chrome(binary=sys.executable, extra_args=("-c", "import time; time.sleep(60)"), timeout_s=1,
+               user_data_dir=tmp_path / "profile")
+
+    proc = started["proc"]
+    assert proc is not None, "the launch never started a process, so this test proves nothing"
+    assert proc.poll() is not None, "a failed launch left its browser running"
 
 
 @WITH_BROWSER
@@ -528,8 +560,33 @@ def test_a_profile_you_supplied_is_never_deleted(tmp_path):
 
 @WITH_BROWSER
 @pytest.mark.asyncio
-async def test_a_browser_that_cannot_be_started_is_a_failed_probe_with_the_reason():
-    """A launch failure has to be an observation naming the cause, not a crash and not a hang."""
+async def test_a_browser_that_cannot_be_started_is_a_failed_probe_that_leaves_nothing_behind():
+    """A launch failure has to be an observation naming the cause — and it must not litter.
+
+    The profile directory is made before the browser is, so a launch that fails used to leave one in the temp
+    directory every time this test ran.
+    """
+    import tempfile
+
+    before = set(Path(tempfile.gettempdir()).glob("ti-matrix-browser-*"))
     env = BrowserEnvironment("about:blank", binary="/nonexistent/chrome")
     obs = await env.probe(Action("title_and_url", {}))
     assert obs.ok is False and "could not start" in obs.text and "/nonexistent/chrome" in obs.text
+    after = set(Path(tempfile.gettempdir()).glob("ti-matrix-browser-*"))
+    assert after == before, f"a failed launch left {sorted(p.name for p in after - before)} behind"
+
+
+def test_an_actions_hint_is_a_shape_not_a_value():
+    """A hint that looks like real data gets used as real data.
+
+    Found live: the engine read a run's `goto` example URL out of the description and navigated away from the
+    site it was asked about to it. Placeholders in angle brackets cannot be mistaken for an answer.
+    """
+    import re
+
+    from ti_matrix.adapters.browser import AgentBrowser
+
+    everything = list(BrowserEnvironment("about:blank").tools().values()) + list(AgentBrowser().tools().values())
+    offenders = [spec.name for spec in everything
+                 if re.search(r"https?://[a-z0-9-]+\.[a-z]{2,}", spec.args_hint or "")]
+    assert not offenders, f"these hints contain a URL a model can copy verbatim: {offenders}"

@@ -349,7 +349,7 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
         ActionSpec("snapshot", "The page as an accessibility tree with @eN refs. Do it first, and again after "
                                "anything changes the page: refs go stale.",
                    '{"interactive": true, "compact": true}'),
-        ActionSpec("read", "A URL's text, fetched through the browser.", '{"url": "https://example.com"}'),
+        ActionSpec("read", "A URL's text, fetched through the browser.", '{"url": "<the URL to read>"}'),
         ActionSpec("get", "One thing about the page or an element: text, html, value, attr, title, url, count, "
                           "box, styles.", '{"what": "value", "selector": "@e1"}'),
         ActionSpec("is_state", "Whether an element is visible, enabled or checked.",
@@ -366,7 +366,7 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
         ActionSpec("console", "The page's console output.", "{}"),
         ActionSpec("errors", "The page's errors.", "{}"),
         ActionSpec("vitals", "Core Web Vitals for the page: LCP, CLS, TTFB, FCP, INP.",
-                   '{"url": "https://example.com"}'),
+                   '{"url": "<the page to measure; omit for the current one>"}'),
         ActionSpec("a11y", "An axe-core accessibility audit: WCAG violations, with selectors.",
                    '{"tags": "wcag2a,wcag2aa"}'),
         # ── observing traffic, models, profiles and sessions ──
@@ -393,9 +393,11 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
                    '{"baseline": "before.txt"}'),
         ActionSpec("diff_screenshot", "A visual pixel diff against a baseline image.",
                    '{"baseline": "before.png"}'),
-        ActionSpec("diff_url", "Compare two pages.", '{"first": "https://a", "second": "https://b"}'),
+        ActionSpec("diff_url", "Compare two pages.", '{"first": "<url>", "second": "<url>"}'),
         # ── navigation and the viewport ──
-        ActionSpec("open", "Navigate to a URL.", '{"url": "https://example.com"}'),
+        ActionSpec("open", "Navigate to a URL. Propose this ON ITS OWN: a fan is probed all at once, so "
+                            "navigating while other actions read the page leaves them reading whichever page "
+                            "they happened to catch.", '{"url": "<the full URL to load>"}'),
         ActionSpec("back", "Go back.", "{}"),
         ActionSpec("forward", "Go forward.", "{}"),
         ActionSpec("reload", "Reload the page.", "{}"),
@@ -441,7 +443,7 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
                    read_only=False),
         ActionSpec("cookies_get", "The browser's cookies.", "{}"),
         ActionSpec("cookies_set", "Set a cookie, with the flags a real one has.",
-                   '{"name": "session", "value": "abc", "domain": ".example.com", "secure": true}',
+                   '{"name": "<cookie>", "value": "<value>", "domain": "<.your-domain>", "secure": true}',
                    read_only=False),
         ActionSpec("cookies_clear", "Clear every cookie.", "{}", read_only=False),
         ActionSpec("storage_get", "localStorage or sessionStorage, all of it or one key.",
@@ -454,8 +456,8 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
         # ── reaching outside the browser ──
         ActionSpec("auth_save", "Save credentials for a site. The password comes from an environment variable "
                                 "you name, never through this action's value.",
-                   '{"name": "app", "url": "https://app.example.com/login", "username": "me", '
-                   '"password_env": "APP_PASSWORD"}', read_only=False),
+                   '{"name": "<a label you choose>", "url": "<the login page>", "username": "<you>", '
+                   '"password_env": "<THE_ENV_VAR_HOLDING_IT>"}', read_only=False),
         ActionSpec("auth_login", "Sign in with saved credentials, or a credential-provider plugin.",
                    '{"name": "app", "credential_provider": "vault", "item": "My App"}', read_only=False),
         ActionSpec("auth_list", "The saved auth profiles.", "{}"),

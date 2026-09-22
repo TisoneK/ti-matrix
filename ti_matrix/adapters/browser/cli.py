@@ -47,8 +47,13 @@ async def _main(a) -> int:
         simulator=LLMSimulator(port),  # so a refused click is judged instead of only reported
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
+    # The state a run renders says nothing about where the browser is, so a model with no fact yet will
+    # happily navigate somewhere it invented — from the example URL in an action's description, in the run
+    # that found this. A constraint is the engine's own way of telling it where it already stands.
+    constraints = (f"the browser is already open at {a.url} — read that page; do not navigate elsewhere "
+                   f"unless the goal needs it",) if a.url and a.url != "about:blank" else ()
     try:
-        async for event in engine.run(Goal(a.goal)):
+        async for event in engine.run(Goal(a.goal, constraints)):
             print(json.dumps(event.to_dict(), ensure_ascii=False) if a.json
                   else f"[{event.kind}] {event.data}")
     finally:

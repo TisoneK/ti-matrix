@@ -141,12 +141,20 @@ class Chrome:
         try:
             self._proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         except OSError as exc:
+            self.close()  # the profile directory was already made; a failed launch should not leave it
             raise BrowserError(f"could not start {self.binary}: {exc}") from exc
         threading.Thread(target=self._drain_stderr, daemon=True).start()
-        listening = self._await_devtools_url()
-        host, _, port = listening.rpartition(":")
-        self.host, self.port = host or "127.0.0.1", int(port)
-        self._check_reachable()
+        try:
+            listening = self._await_devtools_url()
+            host, _, port = listening.rpartition(":")
+            self.host, self.port = host or "127.0.0.1", int(port)
+            self._check_reachable()
+        except BaseException:
+            # A browser that started but never became reachable is still a browser, and this object is about
+            # to become unreachable itself — so nothing would ever close it. Thirty of them accumulated on
+            # this machine while it was busy enough that launches timed out, which is how this was found.
+            self.close()
+            raise
 
     def _drain_stderr(self) -> None:
         """Chrome writes its DevTools URL to stderr and will block if nobody reads it."""
