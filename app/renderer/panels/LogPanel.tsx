@@ -45,7 +45,7 @@ export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookma
 
   return (
     <div className="ledger">
-      <PaneHead title="Ledger" sub={`${decisions.length} decision${decisions.length === 1 ? "" : "s"}`}>
+      <PaneHead title="Decisions" sub={`${decisions.length} decision${decisions.length === 1 ? "" : "s"}`}>
         {FLAG_ORDER.filter((f) => counts[f] > 0).map((f) => (
           <Chip key={f} label={`${flagSpec(f).label} ${counts[f]}`} pressed={only === f} swatch={undefined}
                 onClick={() => setOnly((cur) => (cur === f ? null : f))}

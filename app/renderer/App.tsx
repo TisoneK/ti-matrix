@@ -307,7 +307,7 @@ export function App() {
           onPick={async () => {
             const dir = await session.pickDirectory();
             if (!dir) return;
-            const key = world === "ledger" ? "project" : "root";
+            const key = "root";
             setValues((v) => ({ ...v, [key]: dir }));
           }}
           headless={headless}

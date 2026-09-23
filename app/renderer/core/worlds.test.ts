@@ -6,7 +6,6 @@
  */
 import { EngineEventFrame } from "../protocol";
 import { readFiles, treeOf } from "./worlds/files";
-import { readLedger } from "./worlds/ledger";
 import { readBrowser } from "./worlds/browser";
 
 let pass = 0;
@@ -51,41 +50,9 @@ eq("tree deep.py nested under sub", tree.children.find((c) => c.name === "sub")!
 eq("tree a.txt read", tree.children.find((c) => c.name === "a.txt")!.read, true);
 
 /* ── ledger ────────────────────────────────────────────────────────────── */
-const ledger = readLedger([
-  probe("brief()", true, "Context Ledger at /p/.context_ledger — protocol core 2.0.4 The office is calm. (memory: 34 files; 2 closed office record(s) in history/)"),
-  probe("open_tasks()", true, "Current task: Ship the UI — Working  session: S15 Backlog — High (2): - B-3: fix the thing - B-4: other thing Backlog — Low (1): - B-9: someday Parking lot (not a queue): Findings 1"),
-  probe("decisions(limit=8)", true, '2 decision(s) in force — respected, not relitigated: - ADR-7: Use a beam (2026-09-18) — accepted - ADR-2: Old call (2026-09-01) — proposed Full text of one: read_decision {"number": "<n>"}'),
-  probe("recent_sessions(limit=5)", true, "The last 1 session(s) here: - 2026-09-19 — Session 15     Agent: Codebuff     Model: gpt-5     Outcome: done"),
-  probe("friction(log=inefficiencies, limit=6)", true, "1 open inefficiencies entry (showing 1): - 2026-09-20 — bao     Problem: slow     Workaround / fix: cache it     Prevent next time: measure"),
-  probe("search_memory(text=flaky, scope=memory)", true, "1 line(s) in scope 'memory' contain 'flaky': memory/office/tasks/backlog.md:41: the flaky test (closed offices under history/ are outside this scope — use scope='history')"),
-  probe("list_memory(scope=memory)", true, "2 file(s) in scope 'memory': - memory/user/identity.md (120 B) - memory/user/preferences.md (812 B)"),
-  probe("read_memory(path=memory/user/identity.md)", true, "memory/user/identity.md: hello"),
-  probe("append_note(text=x)", false, "append_note would change the ledger, and this environment only reads (a host writes, from the run's own events)"),
-]);
-eq("ledger vault", ledger.vault, "/p/.context_ledger");
-eq("ledger core", ledger.core, "2.0.4");
-eq("ledger scale", ledger.scale, "2 closed in history · 34 memory files");
-eq("ledger current", ledger.current, { task: "Ship the UI", status: "Working", session: "S15" });
-eq("ledger backlog sections", ledger.backlog.map((b) => b.section), ["High", "Low"]);
-eq("ledger backlog rows", ledger.backlog[0].rows, [{ ident: "B-3", summary: "fix the thing" }, { ident: "B-4", summary: "other thing" }]);
-eq("ledger backlog total", ledger.backlog[0].total, 2);
-eq("ledger parking", ledger.parking, "Findings 1");
-eq("ledger decisions", ledger.decisions, [
-  { number: "7", title: "Use a beam", date: "2026-09-18", status: "accepted" },
-  { number: "2", title: "Old call", date: "2026-09-01", status: "proposed" },
-]);
-eq("ledger session heading", ledger.sessions[0].heading, "2026-09-19 — Session 15");
-eq("ledger session fields", ledger.sessions[0].fields, [["Agent", "Codebuff"], ["Model", "gpt-5"], ["Outcome", "done"]]);
-eq("ledger friction log", ledger.friction[0].log, "inefficiencies");
-eq("ledger friction fields", ledger.friction[0].entries[0].fields.length, 3);
-eq("ledger search hits", ledger.searches[0].hits, [{ rel: "memory/office/tasks/backlog.md", line: 41, text: "the flaky test" }]);
-eq("ledger memory files", ledger.memory[0].files, [{ rel: "memory/user/identity.md", bytes: 120 }, { rel: "memory/user/preferences.md", bytes: 812 }]);
-eq("ledger read", ledger.reads[0].rel, "memory/user/identity.md");
-eq("ledger refused write", ledger.refusedWrites.length, 1);
-eq("ledger seen", [...ledger.seen].sort(), ["brief", "decisions", "friction", "list_memory", "open_tasks", "read_memory", "recent_sessions", "search_memory"]);
-
-const unboot = readLedger([probe("brief()", false, "no bootstrapped Context Ledger at /p/.context_ledger — this needs `.context_ledger/memory/office/` to exist")]);
-eq("ledger unbootstrapped", Boolean(unboot.unbootstrapped), true);
+/* The Context Ledger world's parser was removed with the world itself — it was one project's
+   engineering protocol, not something a stranger opening the app could recognise. The adapter and
+   `ledger_cli` still ship; only the app no longer offers it. */
 
 /* ── browser ───────────────────────────────────────────────────────────── */
 const browser = readBrowser([

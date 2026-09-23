@@ -15,10 +15,9 @@ from ti_matrix.protocols import Action
 
 def test_the_registry_describes_every_world_with_its_form():
     worlds = {w["name"]: w for w in describe()}
-    assert set(worlds) == {"maze", "files", "ledger", "browser"}
+    assert set(worlds) == {"maze", "files", "browser"}
     assert {f["name"] for f in worlds["maze"]["fields"]} == {"width", "height", "seed"}
     assert {f["name"] for f in worlds["files"]["fields"]} == {"root"}
-    assert {f["name"] for f in worlds["ledger"]["fields"]} == {"project", "write_back"}
     assert {f["name"] for f in worlds["browser"]["fields"]} == {"url", "headless"}
     assert all(isinstance(w["note"], str) and w["note"] for w in worlds.values())
 
@@ -48,14 +47,19 @@ def test_a_bad_config_is_a_valueerror_with_a_message_a_form_can_show():
         build("narnia", {})
     with pytest.raises(ValueError, match="root"):
         build("files", {})
-    with pytest.raises(ValueError, match="project"):
+    # The Context Ledger world was removed from the picker; asking for it by name is now a plain
+    # unknown-world error, which is the behaviour a stale saved config will actually hit.
+    with pytest.raises(ValueError, match="no world named"):
         build("ledger", {})
 
 
-def test_the_ledger_builds_against_a_real_vault(tmp_path):
+def test_the_ledger_adapter_still_ships_even_though_the_app_no_longer_offers_it(tmp_path):
+    """Dropping the world from the picker must not delete the adapter — `ledger_cli` still drives it."""
+    from ti_matrix.adapters.context_ledger import LedgerEnvironment
+
     (tmp_path / ".context_ledger" / "memory" / "office").mkdir(parents=True)
-    env = build("ledger", {"project": str(tmp_path)})
-    assert env.name == "context-ledger"  # the adapter's own name; the world key is "ledger"
+    env = LedgerEnvironment(str(tmp_path))
+    assert env.name == "context-ledger"
     # the writes are declared, so the engine reasons about them, and never performs one itself
     assert not all(spec.read_only for spec in env.tools().values())
 

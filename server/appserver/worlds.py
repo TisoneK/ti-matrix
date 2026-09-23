@@ -17,7 +17,6 @@ from typing import Any, Callable, Optional
 
 from ti_matrix.protocols import Action, Observation
 
-from ti_matrix.adapters.context_ledger import LedgerEnvironment
 from ti_matrix.adapters.files import FilesEnvironment
 from ti_matrix.adapters.maze import MazeEnvironment
 
@@ -88,13 +87,6 @@ def _files_world(config: dict[str, Any]) -> RootedFiles:
     return RootedFiles(root)
 
 
-def _ledger_world(config: dict[str, Any]) -> LedgerEnvironment:
-    project = str(config.get("project", "")).strip()
-    if not project:
-        raise ValueError("the ledger world needs a project directory")
-    return LedgerEnvironment(project)
-
-
 def _browser_world(config: dict[str, Any]) -> Any:
     from ti_matrix.adapters.browser import BrowserEnvironment
 
@@ -105,6 +97,12 @@ def _browser_world(config: dict[str, Any]) -> Any:
 
 # ── the registry — the whole list of what v1 can drive ──────────────────────
 
+# The Context Ledger world is deliberately NOT here. `ti_matrix.adapters.context_ledger` still ships
+# and `python -m ti_matrix.adapters.ledger_cli` still drives it — but it is one project's engineering
+# protocol, not a thing a stranger opening this app has any way to recognise. Every label it needed was
+# insider vocabulary ("the vault", "a directory holding .context_ledger/"), and `test_boundary.py`
+# already treats that vocabulary as another project's bookkeeping the engine must not cite. A world
+# picker is the product's front door; three worlds anyone can read beats four with an in-joke in it.
 WORLDS: dict[str, World] = {
     w.name: w
     for w in (
@@ -119,13 +117,6 @@ WORLDS: dict[str, World] = {
               "Every action reads. Paths resolve under the root; one that escapes it is refused.",
               ({"name": "root", "label": "Read files under", "default": "", "placeholder": "C:\\path\\or\\/home/you/code"},),
               _files_world),
-        World("ledger", "Context Ledger",
-              "A project's memory, read as an environment. Write-back happens only when you ask for it.",
-              ({"name": "project", "label": "Project directory (holding .context_ledger/)",
-                "default": "", "placeholder": "C:\\path\\to\\project"},
-               {"name": "write_back", "label": "Write the run's findings back into the vault",
-                "default": False, "kind": "checkbox"}),
-              _ledger_world),
         World("browser", "Real browser",
               "A real Chrome at the URL you name. Clicks and typing are asked before they happen.",
               ({"name": "url", "label": "Start URL", "default": "", "placeholder": "https://example.com"},

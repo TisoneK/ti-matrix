@@ -107,15 +107,14 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
 
 
 def _maybe_recorder(world_name: str, config: dict[str, Any]) -> Any:
-    """The ledger's write-back, only when asked for. Writing the vault is host work, never an action."""
-    if world_name != "ledger" or not config.get("write_back"):
-        return None
-    from ti_matrix.adapters.context_ledger import LedgerRecorder
+    """No app world writes back any more — the Context Ledger world left the picker.
 
-    project = str(config.get("project", "")).strip()
-    if not project:
-        return None
-    return LedgerRecorder(project, model=str(config.get("model", "")))
+    Kept as the seam rather than deleted: `RunState.recorder` and the `settled` frame's `record` field
+    are the general shape for "a run left something behind in its world", and the next world that does
+    (a report written, a file moved) plugs in here. `ti_matrix.adapters.context_ledger.LedgerRecorder`
+    still exists and `ledger_cli` still drives it; it is only the desktop app that no longer offers it.
+    """
+    return None
 
 
 # ── the run's lifecycle on the socket ───────────────────────────────────────

@@ -14,7 +14,6 @@
 import { useMemo } from "react";
 import { EngineEventFrame } from "../core/types";
 import { readFiles, treeOf, Node, FilesKnowledge } from "../core/worlds/files";
-import { readLedger, LedgerKnowledge } from "../core/worlds/ledger";
 import { readBrowser, BrowserKnowledge } from "../core/worlds/browser";
 import { Empty, PaneBody, PaneHead } from "../ui/atoms";
 
@@ -75,7 +74,6 @@ export function WorldSurface({ world, events }: { world: string; events: EngineE
 
 function cardsFor(world: string, events: EngineEventFrame[]): Card[] {
   if (world === "files") return fileCards(readFiles(events));
-  if (world === "ledger") return ledgerCards(readLedger(events));
   if (world === "browser") return browserCards(readBrowser(events));
   return [];
 }
@@ -128,53 +126,6 @@ function fileCards(k: FilesKnowledge): Card[] {
     ...k.failures.map((f) => ({ left: `${f.tool} ${f.path}`.trim(), right: f.why, tone: "fail" as const })),
   ];
   cards.push({ title: "Refused", rows: refusals, empty: "nothing was refused" });
-  return cards;
-}
-
-function ledgerCards(k: LedgerKnowledge): Card[] {
-  const cards: Card[] = [];
-  cards.push({
-    title: "The vault",
-    rows: [
-      ...(k.vault ? [{ left: k.vault, right: "root" }] : []),
-      ...(k.core ? [{ left: `protocol core ${k.core}`, right: "version" }] : []),
-      ...(k.scale ? [{ left: k.scale, right: "scale" }] : []),
-      ...(k.current ? [{ left: k.current.task, right: `${k.current.status}${k.current.session ? ` · ${k.current.session}` : ""}` }] : []),
-    ],
-    empty: k.unbootstrapped ? "no vault here" : "nothing read yet",
-  });
-
-  cards.push({
-    title: "Backlog",
-    rows: k.backlog.flatMap((section) =>
-      section.rows.map((row, i) => ({
-        left: `${row.ident} ${row.summary}`,
-        right: i === 0 ? `${section.section} · of ${section.total}` : undefined,
-      }))),
-    empty: "no backlog read",
-  });
-
-  cards.push({
-    title: "Decisions in force",
-    rows: k.decisions.map((d) => ({ left: `ADR-${d.number}: ${d.title}`, right: `${d.date} · ${d.status}`, tone: d.status === "accepted" ? ("ok" as const) : undefined })),
-    empty: "none read",
-  });
-
-  cards.push({
-    title: "Memory",
-    rows: k.memory.flatMap((group) => group.files.map((f) => ({ left: f.rel, right: bytes(f.bytes) }))),
-    empty: "no file listed",
-  });
-
-  cards.push({
-    title: "Search results",
-    rows: k.searches.flatMap((s) => s.hits.map((h) => ({ left: `${h.rel}:${h.line}`, right: h.text }))),
-    empty: "nothing searched",
-  });
-
-  if (k.refusedWrites.length > 0) {
-    cards.push({ title: "Refused writes", rows: k.refusedWrites.map((w) => ({ left: w, right: "read-only world", tone: "fail" as const })) });
-  }
   return cards;
 }
 
