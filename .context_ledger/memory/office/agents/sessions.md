@@ -27,8 +27,8 @@ re-seeded into the new office explicitly, and nothing else carries over.
 ## 2026-09-23 — Session 1 (bootstrap + the desktop app's skeleton)
 - **Agent:** Buffy | **Model:** unknown | **Platform:** Lameck — Windows, Git Bash | **Role:** engineer | **Core:** 2.0.4
 - **Task:** bootstrap `.context_ledger/` from the package clone (`sh ../context-ledger/core/bin/ledger-sync bootstrap .`) and fill the memory skeleton; then build the desktop-app skeleton per the approved plan — `server/` (the `ti-matrix-server` sidecar: TM1 protocol, event streaming, WS confirmer, world registry, seeded scenario generator, 33 tests) and `app/` (Electron main with sidecar lifecycle, minimal preload, React run-inspector with the confirmer dialog; typecheck + Vite build + subprocess smoke green) — and the CI matrix (pytest 3.10–3.13 × 3 OS, both wheels, PyInstaller sidecar, electron-builder artifacts)
-- **Commits:** 0 — everything (bootstrap, server/, app/, CI, .gitignore) sits uncommitted in the tree; the host leaves committing to the user
-- **Outcome:** done — the `ti_matrix` wheel untouched (197 passed, 2 skipped), sidecar suite 33 passed
+- **Commits:** 3, pushed (48190e7 project surface — server/, app/, CI, .gitignore; e16237d ledger bootstrap; 2fa0699 merge with four remote commits that arrived mid-push, .gitignore conflict resolved, both suites re-verified after)
+- **Outcome:** done and pushed — the `ti_matrix` wheel untouched (197 passed, 2 skipped before the merge; 204 passed, 2 skipped after integrating the remote's engine changes), sidecar suite 33 passed, app typecheck green
 - **Open items:** `npm run dev:electron` not yet run against a live window (needs the user at the keyboard); PyInstaller bundle not yet built locally; codesigning/notarization and auto-update deliberately deferred; ledger write-back checkbox exists but is only exercised by unit tests
 - **Notes:** none
 - **Report:** none

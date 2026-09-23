@@ -7,4 +7,3 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
-| Buffy | S001 | unknown (Freebuff host agent) | desktop-app skeleton built and verified; changes uncommitted, awaiting the user | Working |

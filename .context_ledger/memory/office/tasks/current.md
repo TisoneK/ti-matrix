@@ -7,5 +7,5 @@ its roster row (if left behind) says who was here; check the session
 entry and backlog before starting.
 
 - **Session:** 2026-09-23 — Buffy / unknown (S001)
-- **Task:** desktop-app skeleton built (server/ sidecar + app/ Electron shell + CI) and verified; all changes uncommitted, awaiting the user's go-ahead
-- **Status:** done
+- **Task:** desktop-app skeleton (server/ sidecar + app/ Electron shell + CI) — built, verified, committed and pushed; session closed
+- **Status:** idle
