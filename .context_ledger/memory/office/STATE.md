@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T12:55:41Z_
+_Regenerated: 2026-09-23T12:56:56Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,7 +16,6 @@ _Regenerated: 2026-09-23T12:55:41Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Session start — pull + kickoff orientation, awaiting task
-- **Nadia** (S003) — Working — Back for a follow-up: a custom title bar in the app's own chrome (and the main-branch pus…
 
 ## Current task
 - **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*

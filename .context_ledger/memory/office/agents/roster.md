@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Wren | S002 | unknown | Session start — pull + kickoff orientation, awaiting task | Working |
-| Nadia | S003 | deepseek-flash | Back for a follow-up: a custom title bar in the app's own chrome (and the main-branch push the standing policy asks for) | Working |
