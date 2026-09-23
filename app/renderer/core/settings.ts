@@ -22,6 +22,8 @@ export interface AppSettings {
   goal?: string;
   /** What a run may spend — plain numbers, mirrored from the engine's budget fields. */
   budget?: { max_depth?: number; max_branches?: number; max_model_calls?: number; max_backtracks?: number };
+  /** True once the first-run welcome has been dismissed — it never nags again. */
+  welcomeSeen?: boolean;
 }
 
 interface SettingsBridge {
@@ -72,6 +74,7 @@ export async function loadSettings(): Promise<AppSettings | null> {
       }
       out.budget = budget;
     }
+    if (typeof s["welcomeSeen"] === "boolean") out.welcomeSeen = s["welcomeSeen"];
     return out;
   } catch {
     return null; // unreadable settings are not an error, they are defaults

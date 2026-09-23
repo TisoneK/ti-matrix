@@ -12,7 +12,7 @@
 
 import { Button } from "../ui/controls";
 
-export function Welcome({ onConfigure, blocked, hint }: { onConfigure: () => void; blocked: string; hint: string }) {
+export function Welcome({ onConfigure, onDismiss }: { onConfigure: () => void; onDismiss: () => void }) {
   return (
     <div className="welcome">
       <div className="welcome-card">
@@ -30,12 +30,18 @@ export function Welcome({ onConfigure, blocked, hint }: { onConfigure: () => voi
           <li><span><b>Run it.</b> The map, tree and ledger fill in live. Scrub back through the run, mark the moments it was wrong, compare two runs of the same seed.</span></li>
         </ol>
         <div className="welcome-go">
-          <Button variant="primary" onClick={onConfigure} disabled={Boolean(blocked) && !hint}>
-            {blocked && hint ? blocked : "Open setup — model, key, goal"}
+          {/* Never disabled: setup is the way *out* of not being set up yet — a button that refuses to
+              open the settings you came here to change is a dead end, and this screen is the first one. */}
+          <Button variant="primary" onClick={onConfigure}>
+            Open setup — model, key, goal
           </Button>
           <span className="dim" style={{ fontSize: 11.5 }}>
             or press Ctrl+Enter once it is set · saved runs live in the Library
           </span>
+          <span className="spacer" style={{ flex: 1 }} />
+          <button type="button" className="btn ghost" onClick={onDismiss} title="dismiss this; it will not come back">
+            skip →
+          </button>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@
  * their environment — two fields for one secret was a trap nobody should have to read twice.
  */
 
+import { useEffect } from "react";
 import { WorldField, WorldInfo } from "../protocol";
 import { Button } from "../ui/controls";
 import { Budget, BUDGET } from "../core/models";
@@ -21,7 +22,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless, apiKey, setApiKey }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless, apiKey, setApiKey, onClose }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -38,10 +39,33 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   /** The pasted key: session memory only, sent with the run, never saved anywhere. */
   apiKey: string;
   setApiKey: (value: string) => void;
+  /** Closes the sheet — Esc does the same. A surface the user cannot dismiss is a trap. */
+  onClose: () => void;
 }) {
   const current = worlds.find((w) => w.name === world);
+  // Esc closes, from wherever the focus happens to be — unless it is in a text field mid-word.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) && document.activeElement === t) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <div className="drawer">
+    <div className="drawer" role="dialog" aria-label="run configuration">
+      <div className="drawer-bar">
+        <span className="pane-title">Setup</span>
+        <span className="pane-sub">saved as you type — the key never leaves this window</span>
+        <span className="spacer" />
+        <button type="button" className="winbtn" onClick={onClose} aria-label="close setup" title="close (Esc)">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
       <div className="drawer-grid">
         <Field label={modelLabels["base_url"] ?? "Endpoint"} hint="any OpenAI-compatible base URL">
           {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}

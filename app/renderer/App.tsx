@@ -45,6 +45,8 @@ export function App() {
   const [apiKey, setApiKey] = useState("");
   /** True once stored settings have been read, so hydration does not race the first save. */
   const [hydrated, setHydrated] = useState(false);
+  /** The first-run welcome: shown until dismissed (or a run exists), and never again after that. */
+  const [welcomeSeen, setWelcomeSeen] = useState(false);
 
   const [library, setLibrary] = useState<ArtifactMeta[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
@@ -104,6 +106,7 @@ export function App() {
         if (s.values) setValues(s.values);
         if (s.goal) setGoal(s.goal);
         if (s.budget) setBudgetState((b) => ({ ...b, ...s.budget }));
+        if (s.welcomeSeen) setWelcomeSeen(true);
       }
       setHydrated(true);
     });
@@ -113,10 +116,10 @@ export function App() {
   useEffect(() => {
     if (!hydrated) return;
     const t = window.setTimeout(() => {
-      saveSettings({ model, world, values, goal, budget });
+      saveSettings({ model, world, values, goal, budget, welcomeSeen });
     }, 500);
     return () => window.clearTimeout(t);
-  }, [hydrated, model, world, values, goal, budget]);
+  }, [hydrated, model, world, values, goal, budget, welcomeSeen]);
 
   const current = worlds.find((w) => w.name === world);
   const running = status === "running";
@@ -262,14 +265,14 @@ export function App() {
             setValues((v) => ({ ...v, [key]: dir }));
           }}
           headless={headless}
+          onClose={() => setConfigOpen(false)}
         />
       ) : null}
 
       {view === "run" ? (
         <main className="stage">
-          {projection.decisions.length === 0 && status !== "running" ? (
-            <Welcome onConfigure={() => setConfigOpen(true)} blocked={blocked}
-                     hint={status === "connecting" ? "reaching the sidecar…" : ""} />
+          {projection.decisions.length === 0 && status !== "running" && !welcomeSeen ? (
+            <Welcome onConfigure={() => setConfigOpen(true)} onDismiss={() => setWelcomeSeen(true)} />
           ) : (
             <>
               <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}

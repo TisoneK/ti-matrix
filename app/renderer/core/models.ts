@@ -20,13 +20,30 @@ export const MODELS: { defaults: ModelDefaults; labels: Record<string, string> }
   } as Record<string, string>,
 };
 
+/** The provider's name, from its host — the readout people actually scan. */
+const PROVIDERS: [RegExp, string][] = [
+  [/^api\.deepseek\./, "DeepSeek"],
+  [/^api\.openai\./, "OpenAI"],
+  [/^openrouter\./, "OpenRouter"],
+  [/^api\.groq\./, "Groq"],
+  [/^api\.anthropic\./, "Anthropic"],
+  [/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/, "local"],
+];
+
+export function providerName(baseUrl: string): string {
+  let host = baseUrl;
+  try { host = new URL(baseUrl).host; } catch { /* a half-typed URL is not worth a throw */ }
+  for (const [pattern, name] of PROVIDERS) {
+    if (pattern.test(host)) return name;
+  }
+  // An unknown host is still a name: the domain without its port, not a URL.
+  return host.replace(/^www\./, "").split(":")[0] || host;
+}
+
 /** The one-line summary the settings button shows, so the model in play is visible without opening it. */
 export function modelSummary(config: Record<string, string | boolean>): string {
   const model = String(config["model"] ?? MODELS.defaults["model"]);
-  const url = String(config["base_url"] ?? MODELS.defaults["base_url"]);
-  let host = url;
-  try { host = new URL(url).host; } catch { /* a half-typed URL is not worth a throw */ }
-  return `${model} · ${host}`;
+  return `${model} · ${providerName(String(config["base_url"] ?? MODELS.defaults["base_url"]))}`;
 }
 
 /**

@@ -563,6 +563,8 @@ svg { display: block; }
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
   padding: var(--s3);
 }
+.drawer-bar { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); }
+.drawer-bar .spacer { flex: 1; }
 .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s4); }
 @media (max-width: 700px) { .drawer-grid { grid-template-columns: 1fr; } }
 .field { display: flex; flex-direction: column; gap: 4px; }
@@ -618,6 +620,8 @@ svg { display: block; }
 }
 .welcome-steps b { color: var(--fg); font-weight: 600; }
 .welcome-go { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.welcome .btn.ghost { color: var(--fg-3); border-color: transparent; background: transparent; }
+.welcome .btn.ghost:hover { color: var(--fg); border-color: var(--line-2); }
 
 /* ── the library ─────────────────────────────────────────────────────────── */
 

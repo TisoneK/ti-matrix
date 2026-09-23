@@ -379,28 +379,49 @@ function createAppWindow(): void {
   watchWindowState(appWin);
   mainWindow = appWin;
   stage("renderer", "active", process.env.VITE_DEV ? "from the vite dev server" : "from the built bundle");
+  // True while dev-mode connect retries are outstanding: during that window did-fail-load is the loop's
+  // business, not a boot failure.
+  let retrying = false;
   if (process.env.VITE_DEV) {
     // The dev server may still be waking up; a refused connection here is worth a few retries before
-    // it counts as "not running".
+    // it counts as "not running". Every callback is destroy-safe: the window can die (splash's quit
+    // button, app quit) while a retry is pending, and a `loadURL` on a destroyed window is an uncaught
+    // exception in the main process — the crash dialog this guard exists to prevent.
     let tries = 0;
+    let alive = true;
+    retrying = true;
+    appWin.on("closed", () => { alive = false; });
     const load = (): void => {
-      appWin.loadURL("http://localhost:5173").catch(() => {
-        if (tries < 20) { tries += 1; setTimeout(load, 500); return; }
-        rendererFailed("could not reach the dev server at http://localhost:5173 — is `npm run dev` running?");
+      if (!alive || appWin.isDestroyed()) { alive = false; return; }
+      appWin.loadURL("http://127.0.0.1:5173").catch(() => {
+        if (!alive || appWin.isDestroyed()) return;
+        if (tries < 40) { tries += 1; setTimeout(load, 500); return; }
+        retrying = false;
+        rendererFailed("could not reach the dev server at http://127.0.0.1:5173 — is `npm run dev` running?");
       });
     };
     load();
+    appWin.webContents.on("did-fail-load", () => {
+      if (!alive || appWin.isDestroyed()) return;
+      if (retrying && tries < 40) {
+        tries += 1;
+        setTimeout(load, 500);
+      }
+    });
   } else {
     appWin.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"))
       .catch((err: Error) => rendererFailed(err.message));
   }
   appWin.webContents.on("did-fail-load", (_e, code, desc, _url, isMainFrame) => {
-    if (isMainFrame && !revealed) rendererFailed(`${desc} (${code})`);
+    // In dev the retry loop above owns failure; a main-frame failure here only means the boot failed
+    // for real — the renderer page itself, not the server being late.
+    if (isMainFrame && !revealed && !appWin.isDestroyed() && !retrying) rendererFailed(`${desc} (${code})`);
   });
   appWin.webContents.on("did-finish-load", () => {
     // Fires for the splash too; the renderer stage is only done once the *real* app is up.
+    if (appWin.isDestroyed()) return;
     const url = appWin.webContents.getURL();
-    const isRenderer = process.env.VITE_DEV ? url.startsWith("http://localhost:5173") : url.includes("dist");
+    const isRenderer = process.env.VITE_DEV ? url.startsWith("http://127.0.0.1:5173") : url.includes("dist");
     if (isRenderer) revealApp();
   });
   // A paint event that never arrives (a throttled hidden window, say) must not leave the app invisible
@@ -409,7 +430,7 @@ function createAppWindow(): void {
 }
 
 /** How long the splash stays readable even on a warm boot, so the maze gets its moment. */
-const SPLASH_MIN_MS = 1600;
+const SPLASH_MIN_MS = 2600;
 
 /** The handover: the app takes the screen, the splash closes. Nothing goes dark between the two. */
 function revealApp(): void {
