@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T12:13:43Z_
+_Regenerated: 2026-09-23T12:45:51Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,20 +16,20 @@ _Regenerated: 2026-09-23T12:13:43Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Session start — pull + kickoff orientation, awaiting task
-- **Nadia** (S003) — Working — Discarding the current renderer; rebuilding the app UI from scratch as a visualization-fi…
 
 ## Current task
-- **2026-09-23 — Buffy / unknown (S001)** — desktop-app skeleton (server/ sidecar + app/ Electron shell + CI) — built, verified, committed and pushed; session closed — *idle*
+- **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*
 
 ## Backlog — High priority (the top of the queue)
-(none)
+| B-2026-09-23-1 | Verify the app in a real Electron window (`npm run dev:electron` against the Vite renderer) — the rebuild was driven in a browser harness with the preload stubbed, so the Electron window itself, its CSP and its userData library path are still unverified on this machine. |
 
-_0 medium, 0 low priority row(s) — see tasks/backlog.md_
+_2 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 0 entries
-- inefficiencies/log.md (project code/env friction): 0 entries
-- plans/decisions.md (ADRs in force — respected, not relitigated): 0 entries
+- inefficiencies/log.md (project code/env friction): 1 entry, last added 2026-09-23
+- plans/decisions.md (ADRs in force — respected, not relitigated): 1 entry, last added 2026-09-23
 
 ## Collaboration
-(no collaboration/events — collaboration never used)
+- 3 event(s) on file; most recent: `20260923T124309Z-Nadia-aa88a431.json`
+- Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`

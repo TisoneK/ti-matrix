@@ -39,3 +39,12 @@ names them), and roll-up candidates.
 - **Upstream:** candidate  ← add this line ONLY for protocol-level friction
   worth a core fix; omit entirely for project-local friction.
 -->
+
+## 2026-09-23 — gate auto-discovery runs a bare `python`, which this machine does not have
+- **Where:** `ledger-gates run pre-commit` / `integration` with `mode=hybrid` and no explicit commands
+- **What happened:** discovery fell back to `python -m pytest`; there is no `python` on PATH (the only
+  interpreter is `.venv/bin/python`, and bare `python3` is 3.9.6, below the package's floor). The gate
+  failed with exit 127 on the environment, not on the work — twice, once per gate.
+- **Fix applied:** `memory/workflows/gates.conf` now lists explicit commands for all four gates (both venv
+  layouts, so the same file works here and on Windows). If a future session adds a gate, give it an
+  explicit command — do not leave it to discovery on this machine.
