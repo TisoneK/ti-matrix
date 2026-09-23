@@ -407,14 +407,21 @@ class BrowserReasoner:
 
         # Then follow a link whose text or href carries a word from the goal — never an arbitrary one,
         # because "click the first link" is how a run wanders off a site forever.
+        #
+        # ONE navigation per fan, and it is a stopgap rather than a fix. The engine probes a fan
+        # concurrently (`asyncio.gather`) and this world holds a single page, so two `goto` candidates
+        # in one fan race: probing example.com and iana.org together returns "loaded iana.org" for
+        # *both*, and the fact recorded against the first names a page it never visited. ADR-4 rule 1
+        # is what actually fixes this — a navigation action carrying the URL it acts on — and until the
+        # world is changed, any other proposer (a model, say) can still produce the same fan. Logged as
+        # B-2026-09-23-10; do not delete this guard without doing that.
         for word in words:
             for href, text in sorted(links.items()):
                 if href in loaded:
                     continue
                 if word.lower() in text.lower() or word.lower() in href.lower():
                     offer(Action("goto", {"url": href}, f"{word!r} is in this link"))
-                    if len(wanted) >= n:
-                        return wanted[:n]
+                    return wanted[:n]
         return wanted[:n]
 
     async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:

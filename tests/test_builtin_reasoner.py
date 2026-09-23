@@ -292,3 +292,21 @@ def test_the_page_s_own_words_are_the_answer_when_they_carry_the_goal():
     obs = Observation(move, True, "Our pricing starts at 9 dollars per month.")
     [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find the pricing")), [obs]))
     assert verdict.done is True and "pricing" in verdict.answer.lower()
+
+
+def test_never_two_navigations_in_one_fan():
+    """A fan is probed concurrently against one page, so two gotos race and both report the last URL.
+
+    Demonstrated on the real world: probing example.com and iana.org together returned "loaded
+    iana.org" for both, which writes a false fact. This is a guard, not the fix — see ADR-4 rule 1.
+    """
+    state = AgentState(GoalType("find the pricing and the plans"), facts=(
+        "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",
+        "title_and_url() -> ok: Shop — https://shop.test/",
+        "page_text() -> ok: welcome",
+        "links() -> ok: - Pricing — https://shop.test/pricing\n- Plans — https://shop.test/plans",
+    ))
+    # Every read action already tried, so the fan would otherwise be nothing but navigations.
+    tried = {Action(t, {}, "").fingerprint() for t in ("title_and_url", "page_text", "links")}
+    moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 5, tried))
+    assert len([m for m in moves if m.tool == "goto"]) <= 1, [m.label() for m in moves]
