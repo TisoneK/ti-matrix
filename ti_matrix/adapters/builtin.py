@@ -347,6 +347,100 @@ class FilesReasoner:
         return out
 
 
+# `goto` answers "loaded <url> — <title>"; `links` writes "- <text> — <href>" one per line.
+_LOADED = re.compile(r"loaded (\S+)")
+_LINK = re.compile(r"^- (.*?) — (\S+)$", re.M)
+
+
+class BrowserReasoner:
+    """Both seats for a real browser: open the page you were given, read it, follow what the goal names.
+
+    Same failure as the filesystem had. `SurveyReasoner` proposed `goto()`, `page_text()`, `html()` —
+    every one with no arguments — and `goto` with no URL cannot do anything. A world whose actions take
+    arguments needs a starting point, and for this one it is the start URL the run was configured with.
+
+    Read-only throughout: this proposes nothing that clicks, types or runs script. Those actions exist
+    and the engine will surface them for confirmation, but a rule has no business deciding to press a
+    button on somebody's behalf — that is a judgement, and judgement is what the model seat is for.
+    """
+
+    def __init__(self, specs: Optional[dict[str, ActionSpec]] = None, env: Any = None) -> None:
+        self._specs = specs or {}
+        start = getattr(env, "start_url", None)
+        self._start = str(start) if start else ""
+
+    @staticmethod
+    def _seen(state: AgentState) -> tuple[set[str], dict[str, str]]:
+        """Pages already loaded, and every link the run has been shown (href -> its text)."""
+        loaded: set[str] = set()
+        links: dict[str, str] = {}
+        for fact in state.facts:
+            loaded.update(_LOADED.findall(fact))
+            for text, href in _LINK.findall(fact):
+                links[href] = text
+        return loaded, links
+
+    async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
+        wanted: list[Action] = []
+
+        def offer(action: Action) -> None:
+            fp = action.fingerprint()
+            if fp in avoid or fp in state.failed or any(fp == a.fingerprint() for a in wanted):
+                return
+            wanted.append(action)
+
+        loaded, links = self._seen(state)
+        words = goal_words(state.goal.text)
+
+        if not loaded:
+            if not self._start:
+                return []  # nowhere to begin, and inventing a URL is not a rule's decision
+            offer(Action("goto", {"url": self._start}, "the page this run was pointed at"))
+            return wanted[:n]
+
+        # What is on this page, before deciding where to go next.
+        offer(Action("title_and_url", {}, "where are we"))
+        offer(Action("page_text", {}, "what the page says"))
+        offer(Action("links", {}, "where it can go from here"))
+        if len(wanted) >= n:
+            return wanted[:n]
+
+        # Then follow a link whose text or href carries a word from the goal — never an arbitrary one,
+        # because "click the first link" is how a run wanders off a site forever.
+        for word in words:
+            for href, text in sorted(links.items()):
+                if href in loaded:
+                    continue
+                if word.lower() in text.lower() or word.lower() in href.lower():
+                    offer(Action("goto", {"url": href}, f"{word!r} is in this link"))
+                    if len(wanted) >= n:
+                        return wanted[:n]
+        return wanted[:n]
+
+    async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:
+        loaded, links = self._seen(state)
+        standing = len(loaded) + len(links)
+        words = [w.lower() for w in goal_words(state.goal.text)]
+        out: list[Evaluation] = []
+        for obs in outcomes:
+            if not obs.ok:
+                out.append(Evaluation(0.0, False, "", "probe failed"))
+                continue
+            body = obs.text.lower()
+            # Text that actually contains what the goal asked about, read off a page the run really
+            # loaded, is as settled as a rule gets here — the answer is the page's own words.
+            if obs.move.tool == "page_text" and words and not obs.predicted \
+                    and all(w in body for w in words[:2]):
+                head = " ".join(obs.text.split())[:240]
+                out.append(Evaluation(1.0, True, head, "the page says it"))
+                continue
+            gain = len(_LINK.findall(obs.text)) + len(_LOADED.findall(obs.text))
+            share = min(0.9, (standing + gain) / 40)
+            out.append(Evaluation(round(share, 4), False, "",
+                                  f"{standing + gain} thing(s) known" if gain else "nothing new here"))
+        return out
+
+
 class SurveyReasoner:
     """The fallback seats: try each action once, and score by what actually came back.
 
@@ -396,6 +490,8 @@ def reasoner_for(world: str, specs: Optional[dict[str, ActionSpec]] = None,
         return MazeReasoner(specs)
     if world == "files":
         return FilesReasoner(specs, env)
+    if world == "browser":
+        return BrowserReasoner(specs, env)
     return SurveyReasoner(specs)
 
 
@@ -404,5 +500,5 @@ def is_builtin(model_name: str) -> bool:
     return str(model_name).strip().lower() == BUILTIN
 
 
-__all__ = ["BUILTIN", "FilesReasoner", "MazeKnowledge", "MazeReasoner", "SurveyReasoner",
+__all__ = ["BUILTIN", "BrowserReasoner", "FilesReasoner", "MazeKnowledge", "MazeReasoner", "SurveyReasoner",
            "goal_words", "is_builtin", "is_noise", "reasoner_for"]

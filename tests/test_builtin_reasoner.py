@@ -18,6 +18,7 @@ import pytest
 from ti_matrix import EngineBudget, Goal, StateEngine
 from ti_matrix.adapters.builtin import (
     BUILTIN,
+    BrowserReasoner,
     FilesReasoner,
     MazeKnowledge,
     MazeReasoner,
@@ -146,7 +147,7 @@ def test_the_survey_never_claims_to_have_settled_anything():
 
 
 @pytest.mark.parametrize("world,expected", [("maze", MazeReasoner), ("files", FilesReasoner),
-                                            ("ledger", SurveyReasoner), ("", SurveyReasoner)])
+                                            ("browser", BrowserReasoner), ("", SurveyReasoner)])
 def test_each_world_gets_the_seats_that_suit_it(world, expected):
     assert isinstance(reasoner_for(world), expected)
 
@@ -231,3 +232,63 @@ def test_a_files_probe_that_failed_still_scores_nothing():
     obs = Observation(Action("list_dir", {"path": "/nope"}, ""), False, "no such directory")
     [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find x")), [obs]))
     assert verdict.progress == 0.0 and verdict.done is False
+
+
+# ── the browser's seats ─────────────────────────────────────────────────────
+#
+# Same defect the filesystem had: `SurveyReasoner` proposed `goto()`, `page_text()`, `html()` with no
+# arguments, and `goto` with no URL cannot do anything. Verified against real headless Chrome after the
+# fix: 16 events, page loaded, text read, settled on the page's own words.
+
+
+class _Started:
+    """Stands in for `BrowserEnvironment` — the reasoner only reads `.start_url` off it."""
+
+    def __init__(self, url: str | None) -> None:
+        self.start_url = url
+
+
+def test_the_first_move_is_the_page_the_run_was_pointed_at():
+    moves = asyncio.run(BrowserReasoner({}, _Started("https://example.com")).propose(
+        AgentState(GoalType("find the price")), 3, set()))
+    assert [m.label() for m in moves] == ["goto(url=https://example.com)"]
+
+
+def test_with_no_start_url_it_proposes_nothing_rather_than_inventing_one():
+    moves = asyncio.run(BrowserReasoner({}, _Started(None)).propose(
+        AgentState(GoalType("find the price")), 3, set()))
+    assert moves == []
+
+
+def test_once_a_page_is_open_it_reads_before_it_navigates():
+    state = AgentState(GoalType("find the price"), facts=(
+        "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",))
+    moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 3, set()))
+    assert {m.tool for m in moves} <= {"title_and_url", "page_text", "links"}, [m.label() for m in moves]
+
+
+def test_it_follows_a_link_the_goal_names_and_ignores_the_rest():
+    state = AgentState(GoalType("find the pricing page"), facts=(
+        "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",
+        "links() -> ok: - About us — https://shop.test/about\n- Pricing — https://shop.test/pricing",
+    ))
+    moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 6, set()))
+    gotos = [m.args.get("url") for m in moves if m.tool == "goto"]
+    assert "https://shop.test/pricing" in gotos, [m.label() for m in moves]
+    assert "https://shop.test/about" not in gotos, [m.label() for m in moves]
+
+
+def test_a_rule_never_proposes_something_that_changes_the_page():
+    """click, type, press and evaluate exist. Deciding to press a button is a judgement, not a rule."""
+    state = AgentState(GoalType("buy the thing"), facts=(
+        "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",))
+    moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 9, set()))
+    assert not ({m.tool for m in moves} & {"click", "type", "press", "evaluate", "new_tab", "close_tab"})
+
+
+def test_the_page_s_own_words_are_the_answer_when_they_carry_the_goal():
+    r = BrowserReasoner({}, _Started("https://shop.test"))
+    move = Action("page_text", {}, "")
+    obs = Observation(move, True, "Our pricing starts at 9 dollars per month.")
+    [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find the pricing")), [obs]))
+    assert verdict.done is True and "pricing" in verdict.answer.lower()
