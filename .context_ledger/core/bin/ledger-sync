@@ -1,0 +1,719 @@
+#!/bin/sh
+# ledger-sync — manage the vendored protocol core (.context_ledger/core/)
+#
+# POSIX sh; runs on macOS (shasum) and Linux (sha256sum). Never touches
+# .context_ledger/memory/ except memory/core.lock and one deliberate
+# exception: backfill/migrate group a legacy flat memory layout into the
+# live memory/office/ directory (core 1.0.0) and seed a missing office
+# skeleton from templates. Durable memory files are never altered.
+#
+# Commands (project mode — run as: sh .context_ledger/core/bin/ledger-sync <cmd>):
+#   status               local core version + best reachable update source
+#   verify               check every core file against core/MANIFEST.sha256
+#   update [SOURCE]      replace core/ from SOURCE (package clone / unpacked
+#                        archive). Same-MAJOR updates apply directly; a MAJOR
+#                        bump needs --major. Then migrate --backfill-only runs,
+#                        which groups a legacy flat layout into memory/office/.
+#   migrate [SOURCE]     ONE-COMMAND bring-current: update core to the newest
+#                        reachable version, then backfill every missing zone/
+#                        file, LF-normalize, relock, and verify. Idempotent.
+#                        Leaves only "fill the project facts". Old projects
+#                        whose vendored script lacks this: run `update` once
+#                        (it installs a script that has it), then `migrate`.
+#   rollback [VERSION]   restore core/ from this project's git history
+#                        (default VERSION: the one in memory/core.lock)
+#   lock                 record the current verified core version in
+#                        memory/core.lock (update/verify call this for you)
+#   rename               one-time 0.18 migration: git mv a legacy .context/
+#                        project directory to .context_ledger/ and update
+#                        the generated entry points. Requires a clean tree.
+#
+# Commands (package mode — run from a clone of the protocol package):
+#   manifest             regenerate core/MANIFEST.sha256 (maintainers, per release)
+#   bootstrap DEST       initialize DEST project repo with .context_ledger/ (vendored
+#                        core + memory skeleton + root files); also registers
+#                        DEST's origin remote in the package's fleet.md
+#   harvest [FLEET]      collect open flaws, Upstream:candidate inefficiencies,
+#                        and [core-defect] overrides from every project listed
+#                        in fleet.md into inbox/ for triage. Read-only on the
+#                        projects; dedups against inbox/.harvested. FLEET
+#                        defaults to the package's fleet.md
+#
+# Exit codes: 0 ok · 1 failure · 2 usage · 3 verify mismatch
+
+set -u
+
+say()  { printf '%s\n' "$*"; }
+err()  { printf 'ledger-sync: %s\n' "$*" >&2; }
+die()  { err "$*"; exit 1; }
+
+# --- locate ourselves -------------------------------------------------------
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 1
+PARENT_DIR=$(dirname -- "$CORE_DIR")
+
+# Mode detection accepts both layouts: .context_ledger/ (1.0+) and the
+# legacy .context/ (pre-1.0 projects mid-migration — finish with `rename`).
+case "$(basename -- "$PARENT_DIR")" in
+  .context_ledger|.context)
+  MODE=project
+  LEDGER_DIR=$PARENT_DIR
+  PROJECT_DIR=$(dirname -- "$LEDGER_DIR")
+  MEMORY_DIR=$LEDGER_DIR/memory
+  ;;
+*)
+  MODE=package                     # running from a package clone
+  PACKAGE_DIR=$PARENT_DIR
+  ;;
+esac
+
+# --- helpers ----------------------------------------------------------------
+sha_cmd() {
+  if command -v sha256sum >/dev/null 2>&1; then echo "sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then echo "shasum -a 256"
+  else die "need sha256sum or shasum on PATH — on Windows without them, use the PowerShell port instead: pwsh -File .context_ledger/core/bin/ledger-sync.ps1 ${CMD:-verify}"; fi
+}
+
+core_version() { # $1 = a core dir
+  [ -f "$1/VERSION" ] || { echo "0.0.0"; return; }
+  head -n1 "$1/VERSION" | tr -d '[:space:]'
+}
+
+ver_part() { echo "$1" | cut -d. -f"$2" | tr -cd '0-9'; }
+
+# echoes: newer | same | older  ($1 relative to $2)
+ver_cmp() {
+  for i in 1 2 3; do
+    a=$(ver_part "$1" "$i"); b=$(ver_part "$2" "$i")
+    [ "${a:-0}" -gt "${b:-0}" ] && { echo newer; return; }
+    [ "${a:-0}" -lt "${b:-0}" ] && { echo older; return; }
+  done
+  echo same
+}
+
+# a directory is a core source if it's a package clone (has core/) or an
+# already-unpacked core (has VERSION + rules/)
+source_core_dir() { # $1 = candidate path -> echoes the core dir inside it, or nothing
+  [ -d "$1/core/rules" ] && [ -f "$1/core/VERSION" ] && { echo "$1/core"; return; }
+  [ -d "$1/rules" ] && [ -f "$1/VERSION" ] && { echo "$1"; return; }
+  return 1
+}
+
+find_source() { # echoes a core dir, or nothing. $1 = optional explicit source
+  if [ -n "${1:-}" ]; then
+    source_core_dir "$1" || die "not a package clone or core tree: $1"
+    return
+  fi
+  [ -n "${LEDGER_PKG:-}" ] && source_core_dir "$LEDGER_PKG" && return
+  for d in "$PROJECT_DIR/../context-ledger" "$PROJECT_DIR/../context" "$PROJECT_DIR/../.context"; do
+    source_core_dir "$d" 2>/dev/null && return
+  done
+  return 1
+}
+
+verify_tree() { # $1 = a core dir; returns 0 clean, 3 mismatch
+  [ -f "$1/MANIFEST.sha256" ] || { err "no MANIFEST.sha256 in $1"; return 3; }
+  _sha=$(sha_cmd); [ -n "$_sha" ] || return 3
+  # Hash the CR-stripped content of each file against the manifest. One
+  # manifest stays byte-compatible across LF checkouts (macOS/Linux) and CRLF
+  # copies (files copied outside git on Windows, where .gitattributes does not
+  # reach); LF-only files hash identically, so manifest values never change.
+  # The manifest itself is CR-stripped before parsing.
+  _mf=$(mktemp 2>/dev/null) || _mf="$1/.MANIFEST.lf.$$"
+  tr -d '\r' < "$1/MANIFEST.sha256" > "$_mf" 2>/dev/null || cp "$1/MANIFEST.sha256" "$_mf"
+  _rc=0; _shown=0
+  while read -r _h _rest || [ -n "${_h:-}" ]; do
+    [ -n "${_h:-}" ] || continue
+    case $_h in '#'*) continue ;; esac
+    _p=${_rest#\*}
+    if [ ! -f "$1/$_p" ]; then
+      echo "$_p: FAILED open or read" >&2
+      _rc=3; continue
+    fi
+    _got=$(tr -d '\r' < "$1/$_p" | $_sha | awk '{print $1}')
+    if [ "$_got" != "$_h" ]; then
+      [ "$_shown" -lt 20 ] && echo "$_p: FAILED" >&2
+      _shown=$((_shown + 1))
+      _rc=3
+    fi
+  done < "$_mf"
+  rm -f "$_mf"
+  return $_rc
+}
+
+# rewrite every file under each $1... to LF in place (cat > keeps each file's
+# inode and mode). update/bootstrap run this on the staged copy so the
+# vendored core is byte-identical to its manifest no matter what line endings
+# the source checkout had.
+normalize_lf() {
+  for _dir in "$@"; do
+    find "$_dir" -type f -exec sh -c '
+      for f do
+        tr -d "\r" < "$f" > "$f.lf" && cat "$f.lf" > "$f" && rm -f "$f.lf"
+      done' _ {} +
+  done
+}
+
+write_lock() { # $1 = version
+  [ "$MODE" = project ] || return 0
+  mkdir -p "$MEMORY_DIR"
+  {
+    echo "# written by ledger-sync — the last-known-good core version."
+    echo "# Do not edit by hand. If core fails verify, \`ledger-sync rollback\`"
+    echo "# restores the version recorded here from git history."
+    echo "version=$1"
+    echo "verified=$(date +%Y-%m-%d)"
+  } > "$MEMORY_DIR/core.lock"
+}
+
+lock_version() {
+  [ -f "$MEMORY_DIR/core.lock" ] || { echo ""; return; }
+  # tr -d '\r' keeps this correct when the lock file itself arrived CRLF
+  # (template copied outside git on Windows).
+  sed -n 's/^version=//p' "$MEMORY_DIR/core.lock" | head -n1 | tr -d '\r'
+}
+
+fleet_file() { echo "${LEDGER_FLEET:-$PACKAGE_DIR/fleet.md}"; }
+
+# record a project in the package's fleet registry (package mode). idempotent
+# on the remote URL. $1 = git remote url, $2 = core version at bootstrap.
+fleet_register() {
+  FF=$(fleet_file)
+  if [ ! -f "$FF" ]; then
+    {
+      echo "# Fleet registry — every project bootstrapped from this protocol package."
+      echo "# Appended by 'ledger-sync bootstrap'; read by 'ledger-sync harvest'."
+      echo "# One project per line:  <git-remote-url>  bootstrapped=<date>  core=<version>"
+      echo "# Append-only. Edit by hand only to correct a URL or add a repo bootstrapped"
+      echo "# elsewhere. A '#' comment or blank line is ignored by harvest."
+      echo
+    } > "$FF"
+  fi
+  if grep -Fq "$1" "$FF" 2>/dev/null; then return 0; fi
+  printf '%s  bootstrapped=%s  core=%s\n' "$1" "$(date +%Y-%m-%d)" "$2" >> "$FF"
+}
+
+need_project() { [ "$MODE" = project ] || die "'$1' runs inside a project (.context_ledger/core/bin/ledger-sync), not the package clone"; }
+need_package() { [ "$MODE" = package ] || die "'$1' runs from a package clone, not inside a project"; }
+
+# --- commands ----------------------------------------------------------------
+cmd_status() {
+  need_project status
+  LOCAL_V=$(core_version "$CORE_DIR")
+  say "core:   $LOCAL_V  ($LEDGER_DIR/core)"
+  say "locked: $(lock_version | grep . || echo '(no core.lock yet)')"
+  if SRC=$(find_source "${1:-}"); then
+    SRC_V=$(core_version "$SRC")
+    case $(ver_cmp "$SRC_V" "$LOCAL_V") in
+      newer)
+        if [ "$(ver_part "$SRC_V" 1)" = "$(ver_part "$LOCAL_V" 1)" ]; then
+          say "source: $SRC_V  ($SRC) — UPDATE AVAILABLE (same MAJOR: safe to 'update')"
+        else
+          say "source: $SRC_V  ($SRC) — MAJOR update: read its CHANGELOG.md, then 'update --major' with the user's go-ahead"
+        fi ;;
+      same)  say "source: $SRC_V  ($SRC) — up to date" ;;
+      older) say "source: $SRC_V  ($SRC) — source is OLDER than local; nothing to do" ;;
+    esac
+  else
+    say "source: none reachable (no sibling package clone; set LEDGER_PKG or pass a path) — skipping, this is fine"
+  fi
+}
+
+# Port parse check (core 1.0.1): hashing catches a corrupted file, not a port
+# that shipped unable to run. Each edition verifies what its host can run:
+# this one `sh -n`s every sh port in bin/ and, when a PowerShell engine is on
+# PATH (always on Windows; pwsh on POSIX), runs Parser::ParseFile over every
+# ps1 port under EVERY engine it finds -- not just the first -- because the
+# .cmd launchers target Windows PowerShell 5.1 while pwsh 7 is the modern
+# engine, and a port must parse under both. Without a PS engine the ps1 half
+# is skipped -- the manifest plus a PS-hosted verify still cover it.
+# The ps1 encoding guard below is engine-free on purpose: it is the only half
+# that also holds on a host with no PowerShell at all. Returns 0 clean, 3 broken.
+parse_ports() { # $1 = a core dir
+  _rc=0
+  for _f in "$1"/bin/*; do
+    [ -f "$_f" ] || continue
+    case $_f in
+      *.ps1) continue ;;  # handled below, batched per engine
+      *.cmd) continue ;;
+      *)
+        _e=$(sh -n "$_f" 2>&1) || { err "sh parse: $_f: $_e"; _rc=3; }
+        ;;
+    esac
+  done
+  # Encoding guard (core 2.0.4): Windows PowerShell 5.1 decodes a BOM-less
+  # script with the *system codepage*, not UTF-8, so a non-ASCII byte in a
+  # port is a latent parse failure there -- an em-dash (E2 80 94) decodes to
+  # U+201D, which the parser reads as a string terminator and fails the whole
+  # file on a stock Windows box while pwsh 7 parses it fine. Ports stay pure
+  # ASCII; text that needs a character builds it from its code point.
+  for _f in "$1"/bin/*.ps1; do
+    [ -e "$_f" ] || continue
+    if [ "$(LC_ALL=C tr -d '\11\12\15\40-\176' < "$_f" | wc -c | tr -d ' ')" != "0" ]; then
+      err "ps1 encoding: $(basename "$_f") holds non-ASCII bytes — Windows PowerShell 5.1 will mis-decode it; keep the port pure ASCII"
+      _rc=3
+    fi
+  done
+  _engines=""
+  for _cand in powershell pwsh; do
+    if command -v "$_cand" >/dev/null 2>&1; then _engines="${_engines:+$_engines }$_cand"; fi
+  done
+  if [ -z "$_engines" ]; then
+    say "ps1 parse check skipped — no PowerShell engine on PATH (the manifest + a PS-hosted verify still cover the ps1 ports)"
+    return "$_rc"
+  fi
+  _list=""
+  for _f in "$1"/bin/*.ps1; do
+    [ -e "$_f" ] || continue
+    if command -v cygpath >/dev/null 2>&1; then _w=$(cygpath -w "$_f"); else _w=$_f; fi
+    _list="${_list:+$_list;}$_w"
+  done
+  _checked=""
+  for _ps in $_engines; do
+    _ver=$("$_ps" -NoProfile -ExecutionPolicy Bypass -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null | head -n 1)
+    [ -n "$_ver" ] || _ver='version unknown'
+    if [ -n "$_list" ] && ! LEDGER_PARSE_FILES="$_list" "$_ps" -NoProfile -ExecutionPolicy Bypass -Command '
+      $bad = 0
+      foreach ($f in $env:LEDGER_PARSE_FILES -split ";") {
+        $tok = $null; $errs = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$tok, [ref]$errs)
+        if ($errs -and $errs.Count -gt 0) { foreach ($e in $errs) { [Console]::Error.WriteLine($f + ": " + $e.Message) }; $bad = 1 }
+      }
+      exit $bad'; then
+      err "ps1 parse: a port cannot be parsed by $_ps $_ver (parser errors above)"
+      _rc=3
+    else
+      _checked="${_checked:+$_checked, }$_ps $_ver"
+    fi
+  done
+  if [ -n "$_checked" ]; then
+    say "ps1 parse: OK ($_checked)"
+  fi
+  return "$_rc"
+}
+
+cmd_verify() {
+  TARGET=${1:-$CORE_DIR}
+  if verify_tree "$TARGET"; then
+    if parse_ports "$TARGET"; then
+      say "core OK: every file matches MANIFEST.sha256 and every port parses ($(core_version "$TARGET"))"
+      [ "$TARGET" = "$CORE_DIR" ] && write_lock "$(core_version "$TARGET")"
+      return 0
+    fi
+    err "PORT PARSE FAILURE — a script in core/bin cannot be parsed."
+    err "If this core just arrived from a release: ledger-sync rollback <previous-version>, and report it upstream."
+    err "Do not 'fix' core in place."
+    return 3
+  fi
+  err "CORE INTEGRITY FAILURE — core/ does not match its manifest."
+  err "Do not 'fix' core in place. Run: ledger-sync rollback"
+  err "Then log the incident in memory/office/flaws/log.md and continue."
+  return 3
+}
+
+# One-time layout migration (core 1.0.0): group a legacy flat memory layout
+# into the live office directory. The live office is memory/office/ — roster,
+# session registry and notes, tasks, plans, flaw and inefficiency logs,
+# reviews — everything session-produced, frozen verbatim when the office
+# closes. Durable files (workflows/, collaboration/, system/, user/,
+# overrides/, core.lock, secrets/) stay at the memory/ root and never move.
+# Idempotent: no office dir + flat dirs present = migrate; otherwise no-op.
+# Runs at the top of backfill_project, so every `update` and `migrate`
+# performs it — the old architecture becomes an office during sync.
+migrate_office_layout() {
+  [ -d "$MEMORY_DIR/office" ] && return 0
+  [ -d "$MEMORY_DIR/agents" ] || return 0   # not a flat-layout install
+  say "office migration: grouping the flat memory layout into memory/office/"
+  mkdir -p "$MEMORY_DIR/office"
+  for _d in agents sessions tasks plans flaws inefficiencies reviews; do
+    [ -d "$MEMORY_DIR/$_d" ] && mv "$MEMORY_DIR/$_d" "$MEMORY_DIR/office/$_d"
+  done
+  rm -f "$MEMORY_DIR/office/agents/GROUP" 2>/dev/null || true  # counter retired: office numbers are derived at close
+  _hc=$MEMORY_DIR/workflows/history.conf
+  if [ -f "$_hc" ] && grep -q '^group_size=' "$_hc" 2>/dev/null; then
+    sed 's/^group_size=/office_size=/' "$_hc" > "$_hc.tmp" && mv "$_hc.tmp" "$_hc"
+  fi
+  say "office migration: done — the old layout is now the live office."
+  say "Commit as: chore(ledger): group memory into the live office (core 1.0.0)"
+}
+
+# Install every current-version scaffolding file the project may be missing.
+# Idempotent: only creates what's absent, never clobbers existing files, safe
+# to run repeatedly. Reads the CURRENT (post-swap) core/templates, so it is
+# the single source of "what a fully-migrated project should contain" — the
+# `migrate` command and each future release both go through here, and adding a
+# new template file to the list is the only step to teach migration about it.
+# The office layout migration runs first, so a legacy install is regrouped
+# before this checks what is missing.
+backfill_project() {
+  migrate_office_layout
+  cp "$CORE_DIR/templates/ledger-README.md" "$LEDGER_DIR/README.md" 2>/dev/null || true
+  [ -f "$LEDGER_DIR/.gitattributes" ] || cp "$CORE_DIR/templates/.gitattributes" "$LEDGER_DIR/.gitattributes" 2>/dev/null || true
+  [ -e "$PROJECT_DIR/CLAUDE.md" ] || cp "$CORE_DIR/templates/CLAUDE.md" "$PROJECT_DIR/CLAUDE.md" 2>/dev/null || true
+  [ -d "$LEDGER_DIR/history" ] || cp -R "$CORE_DIR/templates/history" "$LEDGER_DIR/history" 2>/dev/null || true
+  [ -d "$LEDGER_DIR/archive" ] || cp -R "$CORE_DIR/templates/archive" "$LEDGER_DIR/archive" 2>/dev/null || true
+  mkdir -p "$MEMORY_DIR/workflows" 2>/dev/null || true
+  [ -f "$MEMORY_DIR/workflows/history.conf" ] || cp "$CORE_DIR/templates/memory/workflows/history.conf" "$MEMORY_DIR/workflows/history.conf" 2>/dev/null || true
+  # the live office — seeded from templates when absent, topped up when
+  # partial (a migrated install may never have created every directory)
+  _otpl=$CORE_DIR/templates/memory/office
+  _office=$MEMORY_DIR/office
+  if [ -d "$_otpl" ]; then
+    if [ ! -d "$_office" ]; then
+      mkdir -p "$_office"
+      cp -R "$_otpl/." "$_office/" 2>/dev/null || true
+    else
+      find "$_otpl" -type f | while IFS= read -r _tf; do
+        _rel=${_tf#"$_otpl"/}
+        if [ ! -e "$_office/$_rel" ]; then
+          mkdir -p "$_office/$(dirname "$_rel")"
+          cp "$_tf" "$_office/$_rel" 2>/dev/null || true
+        fi
+      done
+    fi
+  fi
+}
+
+# Replace .context_ledger/core with the source tree, LF-normalized and re-verified.
+# $1 = source core dir, $2 = its version. The running script keeps its open
+# inode across the swap, so it finishes cleanly.
+swap_core() {
+  _src=$1; _sv=$2
+  verify_tree "$_src" || die "update source fails its own manifest — refusing to install a corrupt core"
+  STAGE=$LEDGER_DIR/core.new
+  rm -rf "$STAGE"
+  cp -R "$_src" "$STAGE" || die "staging copy failed"
+  normalize_lf "$STAGE"
+  verify_tree "$STAGE" || { rm -rf "$STAGE"; die "staged copy fails verify — aborting, core untouched"; }
+  rm -rf "$CORE_DIR" && mv "$STAGE" "$CORE_DIR" || die "swap failed — restore .context_ledger/core from git (git checkout -- .context_ledger/core)"
+  write_lock "$_sv"
+}
+
+cmd_update() {
+  need_project update
+  backfill_project   # repair missing files even on a same-version no-op
+  ALLOW_MAJOR=no; SRC_ARG=""
+  for a in "$@"; do
+    case "$a" in
+      --major) ALLOW_MAJOR=yes ;;
+      *) SRC_ARG=$a ;;
+    esac
+  done
+  SRC=$(find_source "$SRC_ARG") || die "no update source found (sibling clone, LEDGER_PKG, or a path argument)"
+  SRC_V=$(core_version "$SRC"); LOCAL_V=$(core_version "$CORE_DIR")
+  case $(ver_cmp "$SRC_V" "$LOCAL_V") in
+    same)  say "already at $LOCAL_V — nothing to do"; return 0 ;;
+    older) say "source ($SRC_V) is older than local ($LOCAL_V) — refusing to downgrade"; return 0 ;;
+  esac
+  if [ "$(ver_part "$SRC_V" 1)" != "$(ver_part "$LOCAL_V" 1)" ] && [ "$ALLOW_MAJOR" = no ]; then
+    die "MAJOR version bump ($LOCAL_V -> $SRC_V): read CHANGELOG.md migration notes, get the user's go-ahead, re-run with --major"
+  fi
+  swap_core "$SRC" "$SRC_V"
+  say "core updated: $LOCAL_V -> $SRC_V"
+  # Hand off to the JUST-INSTALLED script so backfill knows every file the new
+  # version introduced (the running old script cannot) — one update fully
+  # migrates. Old scripts (pre-0.16) lack this line; there, run `migrate` once.
+  exec sh "$CORE_DIR/bin/ledger-sync" migrate --backfill-only
+}
+
+# migrate — the one-command "bring this project fully current". Updates the
+# core to the newest reachable same-MAJOR version (if any), then backfills
+# every missing zone/file, LF-normalizes, relocks, and verifies. Idempotent.
+# Leaves exactly one manual step: fill the project facts.
+cmd_migrate() {
+  need_project migrate
+  _backfill_only=no; ALLOW_MAJOR=no; SRC_ARG=""
+  for a in "$@"; do
+    case "$a" in
+      --backfill-only) _backfill_only=yes ;;
+      --major) ALLOW_MAJOR=yes ;;
+      *) SRC_ARG=$a ;;
+    esac
+  done
+
+  if [ "$_backfill_only" = no ]; then
+    SRC=$(find_source "$SRC_ARG" 2>/dev/null || true)
+    if [ -n "${SRC:-}" ]; then
+      SRC_V=$(core_version "$SRC"); LOCAL_V=$(core_version "$CORE_DIR")
+      if [ "$(ver_cmp "$SRC_V" "$LOCAL_V")" = newer ]; then
+        if [ "$(ver_part "$SRC_V" 1)" != "$(ver_part "$LOCAL_V" 1)" ] && [ "$ALLOW_MAJOR" = no ]; then
+          die "MAJOR bump ($LOCAL_V -> $SRC_V): read CHANGELOG.md, then: ledger-sync migrate --major"
+        fi
+        say "updating core: $LOCAL_V -> $SRC_V"
+        swap_core "$SRC" "$SRC_V"
+        # re-exec the new script so its backfill knows all new files
+        exec sh "$CORE_DIR/bin/ledger-sync" migrate --backfill-only
+      fi
+    fi
+  fi
+
+  backfill_project
+  normalize_lf "$CORE_DIR" 2>/dev/null || true
+  write_lock "$(core_version "$CORE_DIR")"
+  _v=$(core_version "$CORE_DIR")
+  if verify_tree "$CORE_DIR" >/dev/null 2>&1; then _vs="core verified"; else _vs="core FAILED verify — run: ledger-sync rollback"; fi
+  say "migration complete — core $_v; all zones/files present; $_vs."
+  say ""
+  say "One step left — fill the project facts (facts from memory, no secrets):"
+  say "  .context_ledger/kickoff.md          — Project Facts (remote URL, default branch, name)"
+  say "  AGENTS.md                    — <PROJECT_NAME>"
+  say "  memory/workflows/active.md   — protocol 'by agent type', BOTH edition paths"
+  say "then commit + push: chore(ledger): migrate to core $_v"
+  if [ "$(basename -- "$LEDGER_DIR")" = ".context" ]; then
+    say ""
+    say "This project still uses the legacy .context/ directory — finish the 0.18"
+    say "rename with: ledger-sync rename"
+  fi
+}
+
+cmd_rollback() {
+  need_project rollback
+  WANT=${1:-$(lock_version)}
+  [ -n "$WANT" ] || die "no version given and no memory/core.lock — pass a version: ledger-sync rollback 0.2.0"
+  cd "$PROJECT_DIR" || exit 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "project is not a git repo — cannot roll back"
+  FOUND=""
+  for sha in $(git log --format=%H -- .context_ledger/core/VERSION); do
+    V=$(git show "$sha:.context_ledger/core/VERSION" 2>/dev/null | head -n1 | tr -d '[:space:]')
+    [ "$V" = "$WANT" ] && { FOUND=$sha; break; }
+  done
+  [ -n "$FOUND" ] || die "no commit in history has core VERSION $WANT"
+  rm -rf .context_ledger/core
+  git checkout "$FOUND" -- .context_ledger/core || die "git checkout failed — run: git checkout HEAD -- .context_ledger/core"
+  write_lock "$WANT"
+  say "core rolled back to $WANT (from commit ${FOUND%????????????????????????????????})"
+  say "log the incident in memory/office/flaws/log.md, then commit as:"
+  say "  chore(ledger): roll back core to $WANT"
+}
+
+cmd_rename() {
+  need_project rename
+  [ "$(basename -- "$LEDGER_DIR")" = ".context" ] || die "this project already uses .context_ledger/ — nothing to rename"
+  cd "$PROJECT_DIR" || exit 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "project is not a git repo — cannot rename"
+  [ -z "$(git status --porcelain)" ] || die "working tree not clean — commit or stash first, then re-run rename"
+  # This script's own fd is open inside .context/ (sh reads scripts
+  # lazily), and on Windows an open handle blocks renaming the directory
+  # containing it. Re-exec through a helper OUTSIDE the ledger tree:
+  # exec closes the fd, the helper does the mv + entry-point sweep, hands
+  # over to the renamed script for verify + lock, and removes itself.
+  HELPER=$PROJECT_DIR/.ledger-rename.$$.sh
+  cat > "$HELPER" <<HELPER_EOF
+#!/bin/sh
+set -u
+git mv .context .context_ledger || { echo "ledger-sync: git mv .context .context_ledger failed — rename by hand, then run: sh .context_ledger/core/bin/ledger-sync lock" >&2; exit 1; }
+for f in .context_ledger/README.md .context_ledger/kickoff.md .context_ledger/.gitattributes AGENTS.md CLAUDE.md; do
+  [ -f "\$f" ] || continue
+  # Portable in-place edit: BSD/macOS sed needs a backup-suffix arg for -i and
+  # has no \b, so rewrite via a temp file with POSIX-only regex (GNU + BSD sed,
+  # i.e. Linux, macOS, and Git Bash on Windows). The trailing-slash case is
+  # rewritten first; then bare .context followed by a non-word/non-slash char
+  # (kept via \1) or at end of line -- which never matches .context_ledger.
+  sed 's|\.context/|.context_ledger/|g; s|\.context\([^A-Za-z0-9_/]\)|.context_ledger\1|g; s|\.context\$|.context_ledger|g' "\$f" > "\$f.ledger-tmp.\$\$" && mv "\$f.ledger-tmp.\$\$" "\$f"
+done
+sh .context_ledger/core/bin/ledger-sync verify
+echo "renamed .context/ -> .context_ledger/"
+echo "One step left — sweep stale '.context/' instruction references in your memory/ files"
+echo "(historical log entries stay as written — append-only), then commit + push:"
+echo "  chore(ledger): rename .context/ to .context_ledger/ (core 0.18)"
+rm -f "\$0"
+HELPER_EOF
+  exec sh "$HELPER"
+}
+
+cmd_manifest() {
+  need_package manifest
+  cd "$CORE_DIR" || exit 1
+  TMP=MANIFEST.sha256.tmp
+  # -t forces the text-mode separator ("hash  path") on every platform —
+  # without it Git Bash's sha256sum emits the binary marker ("hash *path")
+  # and a Windows-regenerated manifest churns all 46 lines vs a mac regen.
+  find . -type f ! -name 'MANIFEST.sha256*' ! -name '.DS_Store' | LC_ALL=C sort \
+    | sed 's|^\./||' | while IFS= read -r f; do $(sha_cmd) -t "$f"; done > "$TMP" \
+    || { rm -f "$TMP"; die "manifest generation failed"; }
+  mv "$TMP" MANIFEST.sha256
+  say "wrote core/MANIFEST.sha256 ($(wc -l < MANIFEST.sha256 | tr -d ' ') files, version $(core_version "$CORE_DIR"))"
+}
+
+cmd_bootstrap() {
+  need_package bootstrap
+  DEST=${1:-}; [ -n "$DEST" ] || die "usage: ledger-sync bootstrap <project-root>"
+  [ -d "$DEST" ] || die "no such directory: $DEST"
+  DEST=$(CDPATH= cd -- "$DEST" && pwd)
+  git -C "$DEST" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$DEST is not a git repo — git init it first"
+  if [ -e "$DEST/.context_ledger" ] || [ -e "$DEST/.context" ]; then
+    die "$DEST already has a .context_ledger/ (or legacy .context/) ledger — this is a sync session, not a bootstrap (use the project's own kickoff.md; legacy projects: ledger-sync rename)"
+  fi
+  verify_tree "$CORE_DIR" || die "package core fails its manifest — pull a clean package first"
+
+  mkdir "$DEST/.context_ledger" || exit 1
+  cp -R "$CORE_DIR" "$DEST/.context_ledger/core"                            || die "vendoring core failed"
+  cp -R "$CORE_DIR/templates/memory" "$DEST/.context_ledger/memory"         || die "copying memory skeleton failed"
+  cp -R "$CORE_DIR/templates/history" "$DEST/.context_ledger/history"       || die "creating history/ zone failed"
+  cp -R "$CORE_DIR/templates/archive" "$DEST/.context_ledger/archive"       || die "creating archive/ zone failed"
+  # byte-identical vendored core + skeleton regardless of this checkout's
+  # line endings (Windows CRLF) — verify/rollback then work out of the box.
+  normalize_lf "$DEST/.context_ledger/core" "$DEST/.context_ledger/memory"
+  cp "$CORE_DIR/templates/ledger-README.md" "$DEST/.context_ledger/README.md"
+  cp "$CORE_DIR/templates/kickoff.md" "$DEST/.context_ledger/kickoff.md"
+  cp "$CORE_DIR/templates/.gitattributes" "$DEST/.context_ledger/.gitattributes" 2>/dev/null || true
+  [ -e "$DEST/AGENTS.md" ] || cp "$CORE_DIR/templates/AGENTS.md" "$DEST/AGENTS.md"
+  # CLAUDE.md points Claude Code (which auto-loads it, not AGENTS.md) into
+  # the protocol. Only create it when absent — never clobber a real one.
+  [ -e "$DEST/CLAUDE.md" ] || cp "$CORE_DIR/templates/CLAUDE.md" "$DEST/CLAUDE.md"
+
+  V=$(core_version "$CORE_DIR")
+  {
+    echo "# written by ledger-sync — the last-known-good core version."
+    echo "# Do not edit by hand. If core fails verify, \`ledger-sync rollback\`"
+    echo "# restores the version recorded here from git history."
+    echo "version=$V"
+    echo "verified=$(date +%Y-%m-%d)"
+  } > "$DEST/.context_ledger/memory/core.lock"
+
+  RURL=$(git -C "$DEST" remote get-url origin 2>/dev/null || true)
+  if [ -n "${RURL:-}" ]; then
+    fleet_register "$RURL" "$V"
+    say "registered in $(fleet_file): $RURL"
+  else
+    say "note: $DEST has no 'origin' remote yet — add its URL to $(fleet_file)"
+    say "      by hand once it has one, so 'ledger-sync harvest' can reach it."
+  fi
+
+  say "bootstrapped $DEST/.context_ledger (core $V) + AGENTS.md + CLAUDE.md"
+  say "next (the bootstrapping agent does this):"
+  say "  1. fill .context_ledger/kickoff.md Project Facts + AGENTS.md <PROJECT_NAME>"
+  say "  2. fill memory/: user/, workflows/active.md, system/, office/tasks/current.md, office/agents/sessions.md"
+  say "  3. scan: grep -rn '<PROJECT\\|<GIT_\\|<LIVE_' $DEST/.context_ledger --include='*.md' (hits only in HTML comments/token forms)"
+  say "  4. entrypoints: CLAUDE.md points Claude Code here. If the project also uses"
+  say "     Copilot/Cursor/Gemini/Codex, add a one-line 'read AGENTS.md first' pointer"
+  say "     to their entrypoint (.github/copilot-instructions.md, .cursor/rules, GEMINI.md)."
+  say "  5. commit as: chore(ledger): bootstrap .context_ledger/ (core $V)  — and push"
+}
+
+# resolve a fleet URL to a readable local checkout. Prefers a sibling clone
+# whose origin matches the URL (identify by remote, never by dir name — the
+# scrapamoja lesson); else shallow-clones read-only into the harvest cache.
+# $1 = url, $2 = cache dir. echoes a repo path with .context_ledger/memory, or fails.
+resolve_repo() {
+  _name=$(basename "$1" .git)
+  for _cand in "$PACKAGE_DIR/../$_name" "$PACKAGE_DIR/../$_name.git"; do
+    [ -d "$_cand/.git" ] || continue
+    _curl=$(git -C "$_cand" remote get-url origin 2>/dev/null || true)
+    [ "$_curl" = "$1" ] || continue
+    [ -d "$_cand/.context_ledger/memory" ] || [ -d "$_cand/.context/memory" ] && { echo "$_cand"; return 0; }
+  done
+  _dst="$2/$_name"
+  if [ -d "$_dst/.git" ]; then
+    git -C "$_dst" pull --ff-only --quiet >/dev/null 2>&1 || true
+  else
+    rm -rf "$_dst"
+    git clone --depth 1 --quiet "$1" "$_dst" >/dev/null 2>&1 || return 1
+  fi
+  [ -d "$_dst/.context_ledger/memory" ] || [ -d "$_dst/.context/memory" ] && { echo "$_dst"; return 0; }
+  return 1
+}
+
+# extract entry blocks from a markdown log that contain a marker, skipping any
+# already in the ledger, and append the survivors to the run's output. A block
+# runs from one line matching START to the next (or EOF); text inside HTML
+# comments (<!-- ... -->, where the templates live) is ignored so example
+# lines never harvest. $1=file $2=marker(ERE) $3=section title $4=ledger
+# $5=repo $6=outfile $7=block-start ERE (e.g. '^## ' or '^- '). Echoes the
+# count of new entries written.
+harvest_source() {
+  [ -f "$1" ] || { echo 0; return 0; }
+  _tmpd=$(mktemp -d) || { echo 0; return 0; }
+  awk -v want="$2" -v start="$7" -v dir="$_tmpd" '
+    function flush() { if (buf ~ start && hit) { n++; f=sprintf("%s/blk-%05d", dir, n); printf "%s", buf > f; close(f) } buf=""; hit=0 }
+    /<!--/ { incmt=1 }
+    incmt  { if (/-->/) incmt=0; next }
+    $0 ~ start { flush() }
+    { buf = buf $0 "\n"; if ($0 ~ want) hit=1 }
+    END { flush() }
+  ' "$1"
+  _new=0
+  for _b in "$_tmpd"/blk-*; do
+    [ -e "$_b" ] || continue
+    _h=$($HASH < "$_b" | awk '{print $1}')
+    grep -Fq "$_h" "$4" 2>/dev/null && continue
+    if [ "$_new" -eq 0 ]; then printf '\n### %s\n\n' "$3" >> "$6"; fi
+    _new=$((_new + 1))
+    cat "$_b" >> "$6"
+    printf '\n' >> "$6"
+    printf '%s  %s  %s\n' "$_h" "$5" "$3" >> "$4"
+  done
+  rm -rf "$_tmpd"
+  echo "$_new"
+}
+
+cmd_harvest() {
+  need_package harvest
+  FF=${1:-$(fleet_file)}
+  [ -f "$FF" ] || die "no fleet registry at $FF — bootstrap a project first, or list repos there by hand"
+  HASH=$(sha_cmd)
+  CACHE=$PACKAGE_DIR/.harvest-cache
+  INBOX=$PACKAGE_DIR/inbox
+  LEDGER=$INBOX/.harvested
+  mkdir -p "$CACHE" "$INBOX"
+  [ -f "$LEDGER" ] || printf '# harvest ledger — <entry-hash>  <repo>  <section>. Dedups across runs. Committed.\n' > "$LEDGER"
+
+  OUT=$INBOX/harvest-$(date +%Y-%m-%d).md
+  total=0; repos=0; reached=0
+  # field 1 of every non-comment, non-blank fleet line is the git URL
+  URLS=$(grep -v '^[[:space:]]*#' "$FF" | awk 'NF {print $1}')
+  for url in $URLS; do
+    repos=$((repos + 1))
+    name=$(basename "$url" .git)
+    repo=$(resolve_repo "$url" "$CACHE") || { err "unreachable: $name ($url) — no matching sibling clone and clone failed (private? no creds?)"; continue; }
+    reached=$((reached + 1))
+    mem="$repo/.context_ledger/memory"
+    [ -d "$mem" ] || mem="$repo/.context/memory"
+    # office-era projects keep the logs under memory/office/ (core 1.0.0);
+    # fall back to the flat pre-office layout. harvest would otherwise read
+    # nothing from any migrated project. overrides/rules.md stays at the
+    # memory root in both layouts.
+    _lg="$mem/office/flaws/log.md";          [ -f "$_lg" ] || _lg="$mem/flaws/log.md"
+    _il="$mem/office/inefficiencies/log.md"; [ -f "$_il" ] || _il="$mem/inefficiencies/log.md"
+    RTMP=$(mktemp) || continue
+    nf=$(harvest_source "$_lg" 'Status:[^A-Za-z]*open'        "flaws (open)"                         "$LEDGER" "$name" "$RTMP" '^## ')
+    ni=$(harvest_source "$_il" 'Upstream:[^A-Za-z]*candidate' "inefficiencies (upstream candidate)" "$LEDGER" "$name" "$RTMP" '^## ')
+    no=$(harvest_source "$mem/overrides/rules.md"    'core-defect'                  "overrides (core-defect)"             "$LEDGER" "$name" "$RTMP" '^- ')
+    sub=$((nf + ni + no))
+    if [ "$sub" -gt 0 ]; then
+      [ -f "$OUT" ] || printf '# Harvest inbox — %s\n\nTriage each entry: fix in core, or reject. Delete this file when done;\nthe ledger (inbox/.harvested) keeps triaged entries from re-harvesting.\n' "$(date +%Y-%m-%d)" > "$OUT"
+      { printf '\n---\n## %s  (%s)\n' "$name" "$url"; cat "$RTMP"; } >> "$OUT"
+      total=$((total + sub))
+      say "$name: +$nf flaws, +$ni inefficiencies, +$no overrides"
+    else
+      say "$name: nothing new"
+    fi
+    rm -f "$RTMP"
+  done
+
+  say ""
+  if [ "$total" -eq 0 ]; then
+    say "harvest: nothing new across $reached/$repos reachable repos (all already in the ledger)"
+  else
+    say "harvest: $total new entries from $reached/$repos repos -> $OUT"
+    say "next: triage $OUT (fix in core, or reject), then delete it. The ledger keeps them from re-harvesting."
+  fi
+}
+
+# --- dispatch ----------------------------------------------------------------
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  status)    cmd_status "$@" ;;
+  verify)    cmd_verify "$@" ;;
+  update)    cmd_update "$@" ;;
+  migrate)   cmd_migrate "$@" ;;
+  rollback)  cmd_rollback "$@" ;;
+  rename)    cmd_rename "$@" ;;
+  lock)      need_project lock; write_lock "$(core_version "$CORE_DIR")"; say "locked $(core_version "$CORE_DIR")" ;;
+  manifest)  cmd_manifest "$@" ;;
+  bootstrap) cmd_bootstrap "$@" ;;
+  harvest)   cmd_harvest "$@" ;;
+  ''|-h|--help|help)
+    sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) die "unknown command: $CMD (try: ledger-sync help)" ;;
+esac

@@ -1,0 +1,241 @@
+#!/bin/sh
+# ledger-state — regenerates memory/office/STATE.md, a single at-a-glance
+# session digest so kickoff Phase 3 reads one ~30-60 line file instead of
+# 8+ separate ones (workflows/active.md, agents/roster.md, agents/sessions.md,
+# tasks/current.md, tasks/backlog.md, flaws/log.md, inefficiencies/log.md,
+# plans/decisions.md). STATE.md is a DERIVED VIEW, never hand-edited: it
+# points back at the underlying file whenever a task actually needs more
+# than a one-line summary gives it.
+#
+# Commands:
+#   generate   regenerate memory/office/STATE.md from the current files
+#
+# Exit codes: 0 ok · 2 usage/error
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-state: %s\n' "$*" >&2; }
+die() { err "$*"; exit 2; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 2
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+MEMORY_DIR=$LEDGER_DIR/memory
+OFFICE_DIR=$MEMORY_DIR/office
+OUT=$OFFICE_DIR/STATE.md
+
+usage() {
+  say "ledger-state — regenerate the memory/office/STATE.md session digest"
+  say ""
+  say "  generate   read the underlying memory files and (re)write STATE.md."
+  say "             Safe to run any time; it never touches anything but"
+  say "             STATE.md itself. Called at check-in (kickoff Phase 2)"
+  say "             and at exit (ledger-gates run exit)."
+  say ""
+  say "Exit codes: 0 ok; 2 usage/error"
+  exit 2
+}
+
+# one-line field grab: file, a leading label regex (already anchored),
+# strips the label and surrounding whitespace, keeps only the LAST match
+# (every source file here is overwrite/update-in-place — never append-only
+# — so the last match is always the current value). Skips <!-- --> blocks:
+# a key mentioned only in the file's own template comment (never given a
+# real line yet, e.g. a freshly bootstrapped skeleton) must read as empty,
+# not leak the comment's placeholder text as if it were live data.
+field() {
+  _f=$1; _label=$2
+  [ -f "$_f" ] || return 0
+  awk -v label="$_label" '
+    /^<!--/ { if ($0 !~ /-->/) intpl = 1; next }
+    intpl { if ($0 ~ /-->/) intpl = 0; next }
+    {
+      pat = "^[[:space:]]*[-*][[:space:]]*\\*\\*" label ":\\*\\*[[:space:]]*"
+      if (match($0, pat)) last = substr($0, RLENGTH + 1)
+    }
+    END { print last }
+  ' "$_f"
+}
+
+truncate_line() {
+  # $1 = text, $2 = max chars
+  awk -v max="$2" '{ if (length($0) > max) print substr($0,1,max-1) "…"; else print }' <<EOF
+$1
+EOF
+}
+
+core_block() {
+  _ver_file=$CORE_DIR/VERSION
+  _lock=$MEMORY_DIR/core.lock
+  _installed=$( [ -f "$_ver_file" ] && cat "$_ver_file" || printf 'unknown' )
+  _locked=""
+  _verified=""
+  if [ -f "$_lock" ]; then
+    _locked=$(sed -n 's/^version=//p' "$_lock" | tail -n1)
+    _verified=$(sed -n 's/^verified=//p' "$_lock" | tail -n1)
+  fi
+  if [ -n "$_locked" ] && [ "$_locked" != "$_installed" ]; then
+    _drift=" — MISMATCH vs core.lock ($_locked, verified $_verified): run \`ledger-sync verify\`"
+  elif [ -n "$_locked" ]; then
+    _drift=" (locked, verified $_verified)"
+  else
+    _drift=" (never locked — run \`ledger-sync verify\`)"
+  fi
+  say "- **Core:** $_installed$_drift"
+}
+
+standing_params() {
+  _f=$MEMORY_DIR/workflows/active.md
+  [ -f "$_f" ] || { say "- (no workflows/active.md)"; return 0; }
+  _push=$(field "$_f" "Push policy")
+  _target=$(field "$_f" "Target")
+  _scope=$(field "$_f" "Scope")
+  [ -n "$_target" ] && say "- **Target:** $_target"
+  [ -n "$_scope" ] && say "- **Scope:** $_scope"
+  [ -n "$_push" ] && say "- **Push policy:** $_push"
+  say "- Full params: \`memory/workflows/active.md\`"
+}
+
+roster_block() {
+  _f=$OFFICE_DIR/agents/roster.md
+  [ -f "$_f" ] || { say "(no roster.md)"; return 0; }
+  _rows=$(awk '
+    /^[[:space:]]*\|/ {
+      n = split($0, c, "|")
+      if (n < 4) next
+      name = c[2]; code = c[3]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", name); gsub(/^[[:space:]]+|[[:space:]]+$/, "", code)
+      if (code !~ /^[Ss][0-9]+$/) next
+      doing = (n >= 5) ? c[5] : ""; gsub(/^[[:space:]]+|[[:space:]]+$/, "", doing)
+      status = (n >= 6) ? c[6] : ""; gsub(/^[[:space:]]+|[[:space:]]+$/, "", status)
+      printf "%s|%s|%s|%s\n", name, code, status, doing
+    }
+  ' "$_f")
+  [ -n "$_rows" ] || { say "(office empty — no live roster rows)"; return 0; }
+  printf '%s\n' "$_rows" | while IFS='|' read -r name code status doing; do
+    say "- **$name** ($code) — $status — $(truncate_line "$doing" 90)"
+  done
+}
+
+current_task_block() {
+  _f=$OFFICE_DIR/tasks/current.md
+  [ -f "$_f" ] || { say "(no tasks/current.md)"; return 0; }
+  _task=$(field "$_f" "Task")
+  _status=$(field "$_f" "Status")
+  _session=$(field "$_f" "Session")
+  if [ -z "$_task" ]; then
+    say "(idle — no task recorded)"
+  else
+    say "- **$_session** — $(truncate_line "$_task" 140) — *$_status*"
+  fi
+}
+
+# backlog: print High-priority rows in full (the only ones a session should
+# start from — see schema "The backlog"), count Medium/Low so their volume
+# is visible without opening the file.
+backlog_block() {
+  _f=$OFFICE_DIR/tasks/backlog.md
+  [ -f "$_f" ] || { say "(no backlog.md)"; return 0; }
+  awk '
+    /^### High Priority/ { sect = "H"; next }
+    /^### Medium Priority/ { sect = "M"; next }
+    /^### Low Priority/ { sect = "L"; next }
+    /^## / { sect = "" }
+    sect != "" && /^[[:space:]]*\|[[:space:]]*B-[0-9]/ {
+      if (sect == "H") { print; hn++ } else if (sect == "M") mn++; else if (sect == "L") ln++
+    }
+    END {
+      if (hn == 0) print "(none)"
+      printf "\n_%d medium, %d low priority row(s) — see tasks/backlog.md_\n", mn+0, ln+0
+    }
+  ' "$_f"
+}
+
+# durable-log digest: count real entries (## headers outside <!-- --> blocks,
+# same scoping ledger-mem prune uses) and the newest entry's date, so a
+# session can decide from two numbers whether the file is worth opening.
+# style=date  → heading starts "## YYYY-MM-DD …" (flaws/inefficiencies)
+# style=adr   → heading is "## ADR-N: … (YYYY-MM-DD)" (plans/decisions.md)
+log_digest() {
+  _rel=$1; _label=$2; _style=$3
+  _f=$OFFICE_DIR/$_rel
+  [ -f "$_f" ] || { say "- $_label: (no file)"; return 0; }
+  awk -v label="$_label" -v style="$_style" '
+    /^<!--/ { intpl = ($0 ~ /-->/) ? 0 : 1; next }
+    intpl { if ($0 ~ /-->/) intpl = 0; next }
+    style == "date" && /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
+      n++; d = substr($0, 4, 10); if (d > last) last = d
+    }
+    style == "adr" && /^## ADR-[0-9]/ {
+      n++
+      if (match($0, /\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)[[:space:]]*$/)) {
+        d = substr($0, RSTART+1, 10); if (d > last) last = d
+      }
+    }
+    END {
+      if (n == 0) printf "- %s: 0 entries\n", label
+      else if (last != "") printf "- %s: %d entr%s, last added %s\n", label, n, (n==1?"y":"ies"), last
+      else printf "- %s: %d entr%s\n", label, n, (n==1?"y":"ies")
+    }
+  ' "$_f"
+}
+
+collab_block() {
+  _dir=$MEMORY_DIR/collaboration/events
+  [ -d "$_dir" ] || { say "(no collaboration/events — collaboration never used)"; return 0; }
+  _n=$(find "$_dir" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
+  _last=$(find "$_dir" -maxdepth 1 -name '*.json' 2>/dev/null | sort | tail -n1)
+  if [ "$_n" -eq 0 ]; then
+    say "(no events yet)"
+  else
+    say "- $_n event(s) on file; most recent: \`$(basename "$_last")\`"
+    say "- Full trail + rules: \`memory/collaboration/README.md\`; live status: \`ledger-collab status --session <S> --issue <slug>\`"
+  fi
+}
+
+generate() {
+  [ $# -eq 0 ] || { case "$1" in -h|--help) usage ;; *) die "unknown argument '$1'" ;; esac; }
+  [ -d "$OFFICE_DIR" ] || die "no memory/office/ directory — is this a bootstrapped project?"
+  _tmp=$OFFICE_DIR/.STATE.$$.tmp
+  {
+    say "# STATE — session digest"
+    say ""
+    say "<!-- GENERATED by \`ledger-state generate\` — never hand-edit. Regenerated"
+    say "at check-in and at exit. This is a DERIVED VIEW for fast orientation;"
+    say "open the file a line points at when your task needs more than the"
+    say "line gives you. Full reading order: ledger-schema.md. -->"
+    say ""
+    say "_Regenerated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_"
+    say ""
+    say "## Standing params"
+    core_block
+    standing_params
+    say ""
+    say "## Office — who's in, right now"
+    roster_block
+    say ""
+    say "## Current task"
+    current_task_block
+    say ""
+    say "## Backlog — High priority (the top of the queue)"
+    backlog_block
+    say ""
+    say "## Logs at a glance — open only if your task touches these"
+    log_digest "flaws/log.md" "flaws/log.md (protocol/.context_ledger friction)" date
+    log_digest "inefficiencies/log.md" "inefficiencies/log.md (project code/env friction)" date
+    log_digest "plans/decisions.md" "plans/decisions.md (ADRs in force — respected, not relitigated)" adr
+    say ""
+    say "## Collaboration"
+    collab_block
+  } > "$_tmp" || { rm -f "$_tmp"; die "could not write STATE.md"; }
+  mv "$_tmp" "$OUT" || { rm -f "$_tmp"; die "could not replace STATE.md"; }
+  say "ledger-state: wrote $(basename "$OUT")"
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  generate) generate "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD' (try: ledger-state help)" ;;
+esac

@@ -1,0 +1,270 @@
+#!/bin/sh
+# ledger-history — office lifecycle: open, work, close, freeze, archive.
+#
+# The live office is the unnumbered directory memory/office/ — the team roster,
+# the session registry, session notes and summaries, tasks, plans, flaw and
+# inefficiency logs, reviews. Only one office is ever live, so its paths are
+# stable. Closing NEVER condenses or resets anything: the directory is frozen
+# verbatim and numbered at that moment (history/office-<NNN>/), and a
+# permanent accomplishments record (history/office-<NNN>.md) is written — it
+# stays in history/ forever, even after the frozen office is zipped into
+# archive/office-<NNN>.tar.gz and eventually gc'd. The next office opens from
+# empty skeletons: nothing carries over implicitly (explicit re-seeding only).
+# Durable memory (workflows/, collaboration/, system/, user/, overrides/,
+# core.lock, secrets/) lives at the memory/ root and never rotates.
+#
+# Commands:
+#   status                 live office, session count, zone sizes, due?
+#   close [--milestone L] [--confirm]
+#                          freeze the live office verbatim into
+#                          history/office-<NNN>/, write the permanent
+#                          accomplishments record, open a fresh empty office,
+#                          and zip the oldest frozen office into archive/
+#                          when history/ is over its keep. Prints the
+#                          checklist and a plan; only --confirm executes.
+#   gc [--confirm]         delete oldest archive/ tarballs over the cap
+#                          (oldest-first). The one destructive step; the files
+#                          remain recoverable in git history, and the permanent
+#                          records stay in history/. --confirm executes.
+#
+# Config: memory/workflows/history.conf (key=value), absent = defaults:
+#   office_size=20    sessions per office before a close is due
+#                     (legacy key group_size is still read)
+#   history_keep=3    frozen offices kept readable in history/ before zipping
+#   archive_keep=12   tarballs kept in archive/ before gc deletes oldest-first
+#   backlog_cap=20    rows the new office's work queue holds before pruning
+#                     (read by ledger-mem check, not by this tool)
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-history: %s\n' "$*" >&2; }
+die() { err "$*"; exit 2; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 2
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+MEMORY_DIR=$LEDGER_DIR/memory
+OFFICE_DIR=$MEMORY_DIR/office
+HISTORY_DIR=$LEDGER_DIR/history
+ARCHIVE_DIR=$LEDGER_DIR/archive
+SESSIONS_MD=$OFFICE_DIR/agents/sessions.md
+CONFIG=$MEMORY_DIR/workflows/history.conf
+OFFICE_TPL=$CORE_DIR/templates/memory/office
+
+usage() { sed -n '16,36p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+conf() { # $1 key, $2 default
+  _v=""
+  [ -f "$CONFIG" ] && _v=$(sed -n "s/^$1=//p" "$CONFIG" | tr -d '\r' | head -n1)
+  case "$_v" in ''|*[!0-9]*) printf '%s' "$2" ;; *) printf '%s' "$_v" ;; esac
+}
+
+office_size() { # office_size, falling back to the legacy group_size key
+  conf office_size "$(conf group_size 20)"
+}
+
+session_count() { # sessions logged in the live office's registry
+  [ -f "$SESSIONS_MD" ] || { echo 0; return; }
+  # real dated entries only — never the "## YYYY-MM-DD — Session N" template line.
+  # grep -c prints 0 on no match (with exit status 1); capture the value, ignore status.
+  _sc=$(grep -cE '^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*Session ' "$SESSIONS_MD" 2>/dev/null)
+  printf '%s' "${_sc:-0}"
+}
+
+office_opened() { # date of the first session entry in the live registry
+  [ -f "$SESSIONS_MD" ] || return 0
+  sed -n 's/^## \([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*$/\1/p' "$SESSIONS_MD" 2>/dev/null | head -n1
+}
+
+strip_zeros() { # POSIX-safe base-10 int from a zero-padded string (dash has no 10#)
+  _s=$(printf '%s' "$1" | sed 's/^0*//'); [ -n "$_s" ] || _s=0; printf '%s' "$_s"
+}
+
+count_glob() { # $1 dir, $2 pattern — count matching files, 0 if none
+  set -- "$1"/$2
+  [ -e "$1" ] && { printf '%s\n' "$@" | wc -l | tr -d ' '; } || echo 0
+}
+
+count_office_dirs() { # frozen office directories currently readable in history/
+  _n=0
+  for _d in "$HISTORY_DIR"/office-*/; do [ -d "$_d" ] && _n=$((_n + 1)); done
+  printf '%s' "$_n"
+}
+
+max_office_num() { # highest office number on record; the records are permanent,
+                   # so the sequence is always derivable — no state file
+  _max=0
+  for _p in "$HISTORY_DIR"/office-*.md "$HISTORY_DIR"/office-*/ "$ARCHIVE_DIR"/office-*.tar.gz; do
+    [ -e "$_p" ] || continue
+    _b=$(basename "$_p"); _b=${_b%%.*}
+    _n=$(printf '%s' "$_b" | sed -n 's/^office-0*\([0-9][0-9]*\)$/\1/p')
+    case "$_n" in ''|*[!0-9]*) continue ;; esac
+    if [ "$_n" -gt "$_max" ]; then _max=$_n; fi
+  done
+  printf '%s' "$_max"
+}
+
+today() { date -u +%Y-%m-%d; }
+
+preclose_checklist() {
+  say "Before closing this office:"
+  say "  - the directory is frozen VERBATIM (roster, registry, notes, logs —"
+  say "    nothing is condensed, trimmed, or reset)"
+  say "  - after the freeze, fill the permanent record history/office-<NNN>.md:"
+  say "    Accomplished / Decisions still in force / Open threads"
+  say "  - re-seed open threads that still matter into the NEW office's files"
+  say "    (backlog / flaws / decisions) — the only carryover there is"
+  say "  - re-seed WORK, not knowledge: backlog.md rows only for actionable"
+  say "    items with an active owner or a clear next step; the old office's"
+  say "    parking-lot findings/questions/someday items go in the permanent"
+  say "    record (Open threads), not into the fresh queue"
+  say "  - re-seeded entries describe the work in plain words: they never cite"
+  say "    this office's session numbers or codenames (S014, Session 12) —"
+  say "    those live in the frozen copy the new office never reads; the new"
+  say "    office's numbering starts clean (codenames from S001, entries from"
+  say "    Session 1)"
+  say "The new office starts from empty skeletons; durable files do not rotate."
+}
+
+roll_oldest_office_to_archive() {
+  _hk=$(conf history_keep 3)
+  while :; do
+    _hc=$(count_office_dirs)
+    [ "$_hc" -gt "$_hk" ] || break
+    _oldest=$(ls -d "$HISTORY_DIR"/office-*/ 2>/dev/null | sort | head -n1)
+    [ -n "$_oldest" ] || break
+    _base=$(basename "$_oldest")
+    mkdir -p "$ARCHIVE_DIR"
+    if command -v tar >/dev/null 2>&1; then
+      ( cd "$HISTORY_DIR" && tar czf "$ARCHIVE_DIR/$_base.tar.gz" "$_base" ) \
+        && rm -rf "$HISTORY_DIR/$_base" \
+        && say "archived $_base -> archive/$_base.tar.gz (its record stays in history/)" \
+        || { err "could not archive $_base"; break; }
+    else
+      err "tar not found — leaving $_base in history/"; break
+    fi
+  done
+}
+
+cmd_status() {
+  _c=$(session_count); _gs=$(office_size)
+  _hk=$(conf history_keep 3); _ak=$(conf archive_keep 12)
+  _hd=$(count_office_dirs); _hm=$(count_glob "$HISTORY_DIR" 'office-*.md')
+  _acount=$(count_glob "$ARCHIVE_DIR" 'office-*.tar.gz')
+  if [ -d "$OFFICE_DIR" ]; then
+    say "Live office:     memory/office (opened $(office_opened | grep . || echo '—'))"
+    say "Sessions in it:  $_c / $_gs"
+  else
+    say "Live office:     none — memory/office missing (run: ledger-sync migrate)"
+  fi
+  say "history/:        $_hd frozen office(s) readable, $_hm permanent record(s) (keep $_hk)"
+  say "archive/:        $_acount tarball(s) (cap $_ak)"
+  if [ "$_c" -ge "$_gs" ]; then
+    say ""
+    say "A close is DUE (>= office_size). The next worker through the door runs it"
+    say "before working: ledger-history close   (then --confirm)"
+  fi
+  [ "$_acount" -gt "$_ak" ] && say "gc is DUE: archive/ over cap. Run: ledger-history gc --confirm"
+  return 0
+}
+
+cmd_close() {
+  _milestone=""; _confirm=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --milestone) [ $# -ge 2 ] || die "--milestone needs a label"; _milestone=$2; shift 2 ;;
+      --confirm) _confirm=1; shift ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  [ -d "$OFFICE_DIR" ] || die "no $OFFICE_DIR — run: ledger-sync migrate"
+  [ -d "$OFFICE_TPL" ] || die "$OFFICE_TPL missing — core is too old for the office layout; update core first"
+  _c=$(session_count)
+  _int=$(strip_zeros "$(max_office_num)")
+  _n=$(printf '%03d' "$(( _int + 1 ))")
+  _target_dir=$HISTORY_DIR/office-$_n
+  _record=$HISTORY_DIR/office-$_n.md
+  _opened=$(office_opened | grep . || echo '—')
+  say "== Closing the live office -> office-$_n =="
+  say "sessions: $_c   opened: $_opened   closing: $(today)${_milestone:+   milestone: $_milestone}"
+  if ( cd "$(dirname -- "$LEDGER_DIR")" 2>/dev/null && git status --porcelain 2>/dev/null | head -n1 | grep . >/dev/null ); then
+    say "notice: uncommitted changes present — the closing commit should include the frozen office move + record"
+  fi
+  say ""
+  preclose_checklist
+  say ""
+  say "Plan:"
+  say "  - freeze memory/office verbatim -> $_target_dir (nothing trimmed)"
+  say "  - write $_record (permanent accomplishments record)"
+  say "  - open a fresh empty office from core/templates/memory/office/"
+  say "  - zip the oldest frozen office into archive/ if history/ exceeds keep"
+  if [ "$_confirm" -ne 1 ]; then
+    say ""
+    say "Dry run — nothing changed. Re-run with --confirm once the checklist is done."
+    return 0
+  fi
+
+  mkdir -p "$HISTORY_DIR"
+  mv "$OFFICE_DIR" "$_target_dir" || die "could not move the live office into history/"
+  say "froze memory/office -> $_target_dir (verbatim)"
+
+  {
+    printf '# Office %s — accomplishments record (permanent)\n\n' "$_n"
+    printf -- '- Opened: %s\n- Closed: %s\n- Sessions: %s\n' "$_opened" "$(today)" "$_c"
+    [ -n "$_milestone" ] && printf -- '- Milestone: %s\n' "$_milestone"
+    printf '\nThe frozen office lives at history/office-%s/ until it is zipped into\narchive/office-%s.tar.gz. This record stays in history/ forever — even after\nthe tarball is garbage-collected, the office is never forgotten. Not read at\nsession start; deliberate lookback only.\n\n' "$_n" "$_n"
+    printf "<!-- FILL IN before committing the close — this is the office's permanent memory:\n## Accomplished\n- <what this office achieved — releases, milestones, work worth remembering>\n\n## Decisions still in force\n- <ADRs / working agreements the next office must respect — or \"none\">\n\n## Open threads\n- <actionable items re-seeded into the new office's backlog (owner / next step),\n  plus the parking-lot findings, questions, and someday items worth keeping —\n  this record is where knowledge survives a close; the fresh queue does not\n  inherit it — or \"none\">\n-->\n"
+  } > "$_record" || die "could not write $_record"
+  say "wrote $_record (fill it in before committing)"
+
+  cp -R "$OFFICE_TPL/." "$OFFICE_DIR" || die "could not seed the fresh office from templates"
+  say "opened a fresh memory/office (empty skeletons)"
+
+  roll_oldest_office_to_archive
+  say ""
+  say "Then, before committing: fill in $_record and re-seed open threads into the"
+  say "new office's backlog / flaws / decisions — only what still matters, and"
+  say "into the backlog only actionable work with an owner or next step (the"
+  say "parking lot's findings/questions go in the record, not the new queue)."
+  say ""
+  say "Commit as: chore(ledger): close office-$_n, open a fresh office"
+}
+
+cmd_gc() {
+  _confirm=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --confirm) _confirm=1; shift ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  _ak=$(conf archive_keep 12)
+  _acount=$(count_glob "$ARCHIVE_DIR" 'office-*.tar.gz')
+  if [ "$_acount" -le "$_ak" ]; then
+    say "archive/ holds $_acount tarball(s), cap $_ak — nothing to delete."
+    return 0
+  fi
+  _over=$(( _acount - _ak ))
+  say "archive/ over cap ($_acount > $_ak). Oldest-first, $_over tarball(s) to delete:"
+  _list=$(ls "$ARCHIVE_DIR"/office-*.tar.gz 2>/dev/null | sort | head -n "$_over")
+  printf '%s\n' "$_list" | sed 's/^/  - /'
+  say "(recoverable from git history after deletion; the permanent records in history/ stay)"
+  if [ "$_confirm" -ne 1 ]; then
+    say "Dry run — nothing deleted. Re-run with --confirm to delete."
+    return 0
+  fi
+  printf '%s\n' "$_list" | while IFS= read -r _f; do [ -n "$_f" ] && rm -f "$_f" && say "deleted $(basename "$_f")"; done
+  say "Commit as: chore(ledger): gc archive/ to the $_ak-tarball cap"
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  status) cmd_status "$@" ;;
+  close)  cmd_close "$@" ;;
+  gc)     cmd_gc "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD' (try: ledger-history help)" ;;
+esac

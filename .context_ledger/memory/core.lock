@@ -1,0 +1,5 @@
+# written by ledger-sync — the last-known-good core version.
+# Do not edit by hand. If core fails verify, `ledger-sync rollback`
+# restores the version recorded here from git history.
+version=2.0.4
+verified=2026-09-23

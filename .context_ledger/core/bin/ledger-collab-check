@@ -1,0 +1,368 @@
+#!/bin/sh
+# ledger-collab-check — validate collaboration events before integration.
+#
+# This is called by ledger-collab check. It treats the event trail as an
+# integration gate: malformed metadata, unresolved claims, overlapping active
+# claims, incomplete agreements, unresolved corrections/handoffs, and releases
+# without product commits fail the check.
+#
+# Reads both event representations: JSON documents (<id>.json, the current
+# format — see core/schemas/collab-event.schema.json) and legacy markdown
+# frontmatter (<id>.md), normalizing both into the same in-memory index.
+#
+# Notes (type: note) are the informal office channel — never required to
+# resolve and never a gate failure.
+#
+# Performance: every event file is parsed ONCE into an in-memory index by a
+# single awk pass; all cross-referencing runs over that index. The previous
+# implementation re-globbed the events directory and forked sed+head per field,
+# which was O(n^2)-O(n^3) in subprocess spawns and hung past a handful of
+# events (minutes) under Git Bash on Windows.
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-collab: %s\n' "$*" >&2; }
+die() { err "$*"; exit 2; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 2
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+EVENT_DIR=$LEDGER_DIR/memory/collaboration/events
+
+usage() {
+  cat <<'EOF'
+ledger-collab check [--session ID] [--issue ID]
+
+Integration-readiness checks:
+  - required and valid event metadata
+  - duplicate event IDs and resolvable event references
+  - complete agreements with proposals, assessments, participants, and owner
+  - active overlapping claims
+  - unresolved claims, proposals, assessments, handoffs, and corrections
+  - releases that reference a product commit
+  - notes are informal and never gate integration
+
+A claim counts as closed when a later release/handoff cites its event ID OR
+shares its session+issue and overlaps its paths (weak-agent / SHA-only case).
+
+Exit codes: 0 passed · 1 validation failure · 2 usage/error
+EOF
+  exit 2
+}
+
+valid_id() {
+  _value=$1
+  [ -n "$_value" ] || return 1
+  case "$_value" in *[!A-Za-z0-9._:-]*) return 1 ;; esac
+  return 0
+}
+
+check() {
+  CHECK_SESSION=""; CHECK_ISSUE=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session) [ $# -ge 2 ] || die "--session needs a value"; valid_id "$2" || die "invalid session id: $2"; CHECK_SESSION=$2; shift 2 ;;
+      --issue)   [ $# -ge 2 ] || die "--issue needs a value"; valid_id "$2" || die "invalid issue id: $2"; CHECK_ISSUE=$2; shift 2 ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  [ -d "$EVENT_DIR" ] || { say "collaboration check: no events (nothing to check)"; return 0; }
+
+  # A single awk pass parses, indexes, and validates every event. It prints
+  # "FAIL: ..." lines to stderr and a summary/exit signal to stdout.
+  # JSON (current) and markdown (legacy) events are checked together.
+  set -- "$EVENT_DIR"/*.md
+  _md_first=$1
+  set -- "$EVENT_DIR"/*.json
+  _js_first=$1
+  if [ ! -e "$_md_first" ] && [ ! -e "$_js_first" ]; then
+    say "collaboration check: no events (nothing to check)"; return 0
+  fi
+  if [ -e "$_md_first" ]; then set -- "$EVENT_DIR"/*.md; else set --; fi
+  if [ -e "$_js_first" ]; then set -- "$@" "$EVENT_DIR"/*.json; fi
+
+  awk -v want_session="$CHECK_SESSION" -v want_issue="$CHECK_ISSUE" '
+    function trim_cr(s) { gsub(/\r/, "", s); return s }
+    function is_id(v) { return (v != "" && v ~ /^[A-Za-z0-9._:-]+$/) }
+    function is_sha(v) { return (v ~ /^[0-9A-Fa-f]+$/ && length(v) >= 7 && length(v) <= 40) }
+    function in_scope(e) {
+      return ((want_session == "" || F[e,"session"] == want_session) &&
+              (want_issue   == "" || F[e,"issue"]   == want_issue))
+    }
+    function fail(msg) { print "FAIL: " msg | "cat 1>&2"; failures++ }
+    # any ref token of event e that resolves to an event of type t
+    function has_ref_type(e, t,   n, arr, i, r, te) {
+      n = split(F[e,"refs"], arr, ",")
+      for (i = 1; i <= n; i++) {
+        r = arr[i]; if (r == "none" || r == "") continue
+        te = id2e[r]; if (te != "" && F[te,"type"] == t) return 1
+      }
+      return 0
+    }
+    function has_sha_ref(e,   n, arr, i, r) {
+      n = split(F[e,"refs"], arr, ",")
+      for (i = 1; i <= n; i++) { r = arr[i]; if (r != "none" && r != "" && is_sha(r)) return 1 }
+      return 0
+    }
+    # is wanted_id referenced by some event of type t in the same session+issue?
+    function referenced_by_type(wanted_id, t,   lst, arr, i, f) {
+      lst = refby[wanted_id]; if (lst == "") return 0
+      split(lst, arr, " ")
+      for (i in arr) {
+        f = arr[i]
+        if (F[f,"type"] == t &&
+            F[f,"session"] == F[id2e[wanted_id],"session"] &&
+            F[f,"issue"]   == F[id2e[wanted_id],"issue"]) return 1
+      }
+      return 0
+    }
+    function paths_overlap(pa, pb,   na, la, nb, lb, i, j) {
+      na = split(pa, la, ","); nb = split(pb, lb, ",")
+      for (i = 1; i <= na; i++) for (j = 1; j <= nb; j++)
+        if (la[i] != "none" && la[i] != "" && la[i] == lb[j]) return 1
+      return 0
+    }
+    # claim closed: event-ID linkage OR (same session+issue + path overlap) with a release/handoff
+    function claim_closed(e,   f) {
+      if (referenced_by_type(F[e,"id"], "release")) return 1
+      if (referenced_by_type(F[e,"id"], "handoff")) return 1
+      for (f = 1; f <= ne; f++) {
+        if (F[f,"type"] != "release" && F[f,"type"] != "handoff") continue
+        if (F[f,"session"] != F[e,"session"] || F[f,"issue"] != F[e,"issue"]) continue
+        if (paths_overlap(F[e,"paths"], F[f,"paths"])) return 1
+      }
+      return 0
+    }
+    # does a claim exist that this release/handoff corresponds to?
+    # (shared session+issue + path overlap — the SHA-only / weak-agent case)
+    function matches_claim(e,   f) {
+      for (f = 1; f <= ne; f++) {
+        if (F[f,"type"] != "claim") continue
+        if (F[f,"session"] != F[e,"session"] || F[f,"issue"] != F[e,"issue"]) continue
+        if (paths_overlap(F[e,"paths"], F[f,"paths"])) return 1
+      }
+      return 0
+    }
+    # is this scope eventually released? (event-ID ref, or session+issue+paths)
+    function has_release_for(e,   f) {
+      if (referenced_by_type(F[e,"id"], "release")) return 1
+      for (f = 1; f <= ne; f++) {
+        if (F[f,"type"] != "release") continue
+        if (F[f,"session"] != F[e,"session"] || F[f,"issue"] != F[e,"issue"]) continue
+        if (paths_overlap(F[e,"paths"], F[f,"paths"])) return 1
+      }
+      return 0
+    }
+    function distinct_count(csv,   n, arr, i, seen, c) {
+      n = split(csv, arr, ","); c = 0
+      for (i = 1; i <= n; i++) if (arr[i] != "none" && arr[i] != "" && !seen[arr[i]]++) c++
+      return c
+    }
+    function csv_has(csv, item,   n, arr, i) {
+      n = split(csv, arr, ",")
+      for (i = 1; i <= n; i++) if (arr[i] == item) return 1
+      return 0
+    }
+    function json_unescape(s) {
+      gsub(/\\\\/, "\001", s); gsub(/\\n/, "\n", s); gsub(/\\r/, "\r", s)
+      gsub(/\\t/, "\t", s); gsub(/\\"/, "\"", s); gsub(/\001/, "\\", s)
+      return s
+    }
+    # JSON value (strict profile) -> the same field value the markdown
+    # parser produces: null/[] -> "none", arrays -> comma-joined,
+    # strings -> unescaped. Keeps every downstream rule format-blind.
+    function json_norm(v) {
+      sub(/,$/, "", v)
+      if (v == "null" || v == "[]" || v == "") return "none"
+      if (v ~ /^\[/) {
+        gsub(/^\[/, "", v); gsub(/\]$/, "", v)
+        if (v == "") return "none"
+        gsub(/", "/, ",", v); gsub(/^"/, "", v); gsub(/"$/, "", v)
+        gsub(/\\\\/, "\001", v); gsub(/\\"/, "\"", v); gsub(/\001/, "\\", v)
+        return v
+      }
+      if (v ~ /^"/) { sub(/^"/, "", v); sub(/"$/, "", v); return json_unescape(v) }
+      return v
+    }
+
+    # ---- parse: capture each event file into F[event, key] ----
+    # JSON (strict profile, one "key": value per line) and markdown
+    # (frontmatter between '---' markers) both land in F[event, key].
+    FNR == 1 {
+      fm = 0
+      first = trim_cr($0)
+      mode = (first == "{") ? "json" : "md"
+      if (mode == "json") next
+    }
+    mode == "json" {
+      line = trim_cr($0)
+      if (line == "}") {
+        ne++
+        for (k in cur) F[ne,k] = cur[k]
+        file[ne] = FILENAME
+        delete cur
+        mode = "done"
+        next
+      }
+      if (line ~ /^  "[a-z]+": /) {
+        key = line; sub(/^  "/, "", key); sub(/": .*/, "", key)
+        val = line; sub(/^  "[a-z]+": /, "", val)
+        cur[key] = json_norm(val)
+      }
+      next
+    }
+    {
+      line = trim_cr($0)
+      if (line == "---") {
+        fm++
+        if (fm == 2) {
+          ne++
+          for (k in cur) F[ne,k] = cur[k]
+          file[ne] = FILENAME
+          delete cur
+        }
+        next
+      }
+      if (fm == 1 && line ~ /^[a-z]+: /) {
+        key = line; sub(/:.*/, "", key)
+        val = line; sub(/^[a-z]+: /, "", val)
+        cur[key] = val
+      }
+    }
+
+    END {
+      failures = 0
+      # build id and ref-back indices over ALL events
+      for (e = 1; e <= ne; e++) {
+        id = F[e,"id"]
+        if (id != "") {
+          if (id2e[id] != "") dup[id] = 1
+          else id2e[id] = e
+        }
+        n = split(F[e,"refs"], arr, ",")
+        for (i = 1; i <= n; i++) {
+          r = arr[i]; if (r == "none" || r == "") continue
+          refby[r] = refby[r] " " e
+        }
+      }
+
+      count = 0
+      req = "id type session agent created issue paths refs option selected owner participants"
+      nreq = split(req, reqk, " ")
+
+      for (e = 1; e <= ne; e++) {
+        if (!in_scope(e)) continue
+        count++
+        id = F[e,"id"]; type = F[e,"type"]
+        for (i = 1; i <= nreq; i++)
+          if (F[e,reqk[i]] == "") fail(file[e] " is missing " reqk[i])
+        if (!is_id(id)) fail(file[e] " has invalid id \x27" id "\x27")
+
+        if (type != "note" && type != "claim" && type != "proposal" &&
+            type != "assessment" && type != "agreement" && type != "correction" &&
+            type != "handoff" && type != "release") {
+          fail(file[e] " has unknown type \x27" type "\x27"); continue
+        }
+
+        # reference resolution: an event ref must share session+issue; else a
+        # SHA. Notes are informal — their --re may be a path, URL, event, or
+        # commit, so they are exempt from this check.
+        if (type != "note") {
+          n = split(F[e,"refs"], arr, ",")
+          for (i = 1; i <= n; i++) {
+            r = arr[i]; if (r == "none" || r == "") continue
+            te = id2e[r]
+            if (te != "") {
+              if (F[te,"session"] != F[e,"session"]) fail(id " references event " r " from another session")
+              if (F[te,"issue"]   != F[e,"issue"])   fail(id " references event " r " from another issue")
+            } else if (!is_sha(r)) {
+              fail(id " has unknown reference \x27" r "\x27 (expected an event ID or commit SHA)")
+            }
+          }
+        }
+
+        if (type == "claim") {
+          if (F[e,"paths"] == "none") fail("claim " id " has no paths")
+        } else if (type == "proposal") {
+          if (F[e,"option"] == "none") fail("proposal " id " has no option")
+        } else if (type == "assessment") {
+          if (!has_ref_type(e, "proposal")) fail("assessment " id " does not reference a proposal")
+        } else if (type == "agreement") {
+          if (!has_ref_type(e, "proposal"))   fail("agreement " id " does not reference a proposal")
+          if (!has_ref_type(e, "assessment")) fail("agreement " id " does not reference an assessment")
+          if (F[e,"selected"] == "none") fail("agreement " id " has no selected option")
+          if (F[e,"owner"] == "none")    fail("agreement " id " has no owner")
+          if (F[e,"participants"] == "none") fail("agreement " id " has no participants")
+          if (F[e,"owner"] != "none" && !csv_has(F[e,"participants"], F[e,"owner"]))
+            fail("agreement " id " owner is not a participant")
+          if (distinct_count(F[e,"participants"]) < 2)
+            fail("agreement " id " needs at least two distinct participants")
+          sel = F[e,"selected"]; found = 0
+          m = split(F[e,"refs"], rr, ",")
+          for (j = 1; j <= m; j++) {
+            te = id2e[rr[j]]
+            if (te != "" && F[te,"type"] == "proposal" && F[te,"option"] == sel) found = 1
+          }
+          if (!found) fail("agreement " id " selects an option not present in its referenced proposals")
+        } else if (type == "correction") {
+          if (F[e,"refs"] == "none") fail("correction " id " has no reference")
+          if (!referenced_by_type(id, "agreement")) fail("correction " id " has no peer agreement")
+        } else if (type == "handoff") {
+          if (F[e,"owner"] == "none") fail("handoff " id " has no receiving owner")
+          if (!has_ref_type(e, "claim") && !has_ref_type(e, "handoff") &&
+              !has_ref_type(e, "agreement") && !matches_claim(e))
+            fail("handoff " id " does not reference the scope being handed off (a claim, prior handoff, or agreement)")
+        } else if (type == "release") {
+          if (!has_ref_type(e, "claim") && !has_ref_type(e, "handoff") && !matches_claim(e))
+            fail("release " id " does not correspond to a claim or handoff (reference it, or share its issue and paths)")
+          if (!has_sha_ref(e)) fail("release " id " does not reference a product commit")
+        }
+        # type == note: no requirements.
+      }
+
+      # duplicate ids (in scope)
+      for (id in dup) if (id2e[id] != "" && in_scope(id2e[id])) fail("duplicate event id " id)
+
+      # active overlapping claims
+      for (e = 1; e <= ne; e++) {
+        if (!in_scope(e) || F[e,"type"] != "claim" || claim_closed(e)) continue
+        for (g = e + 1; g <= ne; g++) {
+          if (!in_scope(g) || F[g,"type"] != "claim" || claim_closed(g)) continue
+          if (F[e,"session"] != F[g,"session"] || F[e,"issue"] != F[g,"issue"]) continue
+          if (paths_overlap(F[e,"paths"], F[g,"paths"]))
+            fail("active claims overlap: " F[e,"id"] " and " F[g,"id"] " — talk it through and agree who takes it")
+        }
+      }
+
+      # resolutions
+      for (e = 1; e <= ne; e++) {
+        if (!in_scope(e)) continue
+        type = F[e,"type"]; id = F[e,"id"]
+        if (type == "claim") {
+          if (!claim_closed(e)) fail("claim " id " is not released or handed off")
+        } else if (type == "proposal" || type == "assessment") {
+          if (!referenced_by_type(id, "agreement")) fail(type " " id " is not resolved by an agreement")
+        } else if (type == "handoff") {
+          if (!has_release_for(e)) fail("handoff " id " is not released")
+        }
+      }
+
+      if (count == 0) { print "collaboration check: no matching events"; exit 0 }
+      if (failures > 0) {
+        print "collaboration check failed: " failures " problem(s) across " count " event(s)" | "cat 1>&2"
+        exit 1
+      }
+      print "collaboration check passed: " count " event(s), all claims resolved and agreements/releases complete"
+      exit 0
+    }
+  ' "$@"
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  check) check "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD'" ;;
+esac

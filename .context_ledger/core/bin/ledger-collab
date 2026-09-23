@@ -1,0 +1,401 @@
+#!/bin/sh
+# ledger-collab — peer-to-peer coordination for concurrent agents.
+#
+# Project mode only. Coordination state is immutable, one-file-per-event
+# under .context_ledger/memory/collaboration/events/, so concurrent agents do not
+# append to a shared log. Product work still belongs on isolated branches or
+# worktrees; this tool does not merge or force-push product code.
+#
+# Events are JSON documents (schema: core/schemas/collab-event.schema.json),
+# written in a strict profile — one "key": value per line — so the POSIX-sh
+# reader needs no JSON dependency. Legacy markdown events (<id>.md) are
+# still read by status and check.
+#
+# Commands:
+#   emit TYPE --session ID --agent ID --issue ID [metadata] [--body-file FILE]
+#   status [--session ID] [--issue ID]
+#   check  [--session ID] [--issue ID]   integration-readiness gate
+#
+# Metadata:
+#   --paths CSV       repo-relative paths or logical scopes
+#   --refs / --re CSV event IDs or commit SHAs this event cites
+#   --option ID       proposal option ID
+#   --selected ID     option selected by an agreement
+#   --owner ID        implementation owner
+#   --participants CSV agents who accepted an agreement
+#   --to CSV          for a note: peer(s) you are addressing (optional)
+#   --body TEXT       one-line event detail (use --body-file for reasoning)
+#
+# Event types: note claim proposal assessment agreement correction handoff release
+#   note  — the office channel: an informal heads-up to peers. No refs,
+#           owner, or participants required; never gates integration. Use it
+#           to say what you're on, flag something, or review a peer's diff.
+#   The other seven are the formal trail; the proposal/assessment/agreement
+#   ceremony is reserved for a genuine conflict (same paths, incompatible
+#   changes), not the common case.
+# check validates the event trail for integration readiness.
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-collab: %s\n' "$*" >&2; }
+die() { err "$*"; exit 1; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 1
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+PROJECT_DIR=$(dirname -- "$LEDGER_DIR")
+MEMORY_DIR=$LEDGER_DIR/memory
+COLLAB_DIR=$MEMORY_DIR/collaboration
+EVENT_DIR=$COLLAB_DIR/events
+
+validate_value() {
+  _label=$1; _value=$2
+  [ -n "$_value" ] || die "$_label cannot be empty"
+  _clean=$(printf '%s' "$_value" | tr -d '\n\r')
+  [ "$_clean" = "$_value" ] || die "$_label cannot contain a newline"
+}
+
+validate_id() {
+  _label=$1; _value=$2
+  validate_value "$_label" "$_value"
+  case "$_value" in
+    *[!A-Za-z0-9._:-]*) die "$_label may contain only letters, numbers, '.', '_', ':' or '-'" ;;
+  esac
+}
+
+validate_body() {
+  # JSON strings cannot carry raw control characters; the writer escapes
+  # tab/CR/LF, so any other control char would produce an invalid document.
+  _clean=$(printf '%s' "$1" | tr -d '\11\12\15')
+  if printf '%s' "$_clean" | grep -q '[[:cntrl:]]'; then
+    die "body contains control characters (tab, newline, and CR are the only ones allowed)"
+  fi
+}
+
+is_json() {
+  _first=
+  IFS= read -r _first < "$1" || true
+  case "$_first" in
+    '{'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# JSON strict-profile reader: every key sits on its own line as
+# `  "key": value,` (the writer's contract), so no JSON parser is needed.
+# Values are normalized to the legacy markdown conventions — null/[] ->
+# "none", arrays -> comma-joined, strings -> unescaped — so all downstream
+# logic (released, paths_overlap, check) sees one shape.
+json_field() {
+  _f=$1 _k=$2
+  awk -v key="$_k" '
+    function unescape(s) {
+      gsub(/\\\\/, "\001", s); gsub(/\\n/, "\n", s); gsub(/\\r/, "\r", s)
+      gsub(/\\t/, "\t", s); gsub(/\\"/, "\"", s); gsub(/\001/, "\\", s)
+      return s
+    }
+    function norm(v) {
+      sub(/\r$/, "", v); sub(/,$/, "", v)
+      if (v == "null" || v == "[]") return "none"
+      if (v ~ /^\[/) {
+        gsub(/^\[/, "", v); gsub(/\]$/, "", v)
+        if (v == "") return "none"
+        gsub(/", "/, ",", v); gsub(/^"/, "", v); gsub(/"$/, "", v)
+        gsub(/\\\\/, "\001", v); gsub(/\\"/, "\"", v); gsub(/\001/, "\\", v)
+        return v
+      }
+      if (v ~ /^"/) { sub(/^"/, "", v); sub(/"$/, "", v); return unescape(v) }
+      return v
+    }
+    index($0, "  \"" key "\": ") == 1 {
+      print norm(substr($0, length(key) + 7))
+      exit
+    }
+  ' "$_f"
+}
+
+field() {
+  _k=$1 _f=$2
+  if is_json "$_f"; then
+    json_field "$_f" "$_k"
+  else
+    sed -n "s/^$_k: //p" "$_f" | head -n 1 | tr -d '\r'
+  fi
+}
+
+# First non-empty line of the event body. Used for the chatter feed so
+# status stays scannable.
+first_body_line() {
+  if is_json "$1"; then
+    field body "$1" | awk 'NF { print; exit }'
+  else
+    awk 'f && NF { print; exit } /^---$/ { c++; if (c==2) f=1 }' "$1" | tr -d '\r'
+  fi
+}
+
+usage() {
+  sed -n '14,36p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+# --- JSON writing helpers (the strict profile's other half) ---
+
+json_escape() {
+  # stdin -> single-line JSON string content (no surrounding quotes).
+  # Backslash first, then quote, then the escapable control chars; CR is
+  # escaped per line so CRLF bodies round-trip as \r\n.
+  awk '
+    {
+      if (NR > 1) printf "\\n"
+      s = $0
+      gsub(/\\/, "\\\\", s)
+      gsub(/"/, "\\\"", s)
+      gsub(/\t/, "\\t", s)
+      gsub(/\r/, "\\r", s)
+      printf "%s", s
+    }
+  '
+}
+
+json_scalar() {
+  # shell value ("none" = absent) -> JSON null or quoted string
+  case "$1" in
+    none|"") printf 'null'; return ;;
+  esac
+  printf '"%s"' "$(printf '%s' "$1" | json_escape)"
+}
+
+csv_to_json_array() {
+  # CLI CSV ("none" = absent) -> JSON array of strings
+  case "$1" in
+    none|"") printf '[]'; return ;;
+  esac
+  printf '%s' "$1" | awk '
+    {
+      n = split($0, a, ",")
+      out = "["; c = 0
+      for (i = 1; i <= n; i++) {
+        e = a[i]
+        sub(/^ +/, "", e); sub(/ +$/, "", e)
+        if (e == "") continue
+        gsub(/\\/, "\\\\", e); gsub(/"/, "\\\"", e); gsub(/\t/, "\\t", e)
+        out = out (c ? ", " : "") "\"" e "\""
+        c++
+      }
+      print (c ? out "]" : "[]")
+    }
+  '
+}
+
+emit() {
+  TYPE=${1:-}; [ -n "$TYPE" ] || usage
+  shift
+  case "$TYPE" in
+    claim|proposal|assessment|agreement|correction|handoff|release|note) ;;
+    *) die "unknown event type '$TYPE'" ;;
+  esac
+
+  SESSION=""; AGENT=""; ISSUE=""; PATHS="none"; REFS="none"
+  OPTION="none"; SELECTED="none"; OWNER="none"; PARTICIPANTS="none"
+  BODY=""; BODY_FILE=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session)       [ $# -ge 2 ] || die "--session needs a value"; SESSION=$2; shift 2 ;;
+      --agent)         [ $# -ge 2 ] || die "--agent needs a value"; AGENT=$2; shift 2 ;;
+      --issue)         [ $# -ge 2 ] || die "--issue needs a value"; ISSUE=$2; shift 2 ;;
+      --paths)         [ $# -ge 2 ] || die "--paths needs a value"; PATHS=$2; shift 2 ;;
+      --refs|--re)     [ $# -ge 2 ] || die "--refs needs a value"; REFS=$2; shift 2 ;;
+      --to)            [ $# -ge 2 ] || die "--to needs a value"; PARTICIPANTS=$2; shift 2 ;;
+      --option)        [ $# -ge 2 ] || die "--option needs a value"; OPTION=$2; shift 2 ;;
+      --selected)      [ $# -ge 2 ] || die "--selected needs a value"; SELECTED=$2; shift 2 ;;
+      --owner)         [ $# -ge 2 ] || die "--owner needs a value"; OWNER=$2; shift 2 ;;
+      --participants)  [ $# -ge 2 ] || die "--participants needs a value"; PARTICIPANTS=$2; shift 2 ;;
+      --body)          [ $# -ge 2 ] || die "--body needs a value"; BODY=$2; shift 2 ;;
+      --body-file)     [ $# -ge 2 ] || die "--body-file needs a value"; BODY_FILE=$2; shift 2 ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1' (try: ledger-collab help)" ;;
+    esac
+  done
+
+  validate_id session "$SESSION"
+  validate_id agent "$AGENT"
+  validate_id issue "$ISSUE"
+  validate_value paths "$PATHS"
+  validate_value refs "$REFS"
+  validate_id option "$OPTION"
+  validate_id selected "$SELECTED"
+  validate_id owner "$OWNER"
+  validate_value participants "$PARTICIPANTS"
+  case "$TYPE" in
+    claim)       [ "$PATHS" != none ] || die "claim requires --paths" ;;
+    proposal)    [ "$OPTION" != none ] || die "proposal requires --option" ;;
+    assessment|correction|handoff|release)
+      [ "$REFS" != none ] || die "$TYPE requires --refs" ;;
+    agreement)
+      [ "$REFS" != none ] || die "agreement requires --refs"
+      [ "$SELECTED" != none ] || die "agreement requires --selected"
+      [ "$OWNER" != none ] || die "agreement requires --owner"
+      [ "$PARTICIPANTS" != none ] || die "agreement requires --participants" ;;
+  esac
+  if [ -n "$BODY_FILE" ] && [ -n "$BODY" ]; then
+    die "use either --body or --body-file, not both"
+  fi
+  if [ -n "$BODY_FILE" ]; then
+    [ -f "$BODY_FILE" ] || die "body file not found: $BODY_FILE"
+    BODY=$(cat "$BODY_FILE")
+  fi
+  if [ -z "$BODY_FILE" ] && [ -z "$BODY" ]; then
+    case "$TYPE" in
+      claim) BODY="Intent and evidence: describe the intended change and why this scope is safe." ;;
+      note) die "note requires --body or --body-file — say what you want your peers to know" ;;
+      *) die "$TYPE requires --body-file or --body with evidence and reasoning" ;;
+    esac
+  fi
+  validate_body "$BODY"
+
+  mkdir -p "$EVENT_DIR" || die "cannot create $EVENT_DIR"
+  # Timestamp + agent + process/random suffix makes collisions exceedingly
+  # unlikely; the temp file + mv makes publication atomic on one filesystem.
+  STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+  if command -v od >/dev/null 2>&1 && [ -r /dev/urandom ]; then
+    RAND=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+  else
+    RAND=$$
+  fi
+  ID="$STAMP-$AGENT-$RAND"
+  TARGET=$EVENT_DIR/$ID.json
+  TMP="$EVENT_DIR/.${ID}.$$.tmp"
+  [ ! -e "$TARGET" ] || die "event ID collision: $ID"
+  {
+    printf '{\n'
+    printf '  "schema": 1,\n'
+    printf '  "id": "%s",\n' "$ID"
+    printf '  "type": "%s",\n' "$TYPE"
+    printf '  "session": "%s",\n' "$SESSION"
+    printf '  "agent": "%s",\n' "$AGENT"
+    printf '  "created": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '  "issue": "%s",\n' "$ISSUE"
+    printf '  "body": "%s",\n' "$(printf '%s' "$BODY" | json_escape)"
+    printf '  "paths": %s,\n' "$(csv_to_json_array "$PATHS")"
+    printf '  "refs": %s,\n' "$(csv_to_json_array "$REFS")"
+    printf '  "option": %s,\n' "$(json_scalar "$OPTION")"
+    printf '  "selected": %s,\n' "$(json_scalar "$SELECTED")"
+    printf '  "owner": %s,\n' "$(json_scalar "$OWNER")"
+    printf '  "participants": %s\n' "$(csv_to_json_array "$PARTICIPANTS")"
+    printf '}\n'
+  } > "$TMP" || { rm -f "$TMP"; die "could not write event"; }
+  mv "$TMP" "$TARGET" || { rm -f "$TMP"; die "could not publish event"; }
+  say "created collaboration event: .context_ledger/memory/collaboration/events/$ID.json"
+  if [ "$TYPE" = note ]; then
+    say "publish it in a chore(ledger): commit so your peers see it — a note carries no obligation"
+  else
+    say "publish it in a separate chore(ledger): commit before changing the claimed product scope"
+  fi
+}
+
+released() { # $1 = claim event FILE
+  _cf=$1
+  _cid=$(field id "$_cf")
+  _cses=$(field session "$_cf"); _ciss=$(field issue "$_cf"); _cpaths=$(field paths "$_cf")
+  for _f in "$EVENT_DIR"/*.md "$EVENT_DIR"/*.json; do
+    [ -f "$_f" ] || continue
+    _type=$(field type "$_f")
+    [ "$_type" = release ] || [ "$_type" = handoff ] || continue
+    # (a) explicit linkage: the release/handoff cites the claim's event ID.
+    _refs=$(field refs "$_f")
+    case ",$_refs," in *",$_cid,"*) return 0 ;; esac
+    # (b) weak-agent fallback: releases in this trail routinely cite only the
+    #     commit SHA, not the claim event ID (a logged bug that left claims
+    #     "Active" forever). Treat the claim as closed when a later
+    #     release/handoff shares its session+issue and overlaps its paths.
+    [ "$(field session "$_f")" = "$_cses" ] || continue
+    [ "$(field issue "$_f")" = "$_ciss" ] || continue
+    paths_overlap "$_cpaths" "$(field paths "$_f")" && return 0
+  done
+  return 1
+}
+
+paths_overlap() {
+  awk -v left="$1" -v right="$2" 'BEGIN {
+    nl=split(left, l, ","); nr=split(right, r, ",");
+    for (i=1; i<=nl; i++) for (j=1; j<=nr; j++)
+      if (l[i] != "none" && l[i] == r[j]) exit 0;
+    exit 1
+  }'
+}
+
+status() {
+  SESSION=""; ISSUE=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session) [ $# -ge 2 ] || die "--session needs a value"; SESSION=$2; shift 2 ;;
+      --issue)   [ $# -ge 2 ] || die "--issue needs a value"; ISSUE=$2; shift 2 ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  [ -d "$EVENT_DIR" ] || { say "no collaboration events yet"; return 0; }
+  count=0
+  say "Collaboration events${SESSION:+ for session $SESSION}${ISSUE:+ / issue $ISSUE}:"
+  for f in "$EVENT_DIR"/*.md "$EVENT_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    s=$(field session "$f"); i=$(field issue "$f")
+    [ -z "$SESSION" ] || [ "$s" = "$SESSION" ] || continue
+    [ -z "$ISSUE" ] || [ "$i" = "$ISSUE" ] || continue
+    count=$((count + 1))
+    say "- $(field type "$f") $(field id "$f") — agent=$(field agent "$f") paths=$(field paths "$f") refs=$(field refs "$f")"
+  done
+  [ "$count" -gt 0 ] || { say "(none)"; return 0; }
+
+  say ""
+  say "Active claims and possible overlaps:"
+  for a in "$EVENT_DIR"/*.md "$EVENT_DIR"/*.json; do
+    [ -f "$a" ] || continue
+    [ "$(field type "$a")" = claim ] || continue
+    sa=$(field session "$a"); ia=$(field issue "$a");
+    [ -z "$SESSION" ] || [ "$sa" = "$SESSION" ] || continue
+    [ -z "$ISSUE" ] || [ "$ia" = "$ISSUE" ] || continue
+    released "$a" && continue
+    say "- $(field id "$a") — agent=$(field agent "$a") paths=$(field paths "$a")"
+    for b in "$EVENT_DIR"/*.md "$EVENT_DIR"/*.json; do
+      [ -f "$b" ] || continue
+      [ "$a" \< "$b" ] || continue
+      [ "$(field type "$b")" = claim ] || continue
+      [ "$(field session "$b")" = "$sa" ] || continue
+      [ "$(field issue "$b")" = "$ia" ] || continue
+      released "$b" && continue
+      if paths_overlap "$(field paths "$a")" "$(field paths "$b")"; then
+        say "  POSSIBLE OVERLAP with $(field id "$b") — talk it through (a note), compare the two changes, and agree who takes it"
+      fi
+    done
+  done
+  say ""
+  say "Recent chatter (notes) — read these first to catch up, like a team channel:"
+  notes=0
+  for f in "$EVENT_DIR"/*.md "$EVENT_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    [ "$(field type "$f")" = note ] || continue
+    ns=$(field session "$f"); ni=$(field issue "$f")
+    [ -z "$SESSION" ] || [ "$ns" = "$SESSION" ] || continue
+    [ -z "$ISSUE" ] || [ "$ni" = "$ISSUE" ] || continue
+    notes=$((notes + 1))
+    nto=$(field participants "$f"); nre=$(field refs "$f")
+    [ "$nto" = none ] && nto=""
+    [ "$nre" = none ] && nre=""
+    say "- $(field agent "$f")${nto:+ →$nto}: $(first_body_line "$f")${nre:+  (re: $nre)}"
+  done
+  [ "$notes" -gt 0 ] || say "  (none yet — a quick 'note' is how you say what you're on or flag something to a peer)"
+  say ""
+  say "A genuine conflict (same paths, incompatible changes) escalates to proposal → assessment → agreement."
+  say "Everything else is a note plus your own claim/release — you're on the same team, not bidding against each other."
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  emit)   emit "$@" ;;
+  status) status "$@" ;;
+  check)  sh "$SCRIPT_DIR/ledger-collab-check" check "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD' (try: ledger-collab help)" ;;
+esac

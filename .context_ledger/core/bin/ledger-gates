@@ -1,0 +1,294 @@
+#!/bin/sh
+# ledger-gates — explicit lifecycle gates for project agents.
+#
+# Commands (run inside a bootstrapped project):
+#   init                                  create memory/workflows/gates.conf
+#   checkpoint [--session ID --issue ID]  required before the next agent action
+#   run pre-commit                        validate staged changes + project checks
+#   run integration --session ID --issue ID
+#                                         validate collaboration before merge
+#   run exit                              validate core + final project checks
+#
+# gates.conf is project-owned. Explicit commands run first; mode=hybrid falls
+# back to conventional package.json/Python commands when none are configured.
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-gates: %s\n' "$*" >&2; }
+die() { err "$*"; exit 2; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 2
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+case "$(basename -- "$LEDGER_DIR")" in
+  .context_ledger|.context)  # .context = legacy layout, pre-0.18 project
+  PROJECT_DIR=$(dirname -- "$LEDGER_DIR")
+  ;;
+*)
+  PROJECT_DIR=$LEDGER_DIR
+  ;;
+esac
+MEMORY_DIR=$LEDGER_DIR/memory
+CONFIG=$MEMORY_DIR/workflows/gates.conf
+
+usage() {
+  sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+valid_id() {
+  [ -n "$1" ] || return 1
+  case "$1" in *[!A-Za-z0-9._:-]*) return 1 ;; esac
+  return 0
+}
+
+# A POSIX pipeline reports only its last stage's status, so a gated
+# `failing-cmd | tee out.txt` used to clear a red gate (tee = 0). When a shell
+# with `set -o pipefail` is available, gated commands run under it and every
+# pipeline stage's failure fails the gate; on a shell without pipefail, a
+# gated command containing a top-level pipeline is unverifiable and is
+# rejected instead of silently passing. Probed once, through the same child
+# form run_one will use.
+PIPEFAIL_RUNNER=""
+if sh -c 'set -o pipefail' >/dev/null 2>&1; then
+  PIPEFAIL_RUNNER=self
+elif command -v bash >/dev/null 2>&1 && bash -c 'set -o pipefail' >/dev/null 2>&1; then
+  PIPEFAIL_RUNNER=$(command -v bash)
+fi
+
+# True when the command text contains a top-level pipeline operator: a `|`
+# outside quotes that is not part of a `||` pair. Quote- and escape-aware;
+# conservative (a `|` in a case pattern or heredoc also matches -- the
+# rejection message tells the author how to restructure).
+has_unverified_pipeline() {
+  printf '%s' "$1" | awk '
+    { line = $0; n = length(line); q = 0; prev = ""
+      for (i = 1; i <= n; i++) {
+        c = substr(line, i, 1)
+        if (q == 1) { if (c == "\047") q = 0; prev = c; continue }
+        if (q == 2) {
+          if (c == "\\") { i++; prev = ""; continue }
+          if (c == "\"") q = 0
+          prev = c; continue
+        }
+        if (c == "\\") { i++; prev = ""; continue }
+        if (c == "\047") { q = 1; prev = ""; continue }
+        if (c == "\"") { q = 2; prev = ""; continue }
+        if (c == "|") {
+          nxt = (i < n) ? substr(line, i + 1, 1) : ""
+          if (prev != "|" && nxt != "|") exit 0
+        }
+        prev = c
+      }
+      exit 1
+    }'
+}
+
+run_one() {
+  _label=$1; _command=$2
+  say "GATE command: $_label -> $_command"
+  _status=0
+  case "$PIPEFAIL_RUNNER" in
+    self)
+      # Pipefail is set inside the child so it reaches the gated command's own
+      # pipelines; the child also keeps the gated text out of this shell's scope.
+      (cd "$PROJECT_DIR" && sh -c 'set -o pipefail; eval "$1"' sh "$_command") || _status=$?
+      ;;
+    */bash)
+      (cd "$PROJECT_DIR" && "$PIPEFAIL_RUNNER" -c 'set -o pipefail; eval "$1"' bash "$_command") || _status=$?
+      ;;
+    *)
+      if has_unverified_pipeline "$_command"; then
+        err "REJECTED: $_command"
+        err "  this shell has no pipefail, so a pipeline's verdict is only its last"
+        err "  stage's -- an earlier stage can fail and the gate would still pass."
+        err "  Use redirection ('tool > file 2>&1') or one command per gates.conf line."
+        return 1
+      fi
+      (cd "$PROJECT_DIR" && sh -c "$_command") || _status=$?
+      ;;
+  esac
+  if [ "$_status" -ne 0 ]; then
+    err "FAILED ($_status): $_command"
+    return "$_status"
+  fi
+  say "PASSED: $_command"
+  return 0
+}
+
+config_mode() {
+  [ -f "$CONFIG" ] || { printf 'hybrid\n'; return; }
+  sed -n 's/^mode=//p' "$CONFIG" | head -n1 | grep . || printf 'hybrid\n'
+}
+
+# NOTE: _explicit_failed/_discovered_failed are distinct names on purpose —
+# run_explicit/run_discovered run in the caller's scope (no locals in sh), so
+# reusing _failed would reset run_gate's failure count (logged 2026-09-05).
+run_explicit() {
+  _gate=$1; _found=0; _explicit_failed=0
+  [ -f "$CONFIG" ] || { CONFIG_FOUND=no; return 0; }
+  CONFIG_FOUND=yes
+  while IFS='|' read -r _kind _command; do
+    case "$_kind" in
+      "$_gate")
+        [ -n "${_command:-}" ] || continue
+        _found=$((_found + 1))
+        run_one "$_gate (explicit)" "$_command" || _explicit_failed=$((_explicit_failed + 1))
+        ;;
+    esac
+  done < "$CONFIG"
+  EXPLICIT_FOUND=$_found
+  EXPLICIT_FAILED=$_explicit_failed
+  [ "$_explicit_failed" -eq 0 ]
+}
+
+package_manager() {
+  if [ -f "$PROJECT_DIR/bun.lock" ] || [ -f "$PROJECT_DIR/bun.lockb" ]; then printf 'bun\n'; return; fi
+  if [ -f "$PROJECT_DIR/pnpm-lock.yaml" ]; then printf 'pnpm\n'; return; fi
+  if [ -f "$PROJECT_DIR/yarn.lock" ]; then printf 'yarn\n'; return; fi
+  if [ -f "$PROJECT_DIR/package-lock.json" ]; then printf 'npm\n'; return; fi
+  printf ''
+}
+
+has_npm_script() {
+  [ -f "$PROJECT_DIR/package.json" ] || return 1
+  grep -Eq "^[[:space:]]*\\\"$1\\\"[[:space:]]*:" "$PROJECT_DIR/package.json"
+}
+
+run_discovered() {
+  _gate=$1; _found=0; _discovered_failed=0
+  _pm=$(package_manager)
+  if [ -n "$_pm" ] && [ -f "$PROJECT_DIR/package.json" ]; then
+    for _script in typecheck lint test build; do
+      case "$_gate:$_script" in
+        pre-commit:typecheck|pre-commit:lint|pre-commit:test|integration:build|exit:test)
+          if has_npm_script "$_script"; then
+            _found=$((_found + 1))
+            run_one "$_gate (discovered)" "$_pm run $_script" || _discovered_failed=$((_discovered_failed + 1))
+          fi ;;
+      esac
+    done
+  elif [ -f "$PROJECT_DIR/pyproject.toml" ] || [ -f "$PROJECT_DIR/pytest.ini" ]; then
+    if [ "$_gate" = pre-commit ] || [ "$_gate" = integration ] || [ "$_gate" = exit ]; then
+      if grep -Eq '\[tool\.pytest|pytest' "$PROJECT_DIR/pyproject.toml" 2>/dev/null || [ -f "$PROJECT_DIR/pytest.ini" ]; then
+        _found=$((_found + 1)); run_one "$_gate (discovered)" "python -m pytest" || _discovered_failed=$((_discovered_failed + 1))
+      fi
+    fi
+    if [ -f "$PROJECT_DIR/pyproject.toml" ] && grep -Eq '\[tool\.ruff|ruff' "$PROJECT_DIR/pyproject.toml"; then
+      if [ "$_gate" = pre-commit ]; then
+        _found=$((_found + 1)); run_one "$_gate (discovered)" "ruff check ." || _discovered_failed=$((_discovered_failed + 1))
+      fi
+    fi
+  fi
+  DISCOVERED_FOUND=$_found
+  DISCOVERED_FAILED=$_discovered_failed
+  [ "$_discovered_failed" -eq 0 ]
+}
+
+run_project_commands() {
+  _gate=$1
+  run_explicit "$_gate" || return 1
+  if [ "${EXPLICIT_FOUND:-0}" -eq 0 ]; then
+    case "$(config_mode)" in
+      explicit)
+        err "$_gate has no explicit project commands in $CONFIG"
+        return 1
+        ;;
+      hybrid)
+        run_discovered "$_gate" || return 1
+        if [ "${DISCOVERED_FOUND:-0}" -eq 0 ]; then
+          say "NOTICE: no project commands discovered for $_gate; configure $CONFIG for a mandatory project check"
+        fi
+        ;;
+      *) die "unknown gate mode: $(config_mode)" ;;
+    esac
+  fi
+  return 0
+}
+
+parse_scope() {
+  GATE_SESSION=""; GATE_ISSUE=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session) [ $# -ge 2 ] || die "--session needs a value"; valid_id "$2" || die "invalid session id: $2"; GATE_SESSION=$2; shift 2 ;;
+      --issue) [ $# -ge 2 ] || die "--issue needs a value"; valid_id "$2" || die "invalid issue id: $2"; GATE_ISSUE=$2; shift 2 ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+}
+
+checkpoint() {
+  parse_scope "$@"
+  say "GATE checkpoint: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  say "Working tree:"
+  (cd "$PROJECT_DIR" && git status --short)
+  # advisory nudge (never blocks): an office at capacity should close before
+  # more sessions log into it
+  _sm=$MEMORY_DIR/office/agents/sessions.md
+  if [ -f "$_sm" ]; then
+    _sc=$(grep -cE '^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*Session ' "$_sm" 2>/dev/null); _sc=${_sc:-0}
+    _hc=$MEMORY_DIR/workflows/history.conf
+    _gs=""; [ -f "$_hc" ] && _gs=$(sed -n 's/^office_size=//p' "$_hc" | tr -d '\r' | head -n1)
+    case "$_gs" in ''|*[!0-9]*) _gs=$(sed -n 's/^group_size=//p' "$_hc" 2>/dev/null | tr -d '\r' | head -n1) ;; esac
+    case "$_gs" in ''|*[!0-9]*) _gs=20 ;; esac
+    if [ "$_sc" -ge "$_gs" ]; then
+      say "NOTICE: the office is full ($_sc / $_gs sessions) — run: ledger-history close"
+    fi
+  fi
+  if [ -n "$GATE_SESSION" ] && [ -n "$GATE_ISSUE" ]; then
+    sh "$CORE_DIR/bin/ledger-collab" status --session "$GATE_SESSION" --issue "$GATE_ISSUE"
+  fi
+  say "CHECKPOINT PASSED: re-read the latest state before the next action"
+}
+
+run_gate() {
+  _gate=${1:-}; [ -n "$_gate" ] || usage
+  shift
+  case "$_gate" in pre-commit|integration|exit) ;; *) die "unknown gate: $_gate" ;; esac
+  parse_scope "$@"
+  _failed=0
+  case "$_gate" in
+    pre-commit)
+      run_one 'pre-commit (universal)' 'git diff --cached --check' || _failed=$((_failed + 1))
+      run_project_commands pre-commit || _failed=$((_failed + 1))
+      ;;
+    integration)
+      run_one 'integration (universal)' 'git diff --check' || _failed=$((_failed + 1))
+      if [ -n "$GATE_SESSION" ] && [ -n "$GATE_ISSUE" ]; then
+        sh "$CORE_DIR/bin/ledger-collab" check --session "$GATE_SESSION" --issue "$GATE_ISSUE" || _failed=$((_failed + 1))
+      else
+        say 'NOTICE: no collaboration scope supplied; skipping ledger-collab check'
+      fi
+      run_project_commands integration || _failed=$((_failed + 1))
+      ;;
+    exit)
+      sh "$CORE_DIR/bin/ledger-sync" verify || _failed=$((_failed + 1))
+      run_one 'exit (universal)' 'git diff --check' || _failed=$((_failed + 1))
+      run_project_commands exit || _failed=$((_failed + 1))
+      # advisory nudge (never blocks the gate): surface archive-eligible
+      # entries at the natural moment instead of only when someone thinks
+      # to run it by hand
+      [ -x "$CORE_DIR/bin/ledger-mem" ] && sh "$CORE_DIR/bin/ledger-mem" prune
+      ;;
+  esac
+  [ "$_failed" -eq 0 ] || { err "$_gate gate failed ($_failed check(s))"; return 1; }
+  say "GATE PASSED: $_gate"
+}
+
+init_config() {
+  [ ! -e "$CONFIG" ] || die "gate config already exists: $CONFIG"
+  mkdir -p "$(dirname -- "$CONFIG")" || die "cannot create workflows directory"
+  cp "$CORE_DIR/templates/memory/workflows/gates.conf" "$CONFIG" || die "cannot create gate config"
+  say "created .context_ledger/memory/workflows/gates.conf"
+  say "fill explicit project commands, then run ledger-gates checkpoint"
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  init) init_config ;;
+  checkpoint) checkpoint "$@" ;;
+  run) run_gate "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD' (try: ledger-gates help)" ;;
+esac

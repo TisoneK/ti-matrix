@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Context Ledger collaboration event (v1)",
+  "description": "One immutable document per coordination event, stored as .context_ledger/memory/collaboration/events/<id>.json. Document-shape validation only: the relational rules (refs resolve to same-session events or commit SHAs, owner is a participant, selected matches a referenced proposal, claim closure, path overlap) are trail-level and enforced by ledger-collab check.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "id", "type", "session", "agent", "created", "issue",
+    "body", "paths", "refs", "option", "selected", "owner", "participants"
+  ],
+  "properties": {
+    "schema":       { "const": 1 },
+    "id":           {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9._:-]+-[0-9A-Fa-f]{1,16}$",
+      "description": "UTC timestamp + agent + random suffix; also the filename stem (<id>.json)."
+    },
+    "type":         { "enum": ["note", "claim", "proposal", "assessment", "agreement", "correction", "handoff", "release"] },
+    "session":      { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
+    "agent":        { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
+    "created":      { "type": "string", "format": "date-time" },
+    "issue":        { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
+    "body":         { "type": "string", "minLength": 1 },
+    "paths":        {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Repo-relative paths or logical scopes claimed or affected. Matched exactly against other claims' entries by check."
+    },
+    "refs":         {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Event IDs and/or commit SHAs (7-40 hex) this event cites. Notes are exempt from resolution."
+    },
+    "option":       { "type": ["string", "null"], "description": "proposal only." },
+    "selected":     { "type": ["string", "null"], "description": "agreement only: the option selected." },
+    "owner":        { "type": ["string", "null"], "description": "agreement: implementation owner; handoff: receiving owner." },
+    "participants": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" },
+      "description": "agreement: agents who accepted (>= 2 distinct). note: --to addressees."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "claim" } }, "required": ["type"] },
+      "then": { "required": ["paths"], "properties": { "paths": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "proposal" } }, "required": ["type"] },
+      "then": { "required": ["option"], "properties": { "option": { "type": "string", "minLength": 1 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "assessment" } }, "required": ["type"] },
+      "then": { "required": ["refs"], "properties": { "refs": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "agreement" } }, "required": ["type"] },
+      "then": {
+        "required": ["refs", "selected", "owner", "participants"],
+        "properties": {
+          "refs": { "minItems": 1 },
+          "selected": { "type": "string", "minLength": 1 },
+          "owner": { "type": "string", "minLength": 1 },
+          "participants": { "minItems": 2 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "correction" } }, "required": ["type"] },
+      "then": { "required": ["refs"], "properties": { "refs": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "handoff" } }, "required": ["type"] },
+      "then": { "required": ["owner"], "properties": { "owner": { "type": "string", "minLength": 1 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "release" } }, "required": ["type"] },
+      "then": { "required": ["refs"], "properties": { "refs": { "minItems": 1 } } }
+    }
+  ]
+}

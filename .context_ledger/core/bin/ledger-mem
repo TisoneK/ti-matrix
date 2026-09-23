@@ -1,0 +1,579 @@
+#!/bin/sh
+# ledger-mem — hygiene checks that keep .context_ledger healthy and contained.
+#
+# check  flags duplicate keys in the update-in-place registries. Those files
+#        hold ONE entry per key: correct an entry by editing its row/block,
+#        never by appending a second one — its prior value already lives in
+#        git history. Agents reach for the loud append-only reflex here too
+#        and append a duplicate, which is how a registry ends up with two
+#        rows for one key and conflicting counts.
+#          system/ai-models.md    key = (Agent, Model)         — one row/pair
+#          system/environments.md key = the "Identify by:" line — one block/env
+#
+# lint   flags .context_ledger vocabulary leaking into product artifacts. A product
+#        file (anything outside .context_ledger/) must stand on its own: a docstring
+#        or comment must not cite ADR-N, a bug ID, "per ADR", or a .context_ledger/
+#        path — meaningless to someone reading only the product repo. Memory
+#        may reference code; code must never reference memory. Scans the
+#        STAGED diff (the new lines you are about to commit).
+#
+# Exit codes: 0 clean · 1 problem found · 2 usage/error
+
+set -u
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'ledger-mem: %s\n' "$*" >&2; }
+die() { err "$*"; exit 2; }
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+CORE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd) || exit 2
+LEDGER_DIR=$(dirname -- "$CORE_DIR")
+PROJECT_DIR=$(dirname -- "$LEDGER_DIR")
+MEMORY_DIR=$LEDGER_DIR/memory
+OFFICE_DIR=$MEMORY_DIR/office
+CONFIG=$MEMORY_DIR/workflows/history.conf
+
+conf() { # $1 key, $2 default — same reader as ledger-history (numeric values only)
+  _v=""
+  [ -f "$CONFIG" ] && _v=$(sed -n "s/^$1=//p" "$CONFIG" | tr -d '\r' | head -n1)
+  case "$_v" in ''|*[!0-9]*) printf '%s' "$2" ;; *) printf '%s' "$_v" ;; esac
+}
+
+usage() {
+  say "ledger-mem — .context_ledger hygiene checks"
+  say ""
+  say "  check   duplicate keys in the update-in-place registries"
+  say "          (ai-models.md by Agent+Model, environments.md by Identify-by;"
+  say "          roster.md by Name and codename) plus warn-only audits: a"
+  say "          roster row with no Status cell (the at-a-glance column), a"
+  say "          roster row whose Session N is already in agents/sessions.md"
+  say "          means the session never clocked out, and a duplicated"
+  say "          Session N means a resumed session re-logged; plus warn-only"
+  say "          cap checks — backlog.md past backlog_cap (prune to"
+  say "          parking-lot.md), flaws/log.md and inefficiencies/log.md past"
+  say "          flaws_cap/inefficiencies_cap (run 'prune'/'prune --apply') —"
+  say "          all three keys in workflows/history.conf"
+  say "  lint    .context_ledger vocabulary (ADR-N, bug IDs, .context_ledger/ paths) leaking"
+  say "          into product artifacts — the staged diff by default; --tree"
+  say "          sweeps every tracked product file (strip leaks old sessions left)"
+  say "  prune   report log compaction: each append-only durable log's size"
+  say "          (flaws, inefficiencies, decisions), which entries carry a"
+  say "          closed marker on their own Status line (resolved/"
+  say "          superseded/fixed — move them verbatim to the"
+  say "          log's archive.md), and which logs hold 3+ entries hitting"
+  say "          the same recurring thing (roll up into one Recurring entry,"
+  say "          instances archived verbatim); --list names them. Report"
+  say "          mode never moves or deletes; --apply performs the closed-"
+  say "          entry moves mechanically (creates archive.md if needed) —"
+  say "          it does NOT do the Recurring roll-up, which needs an"
+  say "          agent to compose the consolidated entry."
+  say "  closeout delete finished backlog items (- [x] tombstones) from the"
+  say "          tasks/backlog.md work queue — open work stays. Dry run by"
+  say "          default (lists the tombstones); --confirm deletes. Every"
+  say "          deleted line stays recoverable in git history; the completion"
+  say "          record is the finishing session's entry + commit."
+  say ""
+  say "Exit codes: check/lint 0 clean, 1 problem; prune/closeout always 0; 2 usage/error"
+  exit 2
+}
+
+# ai-models registry: a row is | Agent | Model | YYYY-MM-DD | YYYY-MM-DD | N |
+# Filtering on the date+count shape ignores the header, the separator, and any
+# illustrative tables in the Observations section — only real registry rows.
+check_ai_models() {
+  _f=$MEMORY_DIR/system/ai-models.md
+  [ -f "$_f" ] || return 0
+  awk '
+    /^[[:space:]]*\|/ {
+      n = split($0, c, "|")
+      if (n < 6) next
+      a = c[2]; m = c[3]; f = c[4]; l = c[5]; s = c[6]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", a); gsub(/^[[:space:]]+|[[:space:]]+$/, "", m)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", f); gsub(/^[[:space:]]+|[[:space:]]+$/, "", l)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      if (f ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ &&
+          l ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ &&
+          s ~ /^[0-9]+$/) {
+        key = a "\t" m
+        seen[key]++
+        where[key] = where[key] " " FNR
+      }
+    }
+    END {
+      d = 0
+      for (k in seen) if (seen[k] > 1) {
+        split(k, kk, "\t")
+        printf "DUP ai-models.md: %d rows for agent=\"%s\" model=\"%s\" (lines%s) — merge into one row; sessions accumulate, old values are in git history\n", seen[k], kk[1], kk[2], where[k] | "cat 1>&2"
+        d++
+      }
+      exit (d > 0) ? 1 : 0
+    }
+  ' "$_f"
+}
+
+# environments registry: one block per env, keyed by the "Identify by:" line.
+check_environments() {
+  _f=$MEMORY_DIR/system/environments.md
+  [ -f "$_f" ] || return 0
+  awk '
+    /^[[:space:]]*-[[:space:]]*\*\*Identify by:\*\*/ {
+      v = $0
+      sub(/^[[:space:]]*-[[:space:]]*\*\*Identify by:\*\*[[:space:]]*/, "", v)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      if (v == "" || v ~ /^</) next   # skip the empty template placeholder
+      seen[v]++
+      where[v] = where[v] " " FNR
+    }
+    END {
+      d = 0
+      for (k in seen) if (seen[k] > 1) {
+        printf "DUP environments.md: %d blocks with Identify by=\"%s\" (lines%s) — merge into one block; keep the latest facts, old ones are in git history\n", seen[k], k, where[k] | "cat 1>&2"
+        d++
+      }
+      exit (d > 0) ? 1 : 0
+    }
+  ' "$_f"
+}
+
+# team roster: a row is | Name | Codename | Model | Doing | Status | Status
+# detail |. Both the name and the codename must be unique within the current
+# office, and the Status cells are the at-a-glance coordination signal — a
+# real row (codename S<NNN>) with an empty or missing Status cell draws a
+# warn-only nudge (legacy pre-1.1.0 four-column rows warn too; they fail
+# nothing). This skips the header, separator, and template.
+check_roster() {
+  _f=$OFFICE_DIR/agents/roster.md
+  [ -f "$_f" ] || return 0
+  awk '
+    /^[[:space:]]*\|/ {
+      n = split($0, c, "|")
+      if (n < 4) next
+      name = c[2]; code = c[3]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", name); gsub(/^[[:space:]]+|[[:space:]]+$/, "", code)
+      if (code !~ /^[Ss][0-9]+$/) next
+      nseen[name]++; nwhere[name] = nwhere[name] " " FNR
+      cseen[code]++; cwhere[code] = cwhere[code] " " FNR
+      st = (n >= 7) ? c[6] : ""
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", st)
+      if (st == "") nostat[code] = nwhere[code]
+    }
+    END {
+      d = 0
+      for (k in nseen) if (nseen[k] > 1) {
+        printf "DUP roster.md: name \"%s\" used by %d rows (lines%s) — one name per office; pick another, or edit your own row\n", k, nseen[k], nwhere[k] | "cat 1>&2"; d++
+      }
+      for (k in cseen) if (cseen[k] > 1) {
+        printf "DUP roster.md: codename \"%s\" on %d rows (lines%s) — one row per session codename; edit your row instead of adding a second\n", k, cseen[k], cwhere[k] | "cat 1>&2"; d++
+      }
+      for (k in nostat)
+        printf "WARN roster.md: codename %s has no Status — the board'"'"'s at-a-glance column (Working/Done/Blocked + a status-detail line) is empty; edit your row\n", k
+      exit (d > 0) ? 1 : 0
+    }
+  ' "$_f"
+}
+
+# warn-only cap check for an append-only durable log (flaws/inefficiencies):
+# counts real entries (## YYYY-MM-DD headers outside <!-- --> blocks, the
+# same scoping prune() and ledger-state use) against a history.conf key.
+# Unlike the backlog, going over does not mean "stop adding" — it means
+# "run ledger-mem prune" (report) / "prune --apply" (moves closed entries).
+check_log_cap() {
+  _rel=$1; _key=$2; _default=$3
+  _f=$OFFICE_DIR/$_rel
+  [ -f "$_f" ] || return 0
+  _cap=$(conf "$_key" "$_default")
+  _n=$(awk '
+    /^<!--/ { intpl = ($0 ~ /-->/) ? 0 : 1; next }
+    intpl { if ($0 ~ /-->/) intpl = 0; next }
+    /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { n++ }
+    END { print n + 0 }
+  ' "$_f")
+  if [ "$_n" -gt "$_cap" ]; then
+    say "WARN $_rel: $_n entries past the cap of $_cap ($_key in workflows/history.conf) — run 'ledger-mem prune' to see what's archive-eligible, 'prune --apply' to move the closed ones"
+  fi
+  return 0
+}
+
+check() {
+  [ $# -eq 0 ] || { case "$1" in -h|--help) usage ;; *) die "unknown argument '$1'" ;; esac; }
+  [ -d "$MEMORY_DIR" ] || { say "ledger-mem: no memory dir (nothing to check)"; return 0; }
+  _rc=0
+  check_ai_models || _rc=1
+  check_environments || _rc=1
+  check_roster || _rc=1
+  check_roster_stale
+  check_dup_sessions
+  check_backlog_tombstones
+  check_backlog_cap
+  check_log_cap flaws/log.md flaws_cap 15
+  check_log_cap inefficiencies/log.md inefficiencies_cap 15
+  if [ "$_rc" -eq 0 ]; then
+    say "memory check passed: no duplicate keys in the update-in-place registries"
+  else
+    err "memory check failed: a registry has more than one entry for a key — correct in place (edit the entry), do not append a duplicate"
+  fi
+  return "$_rc"
+}
+
+# board vs duty log: agents/sessions.md entries are appended at wrap-up
+# (protocol Step 17), so a "Session N" entry whose roster row S<N> is still
+# on the board means the session logged itself done without clocking out.
+# Warns only — never fails the check; the fix is to remove the row.
+check_roster_stale() {
+  _r=$OFFICE_DIR/agents/roster.md
+  _s=$OFFICE_DIR/agents/sessions.md
+  [ -f "$_r" ] || return 0
+  [ -f "$_s" ] || return 0
+  for _num in $(awk '
+    /^[[:space:]]*\|/ {
+      n = split($0, c, "|")
+      if (n < 4) next
+      code = c[3]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", code)
+      if (code ~ /^[Ss][0-9]+$/) { sub(/^[Ss]/, "", code); print code }
+    }
+  ' "$_r" | sort -u); do
+    if grep -Eq "^## .*Session $_num([^0-9]|$)" "$_s"; then
+      say "WARN roster.md: codename S$_num is still on the board, but a Session $_num entry already exists in agents/sessions.md — the session logged itself done without clocking out; remove the row"
+    fi
+  done
+  return 0
+}
+
+# duplicate duty-log entries: agents/sessions.md holds one entry per session
+# codename S<N> (protocol Step 17). Two "Session N" headers for the same N mean
+# a resumed session re-logged instead of extending its entry — the ghost-editor
+# flaw. Warns only; the fix is to merge the two into one entry.
+check_dup_sessions() {
+  _s=$OFFICE_DIR/agents/sessions.md
+  [ -f "$_s" ] || return 0
+  awk '
+    match($0, /^##[[:space:]].*[Ss]ession[[:space:]]+[0-9]+/) {
+      line = $0
+      sub(/.*[Ss]ession[[:space:]]+/, "", line)
+      num = line + 0
+      seen[num]++; where[num] = where[num] " " FNR
+    }
+    END {
+      for (k in seen) if (seen[k] > 1)
+        printf "WARN sessions.md: Session %d has %d entries (lines%s) — one entry per codename S<N>; a resumed session should extend its entry, not add a second. Merge them.\n", k, seen[k], where[k]
+    }
+  ' "$_s"
+  return 0
+}
+
+# archive title per log, used only when --apply creates a fresh archive.md
+_archive_title() {
+  case "$1" in
+    flaws/log.md) printf 'Flaws Log' ;;
+    inefficiencies/log.md) printf 'Inefficiencies Log' ;;
+    plans/decisions.md) printf 'Architectural Decisions' ;;
+  esac
+}
+
+# prune_apply_one — the mechanical half of compaction: cut every entry
+# whose OWN Status/Fixed-in-package line carries a closed marker
+# (resolved/superseded/fixed/no longer) out of the log, verbatim, into the
+# log's companion archive.md (created with a header if it doesn't exist
+# yet). Never touches an entry without an explicit closed marker — age
+# alone is never eligible. Deliberately does NOT perform the 3+-repeat
+# roll-up: composing the one consolidated Recurring entry needs judgment
+# a script shouldn't fabricate, so that move stays an agent's manual edit
+# (still reported by the advisory pass below).
+prune_apply_one() {
+  _rel=$1
+  _f=$OFFICE_DIR/$_rel
+  [ -f "$_f" ] || return 0
+  _dir=$_rel; _dir=${_dir%/*}
+  _archive=$OFFICE_DIR/$_dir/archive.md
+  _tmp_main=$OFFICE_DIR/$_dir/.prune-main.$$.tmp
+  _tmp_arch=$OFFICE_DIR/$_dir/.prune-arch.$$.tmp
+  : > "$_tmp_main"
+  : > "$_tmp_arch"
+  _moved=$(awk -v tmpmain="$_tmp_main" -v tmparch="$_tmp_arch" '
+    function flush() {
+      if (!inseg) return
+      dest = closed ? tmparch : tmpmain
+      for (i = 1; i <= n; i++) print buf[i] >> dest
+      if (closed) moved++
+    }
+    !inseg && /^<!--/ { print >> tmpmain; intpl = ($0 ~ /-->/) ? 0 : 1; next }
+    !inseg && intpl { print >> tmpmain; if ($0 ~ /-->/) intpl = 0; next }
+    /^## / {
+      flush(); inseg = 1; closed = 0; n = 0; n++; buf[n] = $0; next
+    }
+    inseg {
+      n++; buf[n] = $0
+      if ($0 ~ /^[[:space:]]*[-*]?[[:space:]]*\*\*Status:\*\*/ &&
+          $0 ~ /RESOLVED|[Ss]uperseded|[Ff]ixed in package|no longer (a )?(flaw|issue)/) closed = 1
+      if ($0 ~ /^[[:space:]]*[-*]?[[:space:]]*\*\*Fixed in package:\*\*/) closed = 1
+      next
+    }
+    !inseg { print >> tmpmain }
+    END { flush(); print moved + 0 }
+  ' "$_f")
+  if [ "${_moved:-0}" -gt 0 ] 2>/dev/null; then
+    if [ ! -f "$_archive" ]; then
+      {
+        printf '# %s — archive (verbatim moves from log.md)\n\n' "$(_archive_title "$_rel")"
+        printf 'Entries below were explicitly marked `RESOLVED` / `superseded` / fixed in\n'
+        printf 'the live log and moved here verbatim (no edits), per the log'"'"'s pruning\n'
+        printf 'rule (`ledger-mem prune --apply`). Startup reads only the live log; this\n'
+        printf 'archive stays in git, grep-able.\n'
+      } > "$_archive"
+    fi
+    printf '\n' >> "$_archive"
+    cat "$_tmp_arch" >> "$_archive"
+    mv "$_tmp_main" "$_f"
+    say "$_rel: moved $_moved entr$( [ "$_moved" -eq 1 ] && printf y || printf ies ) to $_dir/archive.md"
+  else
+    rm -f "$_tmp_main"
+    say "$_rel: nothing marked resolved/superseded — nothing moved"
+  fi
+  rm -f "$_tmp_arch"
+}
+
+# prune — compact the append-only durable logs so startup stops re-reading
+# cold, closed entries and repeated friction. Report mode (default) NEVER
+# moves or deletes anything; --apply performs the mechanical half (see
+# prune_apply_one). Reports, per log (flaws, inefficiencies, decisions):
+# the log's size, the entries whose own Status line carries a closed
+# marker (resolved/superseded/fixed/no longer — move those verbatim to a
+# companion archive.md, still grep-able), and logs holding 3+ entries
+# with the same normalized Problem/Flaw line (roll them up into one
+# Recurring entry, instances archived verbatim — --apply does not do
+# this; it needs an agent's judgment to compose). Age alone is never a
+# reason to archive — only an explicit closed marker is. Prose elsewhere
+# in an entry is never the marker (an ADR describing the compaction rule
+# mentions those words without being closed), and `<!-- -->` template
+# blocks are never segmented — their placeholder Status lines carry the
+# words literally.
+prune() {
+  _list=0
+  _apply=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --list) _list=1; shift ;;
+      --apply) _apply=1; shift ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  [ -d "$MEMORY_DIR" ] || { say "ledger-mem: no memory dir (nothing to prune)"; return 0; }
+  if [ "$_apply" -eq 1 ]; then
+    for _rel in flaws/log.md inefficiencies/log.md plans/decisions.md; do
+      prune_apply_one "$_rel"
+    done
+    say ""
+    say "memory prune --apply: closed entries moved verbatim to their archive.md;"
+    say "every moved line survives unchanged there and in git history. Recurring"
+    say "roll-ups (3+ entries on the same thing) are still a manual edit — re-run"
+    say "without --apply to see if any are eligible."
+    return 0
+  fi
+  _eligible=0
+  for _rel in flaws/log.md inefficiencies/log.md plans/decisions.md; do
+    _f=$OFFICE_DIR/$_rel
+    [ -f "$_f" ] || continue
+    awk -v rel="$_rel" -v list="$_list" '
+      function norm(s) {
+        s = tolower(s)
+        gsub(/[[:space:]]+/, " ", s)
+        sub(/[[:space:]]+$/, "", s)
+        return s
+      }
+      function flush() {
+        if (inseg && closed) { c++; cand[c] = heading }
+        if (fp != "") { fpseen[fp]++; fpwhere[fp] = fpwhere[fp] " || " heading }
+      }
+      /^<!--/ { if (!inseg) { intpl = ($0 ~ /-->/) ? 0 : 1; next } }
+      intpl { if ($0 ~ /-->/) intpl = 0; next }
+      /^## / {
+        flush(); inseg = 1; closed = 0; heading = $0; total++; fp = ""; next
+      }
+      inseg && /^[[:space:]]*[-*]?[[:space:]]*\*\*Status:\*\*/ &&
+        /RESOLVED|[Ss]uperseded|[Ff]ixed in package|no longer (a )?(flaw|issue)/ { closed = 1 }
+      inseg && /^[[:space:]]*[-*]?[[:space:]]*\*\*Fixed in package:\*\*/ { closed = 1 }
+      inseg && fp == "" && /^[[:space:]]*[-*]?[[:space:]]*\*\*(Problem|Flaw):\*\*/ {
+        fp = $0
+        sub(/^[[:space:]]*[-*]?[[:space:]]*\*\*(Problem|Flaw):\*\*[[:space:]]*/, "", fp)
+        fp = norm(fp)
+      }
+      END {
+        flush()
+        printf "%s — %d entries (%d lines); %d marked resolved/superseded → archive-eligible.\n", rel, total, NR, c
+        dir = rel; sub(/[^\/]*$/, "", dir)
+        if (c > 0) {
+          printf "  move the resolved entries to %sarchive.md; startup then reads only the active log.\n", dir
+          if (list == 1) for (i = 1; i <= c; i++) printf "    - %s\n", cand[i]
+        }
+        for (k in fpseen) if (fpseen[k] >= 3) {
+          printf "  roll-up: %d entries hit the same recurring thing (%.70s) — append one Recurring entry, move the instances to %sarchive.md.\n", fpseen[k], k, dir
+          if (list == 1) printf "    - %s\n", fpwhere[k]
+        }
+        exit (c > 0) ? 10 : 0
+      }
+    ' "$_f"
+    [ $? -eq 10 ] && _eligible=1
+  done
+  if [ "$_eligible" -eq 1 ]; then
+    say ""
+    say "memory prune: advisory only — nothing was moved. Archiving is a manual edit"
+    say "(cut the resolved entries into archive.md); they stay grep-able and out of the"
+    say "startup read. Re-run with --list to see the eligible entries."
+  else
+    say "memory prune: durable logs are lean — nothing archive-eligible."
+  fi
+  return 0
+}
+
+# finished backlog tombstones: the backlog is a live queue of open work
+# (core 0.21.0) — a checked-off `- [x]` line means the item finished but the
+# line was never deleted. Warns only; the sweep is `ledger-mem closeout`.
+check_backlog_tombstones() {
+  _f=$OFFICE_DIR/tasks/backlog.md
+  [ -f "$_f" ] || return 0
+  _n=$(grep -cE '^[[:space:]]*[-*+][[:space:]]+\[[xX]\]' "$_f" 2>/dev/null)
+  _n=${_n:-0}
+  [ "$_n" -gt 0 ] && say "WARN backlog.md: $_n finished item(s) still sit checked off (- [x]) — the backlog holds open work only; run ledger-mem closeout to sweep them (git history keeps the lines)"
+  return 0
+}
+
+# the backlog is a capped WORK QUEUE (core 1.2.0) — actionable items only,
+# default ~20 rows (backlog_cap in workflows/history.conf). Past the cap the
+# add-a-row rule becomes prune-a-row: the lowest-value open row goes to
+# parking-lot.md (still valuable) or is deleted (not). Warns only — the
+# queue is a working set, not a hard limit; a 21st row is a prompt to prune,
+# not an error. Counted as table rows carrying a B-<date> ID (headers,
+# separators, and template comments are not rows).
+check_backlog_cap() {
+  _f=$OFFICE_DIR/tasks/backlog.md
+  [ -f "$_f" ] || return 0
+  _cap=$(conf backlog_cap 20)
+  _n=$(grep -cE '^[[:space:]]*\|[[:space:]]*B-[0-9]' "$_f" 2>/dev/null)
+  _n=${_n:-0}
+  if [ "$_n" -gt "$_cap" ]; then
+    say "WARN backlog.md: $_n actionable rows past the cap of $_cap — the queue is a working set, not an archive; prune the lowest-value open row to tasks/parking-lot.md (or delete it) before adding another (raise backlog_cap in workflows/history.conf only by intent)"
+  fi
+  return 0
+}
+
+# closeout — delete finished backlog items from the tasks/backlog.md live
+# queue. A `- [x]` line is a finished item a session checked off instead of
+# deleting (the tombstone the 0.21.0 live-queue rule retired). Open work
+# (`- [ ]`) is never touched, and every deleted line stays recoverable in
+# git history. Dry run by default: lists the tombstones; --confirm deletes.
+closeout() {
+  _confirm=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --confirm) _confirm=1; shift ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  _f=$OFFICE_DIR/tasks/backlog.md
+  [ -f "$_f" ] || { say "ledger-mem: no tasks/backlog.md (nothing to close out)"; return 0; }
+  _pat='^[[:space:]]*[-*+][[:space:]]+\[[xX]\]'
+  _n=$(grep -cE "$_pat" "$_f" 2>/dev/null); _n=${_n:-0}
+  if [ "$_n" -eq 0 ]; then
+    say "backlog closeout: no finished tombstones — tasks/backlog.md already holds only open work."
+    return 0
+  fi
+  if [ "$_confirm" -ne 1 ]; then
+    say "backlog closeout (dry run): $_n finished item(s) would be deleted from tasks/backlog.md:"
+    grep -nE "$_pat" "$_f" | sed -E 's/^([0-9]+):/  - line \1: /'
+    say ""
+    say "Open items stay untouched, and the deleted lines remain in git history."
+    say "Re-run with --confirm to delete."
+    return 0
+  fi
+  _tmp=$OFFICE_DIR/tasks/.closeout.$$.tmp
+  awk '
+    /^[[:space:]]*[-*+][[:space:]]+\[[xX]\]/ { next }
+    { print }
+  ' "$_f" > "$_tmp" || { rm -f "$_tmp"; die "could not write the cleaned backlog"; }
+  mv "$_tmp" "$_f" || { rm -f "$_tmp"; die "could not replace tasks/backlog.md"; }
+  say "backlog closeout: deleted $_n finished item(s) from tasks/backlog.md (git history keeps them)."
+  _open=$(grep -cE '^[[:space:]]*[-*+][[:space:]]+\[ \]' "$_f" 2>/dev/null); _open=${_open:-0}
+  say "backlog now holds $_open open item(s)."
+  say "Commit as: chore(ledger): close out finished backlog items"
+}
+
+# lint — .context_ledger vocabulary must never leak into product artifacts:
+# a product file (anything outside .context_ledger/) has to stand on its own
+# for someone who cloned only the product repo, so an ADR-N, a bug ID, a
+# ".context_ledger/" path, or "per ADR" in its source is a dangling pointer.
+# Default mode scans the STAGED diff (the new lines you're about to commit);
+# `--tree` sweeps every tracked file outside .context_ledger/ so leaks an old
+# session left behind become visible — strip them (a safe fix), then continue.
+lint() {
+  _mode=staged
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --tree) _mode=tree; shift ;;
+      -h|--help) usage ;;
+      *) die "unknown argument '$1'" ;;
+    esac
+  done
+  command -v git >/dev/null 2>&1 || die "lint needs git on PATH"
+  _root=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null) \
+    || die "lint must run inside the project git repo"
+  _rc=0
+  if [ "$_mode" = tree ]; then
+    # every tracked file outside .context_ledger/, one awk pass, file:line reported
+    _files=$(git -C "$_root" ls-files | grep -v '^\.context_ledger/' || true)
+    [ -n "$_files" ] || { say "lint passed: no tracked product files to sweep"; return 0; }
+    # cd to root so FNR/paths are repo-relative and files resolve
+    ( cd "$_root" && printf '%s\n' "$_files" \
+        | tr '\n' '\0' \
+        | xargs -0 awk '
+            {
+              s = $0
+              pat = ""
+              if (s ~ /ADR-[0-9]/) pat = "an ADR reference"
+              else if (s ~ /B-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9]/) pat = "a bug-ID reference"
+              else if (s ~ /\.context_ledger\//) pat = "a .context_ledger/ path"
+              else if (tolower(s) ~ /per adr/) pat = "\"per ADR\""
+              if (pat != "") { printf "LEAK: %s:%d cites %s: %s\n", FILENAME, FNR, pat, s | "cat 1>&2"; n++ }
+            }
+            END { exit (n > 0) ? 1 : 0 }
+          ' ) || _rc=1
+  else
+    git -C "$_root" diff --cached -U0 --no-color 2>/dev/null | awk '
+      /^\+\+\+ /{ f=$0; sub(/^\+\+\+ b\//, "", f); sub(/^\+\+\+ /, "", f); next }
+      /^\+/ && !/^\+\+\+/ {
+        if (f ~ /^\.context_ledger\// || f == "/dev/null") next
+        s = substr($0, 2)
+        pat = ""
+        if (s ~ /ADR-[0-9]/) pat = "an ADR reference"
+        else if (s ~ /B-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9]/) pat = "a bug-ID reference"
+        else if (s ~ /\.context_ledger\//) pat = "a .context_ledger/ path"
+        else if (tolower(s) ~ /per adr/) pat = "\"per ADR\""
+        if (pat != "") { printf "LEAK: %s cites %s: %s\n", f, pat, s | "cat 1>&2"; n++ }
+      }
+      END { exit (n > 0) ? 1 : 0 }
+    '
+    _rc=$?
+  fi
+  if [ "$_rc" -eq 0 ]; then
+    if [ "$_mode" = tree ]; then
+      say "lint passed: no .context_ledger vocabulary (ADR-N, bug IDs, .context_ledger/ paths) in any tracked product file"
+    else
+      say "lint passed: no .context_ledger vocabulary (ADR-N, bug IDs, .context_ledger/ paths) in the staged product diff"
+    fi
+  else
+    err "lint failed: product code must stand on its own. State the reason in plain words in the docstring/comment; the ADR or bug-ID link belongs in .context_ledger/memory, not the source. Memory references code, never the reverse. Stripping a found leak is a safe fix — do it, then continue."
+  fi
+  return "$_rc"
+}
+
+CMD=${1:-}; [ $# -gt 0 ] && shift
+case "$CMD" in
+  check) check "$@" ;;
+  lint)  lint "$@" ;;
+  prune) prune "$@" ;;
+  closeout) closeout "$@" ;;
+  ''|-h|--help|help) usage ;;
+  *) die "unknown command '$CMD' (try: ledger-mem help)" ;;
+esac
