@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T13:25:39Z_
+_Regenerated: 2026-09-23T19:31:44Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -15,7 +15,8 @@ _Regenerated: 2026-09-23T13:25:39Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Wren** (S002) — Working — Session start — pull + kickoff orientation, awaiting task
+- **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
+- **Mara** (S004) — Working — Reconnect the app to the sidecar — make a run actually execute end to end
 
 ## Current task
 - **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*
@@ -31,5 +32,5 @@ _1 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 1 entry, last added 2026-09-23
 
 ## Collaboration
-- 3 event(s) on file; most recent: `20260923T124309Z-Nadia-aa88a431.json`
+- 6 event(s) on file; most recent: `20260923T145847Z-Wren-eb33e108.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
