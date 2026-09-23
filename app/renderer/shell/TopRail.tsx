@@ -17,8 +17,7 @@ import { Status } from "../protocol";
 import { WindowChrome, WindowGlyph } from "../hooks/useWindowChrome";
 import { Readouts, StatusLamp } from "../ui/atoms";
 import { Tab } from "../ui/controls";
-
-export type View = "run" | "library" | "compare";
+import { View } from "../core/nav";
 
 export function TopRail({ view, onView, status, running, readouts, libraryCount, configOpen, onConfig, chrome, children }: {
   view: View;

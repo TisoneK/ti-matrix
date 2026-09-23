@@ -55,6 +55,9 @@ export interface Readout {
 }
 
 export function Readouts({ items }: { items: Readout[] }) {
+  // Nothing to measure means no list at all, not an empty one: an empty <dl> still takes its gap in
+  // the rail, which leaves a hole where the numbers were and reads as a layout bug.
+  if (items.length === 0) return null;
   return (
     <dl className="readouts">
       {items.map((r) => (

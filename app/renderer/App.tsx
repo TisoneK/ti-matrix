@@ -22,7 +22,8 @@ import { ModelConfig } from "./shell/ConfigDrawer";
 import { ConfigDrawer } from "./shell/ConfigDrawer";
 import { CommandBar } from "./shell/CommandBar";
 import { ConfirmDialog } from "./shell/ConfirmDialog";
-import { TopRail, View } from "./shell/TopRail";
+import { TopRail } from "./shell/TopRail";
+import { View, toRunning, toView, toggleConfig, shortcutsLive } from "./core/nav";
 import { Welcome } from "./shell/Welcome";
 import { Transport } from "./shell/Transport";
 import { ComparePanel } from "./panels/ComparePanel";
@@ -172,11 +173,12 @@ export function App() {
 
   const start = useCallback(() => {
     if (blocked) return;
-    setConfigOpen(false);
-    setView("run");
+    const next = toRunning({ view, configOpen });
+    setConfigOpen(next.configOpen);
+    setView(next.view);
     setBookmarks([]);
     void session.run(goal.trim(), world, runConfig, { ...budget });
-  }, [blocked, goal, session, world, runConfig, budget]);
+  }, [blocked, goal, session, world, runConfig, budget, view, configOpen]);
 
   // The keys a person actually reaches for. Global, so they work wherever the focus happens to be — except
   // in a text field, where the arrows and space belong to the cursor.
@@ -185,9 +187,16 @@ export function App() {
       const target = e.target as HTMLElement | null;
       const typing = target !== null && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
       if (typing) return;
+      // A single unmodified letter is a cheap shortcut, which makes it a cheap way to change the view
+      // out from under something that is waiting for an answer: the confirmer blocks a run and must be
+      // answered, the setup sheet and the welcome own the screen while they are up. Esc is how those
+      // close; `l` and `c` are not, and a view that changed behind one of them reads as the nav firing
+      // on its own.
+      const blocking = document.querySelector(".scrim, .drawer, .welcome") !== null;
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); start(); return; }
-      if (e.key === "l" && !e.metaKey && !e.ctrlKey) { setView((v) => (v === "library" ? "run" : "library")); }
-      if (e.key === "c" && !e.metaKey && !e.ctrlKey) { setView((v) => (v === "compare" ? "run" : "compare")); }
+      if (!shortcutsLive(blocking, { alt: e.altKey, meta: e.metaKey, ctrl: e.ctrlKey })) return;
+      if (e.key === "l") { setView((v) => (v === "library" ? "run" : "library")); }
+      if (e.key === "c") { setView((v) => (v === "compare" ? "run" : "compare")); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -243,14 +252,27 @@ export function App() {
     <div className="app">
       <TopRail
         view={view}
-        onView={(v) => { setView(v); if (v === "library") void refreshLibrary(); }}
+        onView={(v) => {
+          const next = toView({ view, configOpen }, v);
+          setView(next.view);
+          setConfigOpen(next.configOpen);
+          if (next.view === "library") void refreshLibrary();
+        }}
         status={status}
         running={running}
         libraryCount={library.length}
         configOpen={configOpen}
-        onConfig={() => setConfigOpen((v) => !v)}
+        onConfig={() => {
+          const next = toggleConfig({ view, configOpen });
+          setView(next.view);
+          setConfigOpen(next.configOpen);
+        }}
         chrome={chrome}
-        readouts={[
+        // The readouts describe *the* run — one cursor, one map, one belief. On Compare there are two
+        // runs and no single answer to "step", and on an empty Run view there is no run at all, so a
+        // rail reading `step — · progress 0% · elapsed 0ms` is five slots of furniture claiming to be
+        // measurements. They appear when there is something to measure.
+        readouts={view === "compare" || events.length === 0 ? [] : [
           { label: "step", value: projection.decisions.length === 0 ? "—" : `${Math.min(playback.cursor + 1, projection.decisions.length)}/${projection.decisions.length}` },
           { label: "progress", value: pct(shown.progress) },
           { label: "facts", value: shown.at?.facts.length ?? 0 },
@@ -271,6 +293,8 @@ export function App() {
         />
       ) : null}
 
+      {/* `view !== "compare"` is belt and braces: onConfig/onView above keep the two in step, and this
+          makes the invariant local to where the sheet is actually drawn. */}
       {configOpen && view !== "compare" ? (
         <ConfigDrawer
           worlds={worlds} world={world}

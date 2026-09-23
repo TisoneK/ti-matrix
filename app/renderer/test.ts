@@ -7,4 +7,5 @@
 
 import "./core/worlds.test";
 import "./core/core.test";
+import "./core/nav.test";
 import "./protocol.test";
