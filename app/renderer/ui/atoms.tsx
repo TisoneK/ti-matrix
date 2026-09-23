@@ -119,6 +119,24 @@ export function Confidence({ value, showNumber = true }: { value: number; showNu
   );
 }
 
+/* ── the wordmark ───────────────────────────────────────────────────────── */
+
+/**
+ * One word, two colours: `Ti` in the accent, `Matrix` in ink.
+ *
+ * It used to be set as two words — "TI MATRIX" uppercased in the rail, "Ti Matrix" beside a boxed
+ * glyph elsewhere — which read as a two-word phrase rather than a name, and said it twice wherever
+ * the glyph appeared next to it. One component so the rail, the welcome and anything after them
+ * cannot drift apart on it.
+ */
+export function Wordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`wordmark ${className}`}>
+      <b>Ti</b>Matrix
+    </span>
+  );
+}
+
 /* ── status ─────────────────────────────────────────────────────────────── */
 
 const STATUS_TEXT: Record<Status, string> = {

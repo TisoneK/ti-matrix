@@ -21,6 +21,7 @@
  */
 
 import { Button } from "../ui/controls";
+import { Wordmark } from "../ui/atoms";
 import { FLAGS } from "../core/flags";
 
 /* ── the frozen run, as a picture ───────────────────────────────────────── */
@@ -114,9 +115,9 @@ function GhostRow({ flag, text, score }: { flag: keyof typeof FLAGS; text: strin
 
 function GhostRun() {
   return (
-    <div className="ghost" aria-hidden="true">
+    <div className="ghost-run" aria-hidden="true">
       <div className="ghost-bar">
-        <span className="ghost-dot" /> a run, already finished
+        <span className="ghost-run-dot" /> a run, already finished
       </div>
       <div className="ghost-body">
         <div className="ghost-pane">
@@ -154,7 +155,7 @@ export function Welcome({ onConfigure, onDismiss }: { onConfigure: () => void; o
     <div className="welcome">
       <div className="welcome-card">
         <div className="welcome-say">
-          <div className="mark"><i>Ti</i><span>Ti Matrix</span></div>
+          <div className="mark"><Wordmark className="big" /></div>
           <h2>Watch an AI agent think — and check whether to believe it.</h2>
           <p className="lede">
             Give it a goal in a world it can probe — a maze, a codebase, a vault. It proposes moves, the

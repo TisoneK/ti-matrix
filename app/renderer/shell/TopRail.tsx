@@ -15,7 +15,7 @@
 import { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Status } from "../protocol";
 import { WindowChrome, WindowGlyph } from "../hooks/useWindowChrome";
-import { Readouts, StatusLamp } from "../ui/atoms";
+import { Readouts, StatusLamp, Wordmark } from "../ui/atoms";
 import { Tab } from "../ui/controls";
 import { View } from "../core/nav";
 
@@ -43,7 +43,7 @@ export function TopRail({ view, onView, status, running, readouts, libraryCount,
       onDoubleClick={onDoubleClick}
     >
       <div className="brand">
-        <h1>Ti Matrix</h1>
+        <h1><Wordmark /></h1>
         <span className="ver">TM1</span>
       </div>
 
