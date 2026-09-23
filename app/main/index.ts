@@ -22,10 +22,12 @@ let mainWindow: BrowserWindow | null = null;
 
 function sidecarCommand(): { cmd: string; args: string[]; cwd?: string } {
   if (process.env.VITE_DEV) {
+    // __dirname is app/dist-electron/main at runtime; the repo root is three levels up.
+    const repo = path.join(__dirname, "..", "..", "..");
     const python = process.env.TI_MATRIX_PYTHON
-      || path.join(__dirname, "..", "..", ".venv", "Scripts", "python.exe");
+      || path.join(repo, ".venv", "Scripts", "python.exe");
     // `python -m appserver` (see appserver/__main__.py), run from server/ so the package imports
-    return { cmd: python, args: ["-X", "utf8", "-m", "appserver"], cwd: path.join(__dirname, "..", "..", "server") };
+    return { cmd: python, args: ["-X", "utf8", "-m", "appserver"], cwd: path.join(repo, "server") };
   }
   const bundled = path.join(process.resourcesPath ?? "", "sidecar", "ti-matrix-server")
     + (process.platform === "win32" ? ".exe" : "");
@@ -103,7 +105,12 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
-  mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+  // Dev mode serves the renderer from Vite (hot reload); prod loads the built bundle.
+  if (process.env.VITE_DEV) {
+    mainWindow.loadURL("http://localhost:5173");
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock();
