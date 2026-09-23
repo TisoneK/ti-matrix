@@ -8,4 +8,4 @@ entry and backlog before starting.
 
 - **Session:** 2026-09-23 — Mara / claude-opus-5 (S004)
 - **Task:** made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the welcome around a preview of the product, one-word TiMatrix wordmark — done, committed, pushed to `app-ui-rebuild`
-- **Status:** idle — but `origin/main` still needs the fast-forward from `app-ui-rebuild` (the sandbox blocked that push)
+- **Status:** idle — `origin/main` fast-forwarded to `7fabe60`; nothing outstanding
