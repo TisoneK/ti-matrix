@@ -8,3 +8,4 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Wren | S002 | unknown | Session start — pull + kickoff orientation, awaiting task | Working |
+| Nadia | S003 | deepseek-flash | Back again: drive a real maze run against the DeepSeek API through the app and watch it live | Working |
