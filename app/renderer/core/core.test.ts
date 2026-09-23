@@ -10,6 +10,7 @@ import { boundsOf, cellKey, readKnowledge, statsOf } from "./knowledge";
 import { layoutTree, pathTo, readTree, siblingContext } from "./tree";
 import { readTrust, flagCounts } from "./trust";
 import { artifactOf, newRunId, summarise } from "./library";
+import { outcomeLabel, outcomeTone } from "./format";
 
 let pass = 0;
 const failures: string[] = [];
@@ -295,6 +296,24 @@ eq("the summary counts the surprises", meta.surprises, 1);
 eq("the summary counts the backtracks", meta.backtracks, 0);
 eq("the summary keeps the outcome", [meta.settled, meta.reason], [true, null]);
 eq("the summary measures the run", meta.durationMs, 4000);
+
+/* ── how a run ended, in words ────────────────────────────────────────────
+ * The engine names its own stops — budget, no_moves, no_progress — and those were reaching the screen
+ * raw, in the library's badge and the compare scorecard. One map so the same ending reads the same
+ * everywhere, and the rail stopped saying "idle" for four different situations. */
+
+eq("an answered run is settled", outcomeLabel(true, null), "settled");
+eq("the engine's own stop words never reach a reader",
+   ["budget", "no_moves", "no_progress", "stopped"].map((r) => outcomeLabel(false, r)),
+   ["out of budget", "nothing left to try", "nothing improved", "stopped by you"]);
+eq("a crash is a failure, not a stop reason", outcomeLabel(false, "error: boom"), "failed");
+eq("no reason at all is still an honest answer", outcomeLabel(false, null), "unsettled");
+// A reason this map has not met is shown as-is rather than swallowed: better an odd word than none.
+eq("an unknown reason survives", outcomeLabel(false, "meteor"), "meteor");
+
+eq("it answered, it gave up, it broke",
+   [outcomeTone(true, null), outcomeTone(false, "budget"), outcomeTone(false, "error: boom")],
+   ["ok", "warn", "bad"]);
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) throw new Error("core checks failed:\n" + failures.map((f) => "  ✗ " + f).join("\n"));

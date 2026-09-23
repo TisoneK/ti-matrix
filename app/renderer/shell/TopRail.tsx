@@ -19,11 +19,13 @@ import { Readouts, StatusLamp, Wordmark } from "../ui/atoms";
 import { Tab } from "../ui/controls";
 import { View } from "../core/nav";
 
-export function TopRail({ view, onView, status, running, readouts, libraryCount, configOpen, onConfig, chrome, children }: {
+export function TopRail({ view, onView, status, running, lamp, readouts, libraryCount, configOpen, onConfig, chrome, children }: {
   view: View;
   onView: (view: View) => void;
   status: Status;
   running: boolean;
+  /** How the run on screen ended — the socket's status cannot say, and after a run that is the fact. */
+  lamp: { detail?: string; tone?: "ok" | "warn" | "bad" };
   readouts: { label: string; value: ReactNode; tone?: "pos" | "neg" }[];
   libraryCount: number;
   configOpen: boolean;
@@ -50,7 +52,7 @@ export function TopRail({ view, onView, status, running, readouts, libraryCount,
         <span className="ver" title="TM1 — the protocol this window and the engine speak to each other">TM1</span>
       </div>
 
-      <StatusLamp status={status} detail={running ? "running" : undefined} />
+      <StatusLamp status={status} detail={lamp.detail} tone={lamp.tone} />
 
       <Readouts items={readouts} />
 

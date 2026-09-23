@@ -70,8 +70,13 @@ export function Readouts({ items }: { items: Readout[] }) {
   );
 }
 
-export function Badge({ children, tone = "" }: { children: ReactNode; tone?: "" | "ok" | "fail" | "warn" }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+export function Badge({ children, tone = "", title }: {
+  children: ReactNode;
+  tone?: "" | "ok" | "fail" | "warn";
+  /** The engine's own word for this, when the badge shows a plainer one — kept reachable, not shown. */
+  title?: string;
+}) {
+  return <span className={`badge ${tone}`} title={title}>{children}</span>;
 }
 
 /* ── the marks ──────────────────────────────────────────────────────────── */
@@ -145,16 +150,29 @@ export function Wordmark({ className = "" }: { className?: string }) {
    engine" three strings away. One word, and it is the one a person can act on. */
 const STATUS_TEXT: Record<Status, string> = {
   connecting: "starting the engine",
-  ready: "idle",
+  // "idle" was shown for four different situations — nothing run yet, a run that had just succeeded,
+  // a run that had failed, and a saved run opened from the library — because all four are `ready` to
+  // the socket. It is also a machine's word for "no work queued", which is never what a person wants
+  // to know. The rail now says how the run ended; this is only the case where there is no run at all.
+  ready: "ready",
   running: "running",
   reconnecting: "reconnecting…",
   crashed: "engine stopped",
 };
 
-export function StatusLamp({ status, detail }: { status: Status; detail?: string }) {
+/**
+ * The lamp says what the machine is doing; `tone` lets the caller say how the *run* ended, which is a
+ * different fact and the one a person wants once a run is over. `Status` stays the socket's own
+ * vocabulary — it should not learn about runs — so the colour is overridden rather than the state.
+ */
+export function StatusLamp({ status, detail, tone }: {
+  status: Status;
+  detail?: string;
+  tone?: "ok" | "warn" | "bad";
+}) {
   return (
     <span className="status">
-      <span className="lamp" data-state={status} aria-hidden="true" />
+      <span className="lamp" data-state={tone ?? status} aria-hidden="true" />
       <span>{detail ?? STATUS_TEXT[status]}</span>
     </span>
   );

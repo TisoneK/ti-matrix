@@ -13,6 +13,7 @@
 import { useMemo, useState } from "react";
 import { ArtifactMeta } from "../core/types";
 import { modelLabel } from "../core/models";
+import { outcomeLabel, outcomeTone } from "../core/format";
 import { Badge, Empty, PaneHead } from "../ui/atoms";
 import { Button } from "../ui/controls";
 
@@ -106,7 +107,8 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
                     <div className="name nowrap" title={m.goal}>{m.goal || m.name}</div>
                     <div className="dim" style={{ fontSize: 10.5 }}>
                       {m.settled ? <Badge tone="ok">settled</Badge>
-                        : <Badge tone={m.reason === "error" ? "fail" : "warn"}>{m.reason ?? "unsettled"}</Badge>}
+                        : <Badge tone={outcomeTone(false, m.reason) === "bad" ? "fail" : "warn"}
+                                 title={m.reason ?? undefined}>{outcomeLabel(false, m.reason)}</Badge>}
                     </div>
                   </td>
                   <td className="mono dim">{when(m.startedAt)}</td>

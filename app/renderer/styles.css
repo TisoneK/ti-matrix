@@ -198,6 +198,10 @@ svg { display: block; }
    retrying in the background is visibly different from one that came up cleanly and is merely idle. */
 .lamp[data-state="reconnecting"] { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); animation: breathe 1.2s ease-in-out infinite; }
 .lamp[data-state="crashed"] { background: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
+/* How the run ended, which the socket's own states cannot express: it answered, it gave up, it broke. */
+.lamp[data-state="ok"] { background: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+.lamp[data-state="warn"] { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+.lamp[data-state="bad"] { background: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
 
 @keyframes breathe {
   0%, 100% { opacity: 1; }

@@ -35,3 +35,32 @@ export function shortPath(path: string, keep = 42): string {
   }
   return out;
 }
+
+/* ── how a run ended, in words ──────────────────────────────────────────── */
+
+/**
+ * The engine stops for four reasons and names them for itself: `budget`, `no_moves`, `no_progress`,
+ * and `stopped` when a person asked. Those are event vocabulary (ADR-3) and they were reaching the
+ * screen raw — the library's "ended" column and the compare scorecard both printed `no_progress`.
+ *
+ * One map, so the same ending reads the same wherever it is shown.
+ */
+export function outcomeLabel(settled: boolean, reason: string | null): string {
+  if (settled) return "settled";
+  const r = (reason ?? "").trim();
+  if (r === "") return "unsettled";
+  if (r.startsWith("error:")) return "failed";
+  const plain: Record<string, string> = {
+    budget: "out of budget",
+    no_moves: "nothing left to try",
+    no_progress: "nothing improved",
+    stopped: "stopped by you",
+  };
+  return plain[r] ?? r;
+}
+
+/** Green when it answered, amber when it gave up, red when it broke. Drives the lamp and the badges. */
+export function outcomeTone(settled: boolean, reason: string | null): "ok" | "warn" | "bad" {
+  if (settled) return "ok";
+  return (reason ?? "").trim().startsWith("error:") ? "bad" : "warn";
+}

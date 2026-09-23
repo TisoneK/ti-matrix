@@ -14,6 +14,7 @@
 import { useMemo, useState } from "react";
 import { Decision, RunArtifact } from "../core/types";
 import { modelLabel } from "../core/models";
+import { outcomeLabel } from "../core/format";
 import { MazeKnowledge, boundsOf, parseCellKey } from "../core/knowledge";
 import { project } from "../core/project";
 import { Confidence, Empty, Flags, PaneBody, PaneHead, Sparkline } from "../ui/atoms";
@@ -131,7 +132,8 @@ function Scorecard({ a, b, atA, atB }: {
   const trustB = atB.trust.trend;
   const rows: { label: string; x: string | number; y: string | number; delta?: string }[] = [
     { label: "seed", x: a.seed ?? "—", y: b.seed ?? "—" },
-    { label: "ended", x: a.outcome.settled ? "settled" : (a.outcome.reason ?? "unsettled"), y: b.outcome.settled ? "settled" : (b.outcome.reason ?? "unsettled") },
+    { label: "ended", x: outcomeLabel(a.outcome.settled, a.outcome.reason),
+      y: outcomeLabel(b.outcome.settled, b.outcome.reason) },
     { label: "decisions", x: atA.decisions.length, y: atB.decisions.length, delta: diff(atA.decisions.length, atB.decisions.length) },
     { label: "retreats", x: count(atA.decisions, "backtrack"), y: count(atB.decisions, "backtrack") },
     { label: "surprises", x: countFlag(atA.decisions, "surprise"), y: countFlag(atB.decisions, "surprise") },

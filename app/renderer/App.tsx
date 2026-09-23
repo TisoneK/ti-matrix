@@ -31,7 +31,7 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { LogPanel } from "./panels/LogPanel";
 import { MapPanel } from "./panels/MapPanel";
 import { TreePanel } from "./panels/TreePanel";
-import { formatElapsed, pct } from "./core/format";
+import { formatElapsed, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
 
 export function App() {
@@ -246,6 +246,22 @@ export function App() {
     });
   }, [pendingSide, picked, session.library]);
 
+  /**
+   * What the rail's lamp says. The socket's `ready` covers four different situations — nothing run
+   * yet, a run that just answered, a run that gave up, and a saved run opened from the library — and
+   * it used to render all four as "idle", which is a machine's word for "no work queued" and told a
+   * person nothing. Once there is a run on screen, the lamp reports how *it* ended.
+   */
+  const lamp = useMemo((): { detail?: string; tone?: "ok" | "warn" | "bad" } => {
+    if (running) return { detail: "running" };
+    if (status !== "ready") return {};
+    const done = session.settled;
+    if (events.length === 0 || !done) return {};
+    if (done.error) return { detail: "failed", tone: "bad" };
+    const settledOk = done.answer !== null && done.reason === null;
+    return { detail: outcomeLabel(settledOk, done.reason), tone: outcomeTone(settledOk, done.reason) };
+  }, [running, status, events.length, session.settled]);
+
   const lastMs = events.length > 0 ? events[events.length - 1].t_ms : 0;
 
   return (
@@ -260,6 +276,7 @@ export function App() {
         }}
         status={status}
         running={running}
+        lamp={lamp}
         libraryCount={library.length}
         configOpen={configOpen}
         onConfig={() => {
