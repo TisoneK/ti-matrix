@@ -30,3 +30,4 @@ records.
 - A removed summary line MUST have a corresponding permanent entry in
   agents/sessions.md — never delete the only record of a session.
 -->
+2026-09-23 — Nadia / deepseek-flash — the app renderer rebuilt from scratch as a run inspector (fog-of-war map, search tree, decision ledger, playback, compare, library) — 129 renderer assertions green, a real run verified end to end in a browser harness; the engine's and the sidecar's suites untouched (207 + 34 passed) — key decision: every panel is a pure projection of `(events, cursor)`, which is what made playback and comparison fall out for free

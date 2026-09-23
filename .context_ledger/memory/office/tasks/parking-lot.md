@@ -37,6 +37,21 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 ## Findings
 
+- **The engine hands the UI its tree.** `StateEngine.run` stamps every event: `state` carries `node` and
+  `parent`, a `backtrack` names the node it returns to, everything else carries `at`. The renderer's tree
+  used to derive the shape from each state's `trail` instead — a faithful guess at something the engine
+  had already stated. Anything that needs parentage should read the ids first and treat trail-derivation
+  as the fallback for older logs. (2026-09-23)
+- **The maze's coordinates are the drawing's coordinates.** `cell 1,1` is the point (1,1) of the world's
+  own textual map, walls included, so openings land directly on the points between cells and the map needs
+  no rescaling. Worth knowing before anyone "normalises" the grid. (2026-09-23)
+- **A world may contradict itself.** The maze adapter describes a cell's openings from the map as written,
+  so a hand-written maze whose squares disagree produces observations that disagree. Knowledge needs a
+  stated precedence (a refusal beats an inference; an inference never beats a corridor) rather than
+  relying on the order events happen to arrive in. (2026-09-23)
+
+## Open questions
+
 What we learned that isn't work yet — observations, measurements, root
 causes, "the current design does X because Y".
 

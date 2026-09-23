@@ -6,6 +6,6 @@ you find a stale in-progress entry here, a prior session died mid-task —
 its roster row (if left behind) says who was here; check the session
 entry and backlog before starting.
 
-- **Session:** 2026-09-23 — Buffy / unknown (S001)
-- **Task:** desktop-app skeleton (server/ sidecar + app/ Electron shell + CI) — built, verified, committed and pushed; session closed
+- **Session:** 2026-09-23 — Nadia / deepseek-flash (S003)
+- **Task:** the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed
 - **Status:** idle

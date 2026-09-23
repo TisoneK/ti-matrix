@@ -32,3 +32,13 @@ re-seeded into the new office explicitly, and nothing else carries over.
 - **Open items:** `npm run dev:electron` not yet run against a live window (needs the user at the keyboard); PyInstaller bundle not yet built locally; codesigning/notarization and auto-update deliberately deferred; ledger write-back checkbox exists but is only exercised by unit tests
 - **Notes:** none
 - **Report:** none
+---
+## 2026-09-23 — Session 3 (the app UI, rebuilt from the ground up)
+- **Agent:** Nadia | **Model:** deepseek-flash | **Platform:** bao's Mac — macOS (darwin 24.6.0), Node 24.17.0, Python 3.10.20 (.venv) | **Role:** engineer | **Core:** 2.0.4
+- **Task:** discard the renderer and rebuild it as a visualization-first run inspector — a fog-of-war map drawn only from what a run observed, the search tree, a ledger of every decision with the belief behind it, playback (scrub/step/speed/bookmarks over one cursor), comparison of two runs, a persisted session library, and config demoted to a collapsible drawer
+- **Commits:** 1 product commit (`7348350` — the renderer rebuild, the new `tm.runs*` IPC in `app/main` + `app/preload`, the docs) plus ledger commits (`bb09e33` check-in, `888895a` peer merge, `c260f95` STATE, and the closing memory commit)
+- **Outcome:** done and pushed — typecheck green, 129 renderer assertions, engine 207 passed, sidecar 34 passed, Vite build green; a real run driven end to end in a browser harness against the real sidecar (102 events, 14 decisions, 6 retreats) and 11 defects found on screen and fixed (two pane-nesting layout bugs, two accessibility bugs, the map legend, the missing way back from a rewound finished run, a knowledge-precedence bug where an inferred wall erased a known corridor)
+- **Open items:** B-2026-09-23-1 (no real Electron window was launched — the renderer was driven with `window.tm` stubbed), B-2026-09-23-2 (the prose worlds' panels are thinner than the views they replaced), B-2026-09-23-3 (no run against a real LLM yet)
+- **Collaboration:** light path with the peer on the board (Wren, S002, idle on `main`): session `S003`, issue `ui-rebuild`, a `note` and a `claim` at start, a `release` citing `7348350` at close (events under `memory/collaboration/events/`). No agreement was needed — the scopes never overlapped.
+- **Notes:** none
+- **Report:** .context_ledger/memory/office/reviews/2026-09-23-review-2.md

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T124309Z-Nadia-aa88a431",
+  "type": "release",
+  "session": "S003",
+  "agent": "Nadia",
+  "created": "2026-09-23T12:43:09Z",
+  "issue": "ui-rebuild",
+  "body": "Released: app/renderer, app/preload, app/main.\n\nThe renderer was discarded and rebuilt as a visualization-first run inspector: one event log, one cursor,\nand the map, search tree, decision ledger and confidence curve as pure projections of the two. Playback,\nbookmarks, the session library and compare mode all fall out of that one decision.\n\nVerified: typecheck, 129 renderer assertions (`npm run test`), Vite build; the engine's suite 207 passed\nand the sidecar's 34 passed, both untouched. A real run was driven end to end against the real sidecar and\nchecked on screen — the map parsed the world's own sentences, the tree read the engine's node ids, the\nledger flagged every turn — and eleven defects found that way were fixed before this commit.\n\nProduct commit: 7348350.",
+  "paths": ["app/renderer", "app/preload", "app/main"],
+  "refs": ["7348350"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

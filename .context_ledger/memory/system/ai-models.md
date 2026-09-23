@@ -23,8 +23,15 @@ its work accordingly).
 | Agent | Model | First seen | Last seen | Sessions |
 |---|---|---|---|---|
 | Buffy (Freebuff host agent) | unknown | 2026-09-23 | 2026-09-23 | 1 |
+| Nadia (ZCode) | deepseek-flash | 2026-09-23 | 2026-09-23 | 1 |
 
 ## Observations
+
+- **Nadia / deepseek-flash:** drove the whole renderer rebuild from screenshots taken through a browser
+  harness rather than a window — the defects it found (panels laid out as page grid cells, a label
+  swallowing its hint into the accessible name) were all invisible in the source and obvious on screen.
+  Wrote the folds first and the panels second, which is why four panels could be rewritten in one session
+  without breaking the others. (2026-09-23)
 
 Concrete, evidence-based capabilities and limits — things demonstrated
 in this repo's sessions, not marketing claims or self-assessment.

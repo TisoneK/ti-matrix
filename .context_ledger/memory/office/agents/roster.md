@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Wren | S002 | unknown | Session start — pull + kickoff orientation, awaiting task | Working |
-| Nadia | S003 | deepseek-flash | Discarding the current renderer; rebuilding the app UI from scratch as a visualization-first run inspector (fog-of-war map, decision tree, confidence log, playback scrubber, compare mode, session library) | Working |

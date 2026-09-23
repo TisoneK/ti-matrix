@@ -19,6 +19,21 @@ block (and its "last verified" date) every time you run on it again.
    preferences in `user/`; project-wide decisions in `plans/`.
 
 ---
+## bao's Mac — where the app was rebuilt (last verified 2026-09-23)
+- **Identify by:** macOS (darwin 24.6.0, x86_64), project checkout at `/Users/bao/Code/ti-matrix`
+- **OS:** macOS; bash; no Windows tooling — the `.cmd`/`.ps1` launchers do not apply here
+- **Runtimes:** Python 3.10.20 in the repo's `.venv/` (`python3` on PATH is 3.9.6 and too old for the
+  package's `requires-python = ">=3.10"` — always use `.venv/bin/python`); Node 24.17.0, npm 11.13.0
+- **Verified commands:** `.venv/bin/python -m pytest tests` (engine, 207 passed) ·
+  `cd server && ../.venv/bin/python -m pytest tests` (sidecar, 34 passed) ·
+  `cd app && npm run typecheck && npm run test && npm run build` (129 renderer assertions, Vite build) ·
+  `node -e` / `npx esbuild` are both on PATH and usable for scratch work
+- **Quirks:** no `ws` package in `app/node_modules`, so a WebSocket test harness must go through the real
+  sidecar rather than a stub server; a GUI Electron window could not be launched in this session — the
+  renderer was driven by serving `app/dist` and stubbing `window.tm`, which works and is worth repeating;
+  `pkill -f` on a backgrounded node/python script is needed to stop test servers between runs
+
+---
 ## Lameck — the user's Windows desktop (last verified 2026-09-23)
 - **Identify by:** Windows hostname `Lameck`; project checkout at `C:/Users/Lameck/Tisone/ti-matrix`
 - **OS:** Windows with Git Bash (POSIX sh available); PowerShell for `.cmd`/`.ps1` launchers
