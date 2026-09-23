@@ -9,6 +9,8 @@
  * tab, where this module simply becomes a no-op.
  */
 
+import { MODELS, budgetFor } from "./models";
+
 export interface StoredModel {
   base_url: string;
   model: string;
@@ -75,10 +77,41 @@ export async function loadSettings(): Promise<AppSettings | null> {
       out.budget = budget;
     }
     if (typeof s["welcomeSeen"] === "boolean") out.welcomeSeen = s["welcomeSeen"];
-    return out;
+    return migrate(out);
   } catch {
     return null; // unreadable settings are not an error, they are defaults
   }
+}
+
+/**
+ * The one settings value that is not a preference: the endpoint the app used to write down for you.
+ *
+ * Until now the app opened pointing at `qwen2.5:7b` on a local Ollama and saved that on the first
+ * change — so a machine without that exact model pulled recorded a broken run configuration and kept
+ * it forever. Changing the shipped default fixes the next fresh install and nobody else; everyone who
+ * has ever opened the window still has the old one on disk, which is precisely the person who has been
+ * looking at an empty map.
+ *
+ * So this rewrites exactly one value — the old shipped pair, byte for byte — to the built-in rules. It
+ * is safe to do silently because that pair is indistinguishable from "never configured": it is what the
+ * app chose on the user's behalf, not what the user chose. Any other endpoint, including the same
+ * Ollama with a model someone actually picked, is left exactly as it was found.
+ */
+const ABANDONED_DEFAULT = { base_url: "http://localhost:11434/v1", model: "qwen2.5:7b" };
+const OLD_BUDGET = { max_depth: 6, max_branches: 3, max_model_calls: 16, max_backtracks: 2 };
+
+function migrate(out: AppSettings): AppSettings {
+  const m = out.model;
+  if (!m || m.base_url !== ABANDONED_DEFAULT.base_url || m.model !== ABANDONED_DEFAULT.model) return out;
+  out.model = { ...m, base_url: MODELS.defaults.base_url, model: MODELS.defaults.model };
+  // The budget travels with the seat for the same reason: the engine's six-step default exists because
+  // a model call is slow and costly, and against the rules it would stop a solvable maze half-drawn.
+  // Only an untouched budget moves — a number someone typed is a number they meant.
+  const b = out.budget;
+  const untouched = b !== undefined
+    && (Object.keys(OLD_BUDGET) as (keyof typeof OLD_BUDGET)[]).every((k) => b[k] === OLD_BUDGET[k]);
+  if (b === undefined || untouched) out.budget = { ...budgetFor(MODELS.defaults.model) };
+  return out;
 }
 
 export function saveSettings(settings: AppSettings): void {

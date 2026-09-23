@@ -463,6 +463,7 @@ ti_matrix/            the engine — standard library only, no host application
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
     ├── browser/             a real browser: WebSocket + DevTools Protocol, standard library only
     ├── openai_compat.py     any OpenAI-compatible endpoint
+    ├── builtin.py           the two seats filled by rules — a real search with no model in it
     ├── confirm.py           answering the engine when it asks to do something that changes the world
     ├── session.py           what a command carries in and leaves behind: --remember, --record, --ask
     ├── run_log.py           a run written down, and read back: python -m ti_matrix.adapters.run_log FILE

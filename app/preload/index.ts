@@ -27,6 +27,9 @@ const api = {
   bootLog: (): Promise<BootStageReport[]> => ipcRenderer.invoke("tm:boot-log"),
   // The splash's "try again": a fresh process, because a half-started sidecar may hold the port.
   relaunch: (): Promise<void> => ipcRenderer.invoke("tm:relaunch"),
+  // The window's "try again": a new engine under the same window, so a dead sidecar does not cost the
+  // run on screen, the library, or the config someone just typed.
+  sidecarRestart: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke("tm:sidecar-restart"),
   // The window's own chrome. The rail is the title bar, so these are the buttons it draws — on macOS the
   // OS keeps its traffic lights instead and the rail leaves room for them.
   platform: process.platform,

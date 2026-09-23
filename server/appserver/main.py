@@ -60,21 +60,34 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
                   confirmer: WsConfirmer, stats_path: Optional[Path]):
     """The engine for one run: the model from config, the world from the registry, the learning record
     when a path for it exists — the wiring the CLIs do via `session.py`, stated plainly."""
-    from ti_matrix.adapters.openai_compat import OpenAICompatModel
+    from ti_matrix.adapters.builtin import is_builtin, reasoner_for
     from ti_matrix.learning import LearningProposer, Statistics
-    from ti_matrix.model import LLMEvaluator, LLMMoveProposer
     from ti_matrix.search import EngineBudget, StateEngine
     from ti_matrix.tools import EngineTools
 
-    base_url = str(config.get("base_url", "")).strip()
     model_name = str(config.get("model", "")).strip()
-    if not base_url or not model_name:
-        raise ValueError("the goal config needs base_url and model (any OpenAI-compatible endpoint)")
-    key_env = str(config.get("api_key_env", "")).strip()
-    # A key pasted into the window rides the run config directly — it wins over the env var, and never
-    # outlives the run: it is read here, given to the adapter, and nothing writes it down.
-    api_key = str(config.get("api_key", "")).strip() or None
-    model = OpenAICompatModel(base_url, model_name, api_key=api_key, api_key_env=key_env or None)
+    world_name = str(config.get("world", "")).strip() or getattr(env, "name", "")
+
+    # The two seats. `builtin` fills them with rules and touches no network, so a window with no
+    # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
+    # other model name is an OpenAI-compatible endpoint, exactly as before.
+    if is_builtin(model_name):
+        reasoner = reasoner_for(world_name, env.tools())
+        seats: tuple[Any, Any] = (reasoner, reasoner)
+    else:
+        from ti_matrix.adapters.openai_compat import OpenAICompatModel
+        from ti_matrix.model import LLMEvaluator, LLMMoveProposer
+
+        base_url = str(config.get("base_url", "")).strip()
+        if not base_url or not model_name:
+            raise ValueError("the goal config needs base_url and model (any OpenAI-compatible "
+                             "endpoint) — or model 'builtin' to run with no model at all")
+        key_env = str(config.get("api_key_env", "")).strip()
+        # A key pasted into the window rides the run config directly — it wins over the env var, and
+        # never outlives the run: it is read here, given to the adapter, and nothing writes it down.
+        api_key = str(config.get("api_key", "")).strip() or None
+        model = OpenAICompatModel(base_url, model_name, api_key=api_key, api_key_env=key_env or None)
+        seats = (LLMMoveProposer(model, env.tools()), LLMEvaluator(model))
 
     statistics = Statistics()
     environment = env
@@ -85,10 +98,10 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
         environment = EngineTools(env, memory=statistics)
 
     budget_kwargs = {k: v for k, v in budget_in.items() if k in protocol.BUDGET_FIELDS}
-    proposer: Any = LLMMoveProposer(model, env.tools())
+    proposer: Any = seats[0]
     if stats_path is not None:
         proposer = LearningProposer(proposer, statistics)
-    engine = StateEngine(environment, proposer=proposer, evaluator=LLMEvaluator(model),
+    engine = StateEngine(environment, proposer=proposer, evaluator=seats[1],
                          confirmer=confirmer, budget=EngineBudget(**budget_kwargs))
     return engine, statistics
 

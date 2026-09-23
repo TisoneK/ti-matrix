@@ -7,3 +7,4 @@
 
 import "./core/worlds.test";
 import "./core/core.test";
+import "./protocol.test";

@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import { WorldField, WorldInfo } from "../protocol";
 import { Button } from "../ui/controls";
-import { Budget, BUDGET } from "../core/models";
+import { Budget, BUDGET, BUILTIN, LLM_SUGGESTION, isBuiltin } from "../core/models";
 import { Field, Fieldset } from "../ui/atoms";
 
 export interface ModelConfig {
@@ -43,6 +43,9 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   onClose: () => void;
 }) {
   const current = worlds.find((w) => w.name === world);
+  // The rules need no endpoint, no key and no env var, so those four fields are not shown against them —
+  // an empty "API key" box beside a run that will never make a request is a question with no answer.
+  const rules = isBuiltin(model.model);
   // Esc closes, from wherever the focus happens to be — unless it is in a text field mid-word.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -66,30 +69,59 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
           </svg>
         </button>
       </div>
+      {/* Which engine decides. This is the first choice, above the endpoint fields, because it is the
+          one that decides whether those fields matter at all — and because the rules are what makes a
+          first run possible on a machine with no model on it. */}
+      <div className="seatpick" role="group" aria-label="what decides the run">
+        <button type="button" aria-pressed={rules}
+                onClick={() => { setModel("model", BUILTIN); setModel("base_url", ""); }}>
+          Built-in rules
+          <small>instant, offline, no key — a real search with no model in it</small>
+        </button>
+        <button type="button" aria-pressed={!rules}
+                onClick={() => {
+                  if (!rules) return;
+                  setModel("model", LLM_SUGGESTION.model);
+                  setModel("base_url", LLM_SUGGESTION.base_url);
+                }}>
+          A language model
+          <small>any OpenAI-compatible endpoint — slower, and it reasons</small>
+        </button>
+      </div>
+
       <div className="drawer-grid">
-        <Field label={modelLabels["base_url"] ?? "Endpoint"} hint="any OpenAI-compatible base URL">
-          {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}
-                         onChange={(e) => setModel("base_url", e.target.value)} />}
-        </Field>
-        <Field label={modelLabels["model"] ?? "Model"} hint="the name the endpoint knows it by">
-          {(f) => <input {...f} type="text" value={model.model} spellCheck={false}
-                         onChange={(e) => setModel("model", e.target.value)} />}
-        </Field>
-        <Field label="API key"
-               hint={apiKey.trim()
-                 ? "held in memory for this session only — never saved to disk"
-                 : model.api_key_env
-                   ? `empty: the key is read from $${model.api_key_env} in this machine's environment`
-                   : "empty and no env var set: the endpoint is asked without a key"}>
-          {(f) => <input {...f} type="password" value={apiKey} spellCheck={false} autoComplete="off"
-                         placeholder={model.api_key_env ? `leave empty to use $${model.api_key_env}` : "paste a key for this session"}
-                         onChange={(e) => setApiKey(e.target.value)} />}
-        </Field>
-        <Field label="Env var fallback"
-               hint={`advanced: which environment variable holds the key when the field above is empty`}>
-          {(f) => <input {...f} type="text" value={model.api_key_env} spellCheck={false} placeholder="OPENAI_API_KEY"
-                         onChange={(e) => setModel("api_key_env", e.target.value)} />}
-        </Field>
+        {rules ? null : (
+          <>
+            <Field label={modelLabels["base_url"] ?? "Endpoint"} hint="any OpenAI-compatible base URL">
+              {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}
+                             onChange={(e) => setModel("base_url", e.target.value)} />}
+            </Field>
+            <Field label={modelLabels["model"] ?? "Model"} hint="the name the endpoint knows it by">
+              {(f) => <input {...f} type="text" value={model.model} spellCheck={false}
+                             placeholder="the exact name the endpoint knows"
+                             onChange={(e) => setModel("model", e.target.value)} />}
+            </Field>
+          </>
+        )}
+        {rules ? null : (
+          <>
+            <Field label="API key"
+                   hint={apiKey.trim()
+                     ? "held in memory for this session only — never saved to disk"
+                     : model.api_key_env
+                       ? `empty: the key is read from $${model.api_key_env} in this machine's environment`
+                       : "empty and no env var set: the endpoint is asked without a key"}>
+              {(f) => <input {...f} type="password" value={apiKey} spellCheck={false} autoComplete="off"
+                             placeholder={model.api_key_env ? `leave empty to use $${model.api_key_env}` : "paste a key for this session"}
+                             onChange={(e) => setApiKey(e.target.value)} />}
+            </Field>
+            <Field label="Env var fallback"
+                   hint={`advanced: which environment variable holds the key when the field above is empty`}>
+              {(f) => <input {...f} type="text" value={model.api_key_env} spellCheck={false} placeholder="OPENAI_API_KEY"
+                             onChange={(e) => setModel("api_key_env", e.target.value)} />}
+            </Field>
+          </>
+        )}
 
         {fields.map((f) => (
           f.kind === "checkbox" ? (

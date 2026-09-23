@@ -50,6 +50,10 @@ export interface Session {
   /** Reopen a stored run: its events become the current run, with no socket involved. */
   open: (artifact: RunArtifact) => void;
   clear: () => void;
+  /** Try the socket again now, from a button. Also respawns the sidecar when it is the thing that died. */
+  retry: () => void;
+  /** Why the socket is not usable, when it is not — the sentence the UI shows instead of guessing. */
+  trouble: string | null;
 }
 
 export function useSidecar(bookmarks: number[]): Session {
@@ -71,6 +75,9 @@ export function useSidecar(bookmarks: number[]): Session {
   const [settled, setSettled] = useState<Settled | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [saved, setSaved] = useState<RunArtifact | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  // Bumped by `retry` to re-run the connect effect from the top.
+  const [attempt, setAttempt] = useState(0);
 
   const sidecar = useRef<Sidecar | null>(null);
   // The frames as they arrive, kept outside React state: the artifact is assembled in the frame handler,
@@ -82,10 +89,16 @@ export function useSidecar(bookmarks: number[]): Session {
 
   useEffect(() => {
     if (!tm) {
+      // A plain browser tab, not a broken app: there is no preload here, so there is no sidecar to
+      // reach and no app to restart. Saying "restart the app" to someone looking at :5173 sends them
+      // to fix a thing that is not wrong.
       setStatus("crashed");
+      setTrouble("this page is not running inside the desktop app, so there is no engine to talk to — "
+        + "start it with `npm run dev` and use the window it opens");
       return;
     }
     let cancelled = false;
+    setTrouble(null);
     tm.connection().then(({ url }) => {
       if (cancelled) return;
       const s = new Sidecar(url);
@@ -122,10 +135,29 @@ export function useSidecar(bookmarks: number[]): Session {
         }
       });
       s.connect();
-    }).catch(() => { if (!cancelled) setStatus("crashed"); });
-    tm.onSidecarExit(() => setStatus("crashed"));
-    return () => { cancelled = true; };
-  }, [tm, library]);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setStatus("crashed");
+      // main rejects this when the boot failed, and the reason it gives is the only thing that
+      // explains an app that came up with nothing behind it.
+      setTrouble(err instanceof Error && err.message ? err.message : "the engine never started");
+    });
+    return () => {
+      cancelled = true;
+      sidecar.current?.close();
+      sidecar.current = null;
+    };
+  }, [tm, library, attempt]);
+
+  // The sidecar's own death, heard once. This used to be registered inside the connect effect, where
+  // every re-run stacked another listener on the same channel that nothing ever removed.
+  useEffect(() => {
+    if (!tm) return;
+    tm.onSidecarExit(({ code }) => {
+      setStatus("crashed");
+      setTrouble(`the engine exited (code ${code ?? "signal"}) — restart it to run again`);
+    });
+  }, [tm]);
 
   const run = useCallback(async (goal: string, world: string, config: Record<string, unknown>,
                                  budget?: Record<string, number>) => {
@@ -177,9 +209,32 @@ export function useSidecar(bookmarks: number[]): Session {
     setSaved(null);
   }, []);
 
+  /**
+   * The way back from a dead socket, without reloading the window.
+   *
+   * Two different things can be wrong, so this tries both in order: if the sidecar process itself is
+   * gone, ask main to spawn a fresh one (it re-announces a new URL when it is healthy); otherwise the
+   * process is fine and only the socket dropped, which `Sidecar.reconnect` handles on its own. Bumping
+   * `attempt` re-runs the connect effect against whatever URL main now reports.
+   */
+  const retry = useCallback(() => {
+    setTrouble(null);
+    setStatus("connecting");
+    const restart = (tm as (TmApi & { sidecarRestart?: () => Promise<{ ok: boolean; error?: string }> }) | undefined)?.sidecarRestart;
+    if (restart) {
+      void restart().then((res) => {
+        if (res && res.ok === false && res.error) setTrouble(res.error);
+        setAttempt((n) => n + 1);
+      }).catch(() => setAttempt((n) => n + 1));
+      return;
+    }
+    if (sidecar.current) { sidecar.current.reconnect(); return; }
+    setAttempt((n) => n + 1);
+  }, [tm]);
+
   const headless = !tm?.runsSave;
 
-  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, open, clear };
+  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, open, clear, retry, trouble };
 }
 
 /** The run as an artifact: the events verbatim, the world, the model, and how it ended. */

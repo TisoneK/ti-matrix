@@ -79,6 +79,36 @@ The config drawer also carries **what a run may spend** — steps, options per s
 seeded with the engine's own defaults. Against a real endpoint the defaults are the thing that ends a run:
 a live model spends 20–45 seconds per decision, so depth six runs out long before the exit does.
 
+## What decides a run
+
+Two choices, and the setup sheet leads with them because the second one only matters after the first.
+
+**Built-in rules** (the default) fill the engine's proposer and evaluator seats from
+`ti_matrix.adapters.builtin` — no endpoint, no key, no network. A maze run finishes in well under a
+second and produces a full search: real probes against the real world, a map drawn from what the run
+actually saw, retreats out of dead ends, and a ledger of every decision. This is the default for a
+blunt reason: the app used to open pointing at `qwen2.5:7b` on a local Ollama, so on any machine
+without that exact model pulled every run ended on its second event with `proposer_error: 404` and
+every panel in the window drew an empty state — correctly, because there was nothing to draw. A first
+run has to be possible before any of this is worth looking at.
+
+**A language model** is any OpenAI-compatible endpoint, and it is what the product is actually about:
+the rules walk a maze they understand, a model reasons about a goal in words. It is also slower by
+four orders of magnitude (20–45s per decision against a small local model), which is why the budget
+travels with the choice — 80 steps against rules, the engine's own 6 against an endpoint.
+
+A settings file still holding the old `qwen2.5:7b` default is migrated to the rules on load, once.
+That exact pair is the value the app wrote on its own; any endpoint someone actually chose is left
+alone.
+
+## When the engine dies
+
+The socket reconnects on its own — eight attempts, backing off 400ms to 6s — and the status lamp says
+`reconnecting` while it is trying rather than claiming a crash. If the sidecar process itself exited,
+the command bar's Run button becomes **Reconnect**, which spawns a fresh sidecar under the same window:
+the run on screen, the library and the config all survive it. Only a boot that never got off the ground
+sends you back to the splash's full relaunch.
+
 ## Endless scenarios
 
 The maze world takes a **seed**: blank means a brand-new procedural maze every run (recursive

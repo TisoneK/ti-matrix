@@ -122,6 +122,7 @@ const STATUS_TEXT: Record<Status, string> = {
   connecting: "reaching the sidecar",
   ready: "idle",
   running: "running",
+  reconnecting: "reconnecting…",
   crashed: "sidecar gone",
 };
 

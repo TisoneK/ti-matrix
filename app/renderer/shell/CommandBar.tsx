@@ -10,7 +10,7 @@ import { useEffect, useRef } from "react";
 import { WorldInfo } from "../protocol";
 import { Button } from "../ui/controls";
 
-export function CommandBar({ worlds, world, onWorld, goal, onGoal, onRun, onStop, running, blocked, hint, configOpen }: {
+export function CommandBar({ worlds, world, onWorld, goal, onGoal, onRun, onStop, running, blocked, hint, configOpen, onRetry, retryable }: {
   worlds: WorldInfo[];
   world: string;
   onWorld: (name: string) => void;
@@ -22,6 +22,10 @@ export function CommandBar({ worlds, world, onWorld, goal, onGoal, onRun, onStop
   blocked: string;
   hint: string;
   configOpen: boolean;
+  /** Offered instead of Run when the socket is the thing that is wrong — see `retryable`. */
+  onRetry: () => void;
+  /** True when the engine is unreachable and trying again is the move that could fix it. */
+  retryable: boolean;
 }) {
   const field = useRef<HTMLTextAreaElement>(null);
   const current = worlds.find((w) => w.name === world);
@@ -68,7 +72,12 @@ export function CommandBar({ worlds, world, onWorld, goal, onGoal, onRun, onStop
         <span className="pane-sub nowrap hintline" title={hint}>{hint}</span>
         {running
           ? <Button variant="danger" onClick={onStop}>Stop</Button>
-          : <Button variant="primary" onClick={onRun} disabled={Boolean(blocked)} title={blocked || "start the run"}>Run</Button>}
+          : retryable
+            // A disabled Run button next to "the sidecar is not running" is a dead end: the one thing
+            // that could fix it is not on screen. When the engine is what is wrong, the button becomes
+            // the fix rather than staying a greyed-out reminder of it.
+            ? <Button variant="primary" onClick={onRetry} title="start the engine again and reconnect">Reconnect</Button>
+            : <Button variant="primary" onClick={onRun} disabled={Boolean(blocked)} title={blocked || "start the run"}>Run</Button>}
         <span className="kbd">⌘↵</span>
       </div>
     </div>

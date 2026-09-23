@@ -124,3 +124,36 @@ async def test_a_run_can_be_recorded_to_a_jsonl_log(server, client_factory, tmp_
     events = read(log)
     assert len(events) == len(client.events)
     assert "settled: the exit is at 1,6" in summarize(events)
+
+
+async def test_a_builtin_goal_runs_with_no_endpoint_at_all(server, client_factory):
+    """The first run on a fresh machine: no base_url, no key, nothing listening anywhere.
+
+    This is the case the app shipped broken. The window defaulted to a model name that most machines
+    do not have pulled, so a run ended on its second event with `proposer_error` and every panel drew
+    an empty state — correctly, because there was nothing to draw. `model: "builtin"` fills the seats
+    with rules instead, and the run below makes real probes against the real maze and settles.
+    """
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": "", "model": "builtin", "api_key_env": ""},
+                      budget={"max_depth": 40, "max_model_calls": 300, "max_backtracks": 20})
+    settled = await client.settle()
+
+    assert settled["reason"] is None, settled["reason"]
+    assert settled["answer"] and "1,6" in settled["answer"], settled["answer"]
+    kinds = [e["kind"] for e in client.events]
+    assert kinds[0] == "state" and kinds[-1] == "done"
+    # A real search: many probes against the world, not one lucky guess.
+    assert kinds.count("probe") >= 5, kinds
+    # And not a single request reached the fake endpoint — the rules never asked anyone anything.
+    assert server.endpoint.requests == 0
+
+
+async def test_builtin_needs_no_base_url_but_a_named_model_still_does(server, client_factory):
+    """The config check must stay strict for endpoints while letting the rules through."""
+    client = await client_factory()
+    # An empty config is still an error — "builtin" is a deliberate choice, not the fallback for a typo.
+    await client.send(type="goal", text="x", world="maze", config={"base_url": "", "model": ""})
+    err = await client.drain_until("error")
+    assert "builtin" in err["message"], err["message"]

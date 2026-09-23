@@ -44,16 +44,30 @@ let bootedAt = 0;
 // The handshake lands before any window exists, and a window can be reloaded at any time — so the renderer
 // asks for the connection when it is ready to use it, and a request that arrives early waits here.
 let readyConn: { url: string } | null = null;
-let waiting: ((conn: { url: string }) => void)[] = [];
+let waiting: { resolve: (conn: { url: string }) => void; reject: (err: Error) => void }[] = [];
+/** Why the last boot failed, if it did — so a renderer asking for a connection is told, not left hanging. */
+let bootFailure: string | null = null;
 
 function whenReady(): Promise<{ url: string }> {
   if (readyConn) return Promise.resolve(readyConn);
-  return new Promise((resolve) => { waiting.push(resolve); });
+  // A boot that already failed must answer now. This used to return a promise that simply never settled:
+  // the renderer sat at "reaching the sidecar…" forever with the one fact that explained it — the reason
+  // the spawn failed — sitting right here, unsaid.
+  if (bootFailure !== null) return Promise.reject(new Error(bootFailure));
+  return new Promise((resolve, reject) => { waiting.push({ resolve, reject }); });
 }
 
 function announceReady(conn: { url: string }): void {
   readyConn = conn;
-  for (const resolve of waiting) resolve(conn);
+  bootFailure = null;
+  for (const w of waiting) w.resolve(conn);
+  waiting = [];
+}
+
+/** The boot failed: everyone still waiting hears why, and so does everyone who asks after this. */
+function announceFailure(reason: string): void {
+  bootFailure = reason;
+  for (const w of waiting) w.reject(new Error(reason));
   waiting = [];
 }
 
@@ -156,6 +170,9 @@ function startSidecar(onExit: (code: number | null) => void): Promise<void> {
     sidecar.on("error", (err) => fail(err));
     sidecar.on("exit", (code) => {
       sidecar = null;
+      // The URL we handed out names a port nothing is listening on any more. Forgetting it is what makes
+      // `tm:sidecar-restart` able to hand out a new one instead of the stale one.
+      readyConn = null;
       // A sidecar that dies while the splash is still up is a boot failure, not a lifecycle event.
       if (!readyConn) fail(new Error(`the engine exited while starting (code ${code ?? "signal"})`));
       // Always forwarded: before the renderer exists nobody is listening (harmless), after it the app
@@ -294,6 +311,31 @@ function registerWindow(): void {
   // The splash's "try again" — a fresh process is the only honest retry, because a half-started sidecar
   // may hold the port.
   ipcMain.handle("tm:relaunch", () => { app.relaunch(); app.exit(0); });
+  /**
+   * The window's "try again": spawn a new engine without throwing the window away.
+   *
+   * `tm:relaunch` restarts everything, which is the right answer on the splash — there is nothing on
+   * screen yet to lose. Once the app is up there is: the run on screen, the library, the config someone
+   * just typed. A sidecar that died should not cost all of that, so this replaces only the child, and
+   * the renderer picks the new URL up by asking for the connection again.
+   */
+  ipcMain.handle("tm:sidecar-restart", async () => {
+    if (sidecar && sidecar.pid) {
+      // A sidecar still alive holds the port we are about to want back.
+      try { sidecar.kill(); } catch { /* already gone is the state we wanted */ }
+      sidecar = null;
+    }
+    readyConn = null;
+    bootFailure = null;
+    try {
+      await startSidecar(() => undefined);
+      return { ok: true };
+    } catch (err) {
+      const reason = String(err instanceof Error ? err.message : err);
+      announceFailure(reason);
+      return { ok: false, error: reason };
+    }
+  });
   // A splash that loads after a stage was reported replays the log instead of sitting idle forever.
   ipcMain.handle("tm:boot-log", () => bootLog);
   // Settings that outlive the window. One JSON file under userData, written whole on every change —
@@ -470,7 +512,9 @@ async function boot(): Promise<void> {
   try {
     await startSidecar(() => undefined);
   } catch (err) {
-    stage("spawn", "failed", String(err instanceof Error ? err.message : err));
+    const reason = String(err instanceof Error ? err.message : err);
+    stage("spawn", "failed", reason);
+    announceFailure(reason);
     return; // the splash holds the failure; the window stays up with a way out
   }
   stage("spawn", "done");

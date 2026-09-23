@@ -11,9 +11,9 @@
  * possible without a recording, and comparison possible without running anything twice.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactMeta, RunArtifact } from "./core/types";
-import { BUDGET, Budget, MODELS, modelSummary } from "./core/models";
+import { Budget, MODELS, budgetFor, isBuiltin, modelSummary } from "./core/models";
 import { project } from "./core/project";
 import { useSidecar } from "./hooks/useSidecar";
 import { usePlayback } from "./hooks/usePlayback";
@@ -39,7 +39,7 @@ export function App() {
   const [goal, setGoal] = useState("");
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [model, setModel] = useState<ModelConfig>({ ...MODELS.defaults });
-  const [budget, setBudgetState] = useState<Budget>({ ...BUDGET.defaults });
+  const [budget, setBudgetState] = useState<Budget>(budgetFor(MODELS.defaults.model));
   const [configOpen, setConfigOpen] = useState(false);
   /** The pasted key, for this session only — never saved, never sent anywhere but the sidecar. */
   const [apiKey, setApiKey] = useState("");
@@ -112,6 +112,20 @@ export function App() {
     });
   }, []);
 
+  // The budget belongs to whoever is deciding. Rules run eighty steps in a blink; the same eighty against
+  // a paid endpoint is twenty minutes and a bill, so crossing between the two carries the budget with it
+  // rather than leaving the other one's numbers in the box. Only the crossing does this — a number typed
+  // by hand stays typed, because this fires on the change of seat, not on every render.
+  const seat = isBuiltin(model.model);
+  const lastSeat = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (lastSeat.current === null) { lastSeat.current = seat; return; }
+    if (lastSeat.current === seat) return;
+    lastSeat.current = seat;
+    setBudgetState(budgetFor(model.model));
+  }, [seat, hydrated, model.model]);
+
   // And every change is kept — debounced, so typing writes one file, not one per keystroke.
   useEffect(() => {
     if (!hydrated) return;
@@ -144,10 +158,17 @@ export function App() {
     ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
   }), [worldValues, model, apiKey]);
 
-  const blocked = status === "crashed" ? "the sidecar is not running — restart the app"
-    : status === "connecting" ? "reaching the sidecar…"
-      : running ? "a run is already in flight"
-        : goal.trim() ? "" : "type a goal to run";
+  // Why the button is unavailable, said as precisely as the app actually knows. `session.trouble` is the
+  // reason main or the socket gave — a missing python, an engine that exited, a page opened outside the
+  // app — and it beats the old blanket "restart the app", which was wrong for most of those.
+  const blocked = status === "crashed"
+    ? (session.trouble ?? "the engine is not running")
+    : status === "reconnecting" ? "the engine dropped — reconnecting…"
+      : status === "connecting" ? "reaching the sidecar…"
+        : running ? "a run is already in flight"
+          : goal.trim() ? "" : "type a goal to run";
+  // Trying again only helps when there is something to try: inside the app, with the socket down.
+  const retryable = (status === "crashed" || status === "reconnecting") && !session.headless;
 
   const start = useCallback(() => {
     if (blocked) return;
@@ -246,6 +267,7 @@ export function App() {
           blocked={blocked}
           hint={blocked || (running ? "streaming — the panels follow the newest step" : current?.note ?? "")}
           configOpen={configOpen}
+          onRetry={session.retry} retryable={retryable}
         />
       ) : null}
 

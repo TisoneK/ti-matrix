@@ -188,6 +188,9 @@ svg { display: block; }
 .lamp[data-state="ready"] { background: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
 .lamp[data-state="running"] { background: var(--ice); box-shadow: 0 0 0 3px var(--ice-dim); animation: breathe 1.8s ease-in-out infinite; }
 .lamp[data-state="connecting"] { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+/* Reconnecting is amber like connecting — the app is trying, not broken — but it pulses, so a socket
+   retrying in the background is visibly different from one that came up cleanly and is merely idle. */
+.lamp[data-state="reconnecting"] { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); animation: breathe 1.2s ease-in-out infinite; }
 .lamp[data-state="crashed"] { background: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
 
 @keyframes breathe {
@@ -727,3 +730,39 @@ svg { display: block; }
   .compare-body, .compare-body.overlay { grid-template-columns: minmax(0, 1fr); }
   :root { --transport: 76px; }
 }
+
+
+/* ── which engine decides ──────────────────────────────────────────────────
+   The first choice in the setup sheet, and a visibly bigger one than the text
+   fields under it: it decides whether those fields matter at all. Two cards,
+   the selected one lit — the same treatment the world picker gets, because it
+   is the same kind of choice. */
+.seatpick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4) 0;
+}
+.seatpick button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--s3);
+  text-align: left;
+  font: inherit;
+  color: var(--fg-2);
+  background: var(--plate);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.seatpick button:hover { border-color: var(--line-2); color: var(--fg); }
+.seatpick button small { font-size: 11px; color: var(--fg-3); line-height: 1.35; }
+.seatpick button[aria-pressed="true"] {
+  color: var(--fg);
+  border-color: var(--ice-line);
+  background: var(--ice-dim);
+}
+.seatpick button[aria-pressed="true"] small { color: var(--fg-2); }
+@media (max-width: 720px) { .seatpick { grid-template-columns: 1fr; } }
