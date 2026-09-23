@@ -49,9 +49,26 @@ export interface RunStartInfo {
   recordPath: string | null;
 }
 
+/** The window controls the rail draws itself, wherever the OS does not draw them. */
+export interface TmWindow {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<void>;
+  close: () => Promise<void>;
+  state: () => Promise<WindowState>;
+  onState: (cb: (state: WindowState) => void) => void;
+}
+
+export interface WindowState {
+  maximized: boolean;
+  fullScreen: boolean;
+}
+
 /** What the preload exposes as `window.tm` — the renderer's whole view of the machine. */
 export interface TmApi {
   connection: () => Promise<{ url: string }>;
+  /** `process.platform` — "darwin" keeps its traffic lights, everyone else gets the rail's own buttons. */
+  platform?: string;
+  window?: TmWindow;
   onReady: (cb: (conn: { url: string }) => void) => void;
   onSidecarExit: (cb: (info: { code: number | null }) => void) => void;
   pickDirectory: () => Promise<string | null>;

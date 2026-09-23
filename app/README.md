@@ -63,6 +63,13 @@ renderer/
   ui/              the primitives — buttons, chips, marks, the confidence bar, the sparkline
 ```
 
+The window has no OS chrome above the app: **the top rail is the title bar.** It already carries what a
+title bar carries — the name, the state, the way in — so a second strip would spend screen a run never gets
+back. macOS keeps its traffic lights and the rail leaves them their corner (`titleBarStyle: "hiddenInset"`);
+everywhere else the frame is gone and the rail draws its own minimize/maximize/close over the same
+`tm.window-*` channels. The rail therefore takes the drag region, and everything clickable inside it opts
+out — plus a double-click on its empty space maximizes, the way every title bar does.
+
 The renderer has no filesystem: context isolation, no node integration. `window.tm` is the only way out,
 and the session library is the one thing it needs — `app/main/index.ts` owns `<userData>/runs/<id>/`,
 holding `run.json` (the artifact), `meta.json` (the library row) and `events.jsonl` (the engine's own run

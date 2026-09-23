@@ -17,6 +17,18 @@ const api = {
   },
   // renderer -> main requests
   connection: (): Promise<{ url: string }> => ipcRenderer.invoke("tm:connection"),
+  // The window's own chrome. The rail is the title bar, so these are the buttons it draws — on macOS the
+  // OS keeps its traffic lights instead and the rail leaves room for them.
+  platform: process.platform,
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke("tm:window-minimize"),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke("tm:window-toggle-maximize"),
+    close: (): Promise<void> => ipcRenderer.invoke("tm:window-close"),
+    state: (): Promise<{ maximized: boolean; fullScreen: boolean }> => ipcRenderer.invoke("tm:window-state"),
+    onState: (cb: (state: { maximized: boolean; fullScreen: boolean }) => void) => {
+      ipcRenderer.on("tm:window-state", (_e, state) => cb(state));
+    },
+  },
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("tm:pick-directory"),
   userDataPath: (): Promise<string> => ipcRenderer.invoke("tm:user-data"),
   // The session library. The renderer has no filesystem of its own; these five calls are all of it, and

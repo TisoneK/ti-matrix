@@ -17,6 +17,7 @@ import { MODELS, modelSummary } from "./core/models";
 import { project } from "./core/project";
 import { useSidecar } from "./hooks/useSidecar";
 import { usePlayback } from "./hooks/usePlayback";
+import { useWindowChrome } from "./hooks/useWindowChrome";
 import { ModelConfig } from "./shell/ConfigDrawer";
 import { ConfigDrawer } from "./shell/ConfigDrawer";
 import { CommandBar } from "./shell/CommandBar";
@@ -51,6 +52,7 @@ export function App() {
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const session = useSidecar(bookmarks);
   const { status, worlds, events, settled, confirm, headless } = session;
+  const chrome = useWindowChrome();
 
   const projection = useMemo(() => project(events, Number.MAX_SAFE_INTEGER), [events]);
   const playback = usePlayback(projection.decisions.length);
@@ -187,6 +189,7 @@ export function App() {
         libraryCount={library.length}
         configOpen={configOpen}
         onConfig={() => setConfigOpen((v) => !v)}
+        chrome={chrome}
         readouts={[
           { label: "step", value: projection.decisions.length === 0 ? "—" : `${Math.min(playback.cursor + 1, projection.decisions.length)}/${projection.decisions.length}` },
           { label: "progress", value: pct(shown.progress) },

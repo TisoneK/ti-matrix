@@ -210,17 +210,66 @@ function registerLibrary(): void {
   });
 }
 
+// ── the window's own chrome ────────────────────────────────────────────────
+//
+// The title bar is the app's top rail, not a strip of OS chrome above it: the rail already carries what a
+// title bar carries (the name, the state, the way in), so drawing it twice would be a waste of the one
+// strip of screen a run never gets back. That means the frame is ours to own, and these are the controls.
+//
+// macOS keeps its traffic lights and insets them over the rail (`hiddenInset`) — a Mac user reaches for
+// those in muscle memory, and reimplementing them would only be worse. Everywhere else the frame is gone
+// and the rail draws its own minimize/maximize/close.
+
+function registerWindow(): void {
+  const win = (): BrowserWindow | null => mainWindow;
+
+  ipcMain.handle("tm:window-minimize", () => { win()?.minimize(); });
+  ipcMain.handle("tm:window-toggle-maximize", () => {
+    const w = win();
+    if (!w) return;
+    if (w.isMaximized()) w.unmaximize(); else w.maximize();
+  });
+  ipcMain.handle("tm:window-close", () => { win()?.close(); });
+  ipcMain.handle("tm:window-state", () => ({
+    maximized: Boolean(mainWindow?.isMaximized()),
+    fullScreen: Boolean(mainWindow?.isFullScreen()),
+  }));
+}
+
+/** Both of these change how the rail should draw its button, so both are pushed rather than polled. */
+function watchWindowState(window: BrowserWindow): void {
+  const tell = (): void => {
+    window.webContents.send("tm:window-state", {
+      maximized: window.isMaximized(),
+      fullScreen: window.isFullScreen(),
+    });
+  };
+  window.on("maximize", tell);
+  window.on("unmaximize", tell);
+  window.on("enter-full-screen", tell);
+  window.on("leave-full-screen", tell);
+}
+
 function createWindow(): void {
+  const mac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
-    backgroundColor: "#0e1015",
+    minWidth: 760,
+    minHeight: 520,
+    backgroundColor: "#090c12",
+    // A one-pixel sliver of the rail showing above the traffic lights reads as a bug; the rail's own
+    // padding below is what makes room for them.
+    titleBarStyle: mac ? "hiddenInset" : "hidden",
+    trafficLightPosition: mac ? { x: 14, y: 15 } : undefined,
+    frame: mac ? undefined : false,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  watchWindowState(mainWindow);
   // Dev mode serves the renderer from Vite (hot reload); prod loads the built bundle.
   if (process.env.VITE_DEV) {
     mainWindow.loadURL("http://localhost:5173");
@@ -246,6 +295,8 @@ if (!gotLock) {
     ipcMain.handle("tm:user-data", () => app.getPath("userData"));
     // The renderer's way in: ask when you are ready, whether that is before or after the sidecar answered.
     ipcMain.handle("tm:connection", () => whenReady());
+    registerLibrary();
+    registerWindow();
 
     try {
       await startSidecar();
