@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T20:29:00Z_
+_Regenerated: 2026-09-23T20:33:29Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -23,6 +23,7 @@ _Regenerated: 2026-09-23T20:29:00Z_
 ## Backlog — High priority (the top of the queue)
 | B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
 | B-2026-09-23-7 | **Show the page the browser world is driving, and what the run actually saw of it.** The engine already has `cdp.screenshot()`, `BrowserEnvironment(screenshot_dir=...)` and a `screenshot` action; the CLI uses them via `--shots`. The gap is one call site — `worlds.py::_browser_world` never passes `screenshot_dir` — plus a panel, a frame-per-decision written beside the run (not inside the artifact), and a `window.tm` channel to read one. **The agent reads text, never pixels**, so the panel must show the page *and* what the run extracted from it, distinguishably; a bare screenshot would imply the agent saw what the viewer sees. Sharpens B-2026-09-23-2 for the browser. Brief: `.context_ledger/memory/office/plans/browser-what-it-sees-brief.md`. |
+| B-2026-09-23-8 | **Draw the branches, not just the path — the alternatives are folded and nothing renders them.** The engine probes *and scores* every candidate at each step and applies one; across the saved runs that is 186 decision points and 54 alternatives discarded. `foldDecisions` already folds them into `Decision.options: Candidate[]` with the world's answer and the evaluator's score on each — and `grep '\.options' panels/ shell/` returns nothing. Add sibling stubs at each tree node (leaves, never subtrees — they were probed once), the alternatives in the ledger row, and the count in the tree header. Brief: `.context_ledger/memory/office/plans/the-roads-not-taken-brief.md`. |
 
 _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 
