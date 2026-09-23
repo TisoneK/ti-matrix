@@ -7,3 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
+| Wren | S002 | unknown | Session start — pull + kickoff orientation, awaiting task | Working |
