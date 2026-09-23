@@ -3,7 +3,12 @@
  *
  * The shapes mirror `server/appserver/protocol.py`; the engine event payloads are
  * `EngineEvent.to_dict()` verbatim, so this file maps exactly what the engine emits and nothing else.
+ *
+ * The `runs*` channels are not TM1 — they never reach the sidecar. They are the preload's route to the
+ * main process's filesystem, which is the only way a run can outlive the window that watched it.
  */
+
+import { ArtifactMeta, RunArtifact } from "./core/types";
 
 export interface WorldField {
   name: string;
@@ -36,6 +41,14 @@ export type Frame =
 
 export type Status = "connecting" | "ready" | "running" | "crashed";
 
+/** Where a run's files live, handed over when the run begins. */
+export interface RunStartInfo {
+  id: string;
+  dir: string;
+  /** The run log the sidecar appends to — `ti_matrix.adapters.run_log` reads it back. */
+  recordPath: string | null;
+}
+
 /** What the preload exposes as `window.tm` — the renderer's whole view of the machine. */
 export interface TmApi {
   connection: () => Promise<{ url: string }>;
@@ -44,6 +57,13 @@ export interface TmApi {
   pickDirectory: () => Promise<string | null>;
   userDataPath: () => Promise<string>;
   versions?: () => { electron: string; chrome: string };
+  /** The session library. Absent in a plain browser tab, and `core/library.ts` copes with that. */
+  runsBegin?: (id: string, world: string, goal: string, config: Record<string, unknown>) => Promise<RunStartInfo | null>;
+  runsSave?: (artifact: RunArtifact, meta: ArtifactMeta) => Promise<boolean>;
+  runsList?: () => Promise<ArtifactMeta[]>;
+  runsLoad?: (id: string) => Promise<RunArtifact | null>;
+  runsDelete?: (id: string) => Promise<boolean>;
+  runsDir?: () => Promise<string>;
 }
 
 export class Sidecar {
@@ -90,8 +110,8 @@ export class Sidecar {
     return () => { this.handlers = this.handlers.filter((h) => h !== handler); };
   }
 
-  goal(text: string, world: string, config: Record<string, unknown>): void {
-    this.send({ type: "goal", text, world, config });
+  goal(text: string, world: string, config: Record<string, unknown>, options: { record?: string | null } = {}): void {
+    this.send({ type: "goal", text, world, config, ...(options.record ? { record: options.record } : {}) });
   }
 
   confirm(id: string, granted: boolean): void {

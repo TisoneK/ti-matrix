@@ -7,6 +7,11 @@
  * the renderer receives a ready-to-use ws:// URL with the token already appended, spoken over IPC
  * the preload allows and nowhere else. On quit, the child and its whole process tree go with us —
  * on Windows explicitly, because orphans do not die on their own there.
+ *
+ * It is also, and only, the filesystem: the renderer has none (context isolation, no node integration),
+ * so the session library lives here. Every id that arrives over IPC is checked against a strict pattern
+ * and resolved inside the runs directory before a file is touched — the renderer is not trusted with a
+ * path, even though in this app the caller happens to be our own code.
  */
 import { app, BrowserWindow, ipcMain } from "electron";
 import { spawn, ChildProcess } from "child_process";
@@ -16,6 +21,9 @@ import * as path from "path";
 
 const HANDSHAKE = /^TM(\d+) (\d+) ([0-9a-f]{32})$/;
 const START_TIMEOUT_MS = 15000;
+/** Run ids are minted by the renderer, so they are validated here: no dots, no separators, nothing to climb. */
+const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 let sidecar: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -105,6 +113,100 @@ function startSidecar(): Promise<void> {
       sidecar = null;
       mainWindow?.webContents.send("tm:sidecar-exit", { code });
     });
+  });
+}
+
+// ── the session library: the only place in the app that touches a disk ──────
+//
+// One directory per run under the app's user-data folder:
+//
+//   runs/<id>/run.json      the artifact — the events verbatim, the world, the model, how it ended
+//   runs/<id>/meta.json     the library row, written by the renderer at the same moment
+//   runs/<id>/events.jsonl  the engine's own run log, appended by the sidecar as the run streams
+//
+// The third file is not ours: it is `ti_matrix.adapters.run_log`'s format, so a run watched in this window
+// can be read back by the CLIs, and a run recorded by a CLI can be compared against one from the window.
+
+function runsDir(): string {
+  return path.join(app.getPath("userData"), "runs");
+}
+
+/** A run directory, or null when the id could not name one — the caller never sees a path it did not earn. */
+function runDir(id: unknown): string | null {
+  if (typeof id !== "string" || !RUN_ID.test(id)) return null;
+  const dir = path.join(runsDir(), id);
+  const root = path.resolve(runsDir());
+  return path.resolve(dir).startsWith(root + path.sep) ? dir : null;
+}
+
+async function writeJson(file: string, value: unknown): Promise<void> {
+  await fs.promises.writeFile(file, JSON.stringify(value), "utf8");
+}
+
+async function readJson<T>(file: string): Promise<T | null> {
+  try {
+    const stat = await fs.promises.stat(file);
+    if (!stat.isFile() || stat.size > MAX_ARTIFACT_BYTES) return null;
+    return JSON.parse(await fs.promises.readFile(file, "utf8")) as T;
+  } catch {
+    return null; // a missing or half-written run is not an error, it is a run that is not there
+  }
+}
+
+function registerLibrary(): void {
+  ipcMain.handle("tm:runs-dir", async () => {
+    await fs.promises.mkdir(runsDir(), { recursive: true });
+    return runsDir();
+  });
+
+  ipcMain.handle("tm:run-begin", async (_e, id: unknown) => {
+    // The renderer mints the id (it has to: the artifact saved later must carry the same one) and main
+    // only says yes or no to it, after checking it names a directory directly under runs/.
+    const dir = runDir(id);
+    if (dir === null) return null;
+    await fs.promises.mkdir(dir, { recursive: true });
+    return { id, dir, recordPath: path.join(dir, "events.jsonl") };
+  });
+
+  ipcMain.handle("tm:run-save", async (_e, artifact: unknown, meta: unknown) => {
+    const id = (artifact as { id?: unknown } | null)?.id;
+    const dir = runDir(id);
+    if (dir === null || artifact === null || typeof artifact !== "object") return false;
+    try {
+      await fs.promises.mkdir(dir, { recursive: true });
+      await writeJson(path.join(dir, "run.json"), artifact);
+      if (meta !== null && typeof meta === "object") await writeJson(path.join(dir, "meta.json"), meta);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  ipcMain.handle("tm:runs-list", async () => {
+    let names: string[] = [];
+    try {
+      names = await fs.promises.readdir(runsDir());
+    } catch {
+      return [];
+    }
+    const metas = await Promise.all(names.map((name) => readJson<Record<string, unknown>>(path.join(runsDir(), name, "meta.json"))));
+    return metas.filter((m): m is Record<string, unknown> => m !== null && typeof m["id"] === "string");
+  });
+
+  ipcMain.handle("tm:run-load", async (_e, id: unknown) => {
+    const dir = runDir(id);
+    return dir === null ? null : readJson(path.join(dir, "run.json"));
+  });
+
+  ipcMain.handle("tm:run-delete", async (_e, id: unknown) => {
+    const dir = runDir(id);
+    if (dir === null) return false;
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+      return true;
+    } catch {
+      return false;
+    }
   });
 }
 

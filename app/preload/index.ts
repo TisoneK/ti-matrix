@@ -19,6 +19,15 @@ const api = {
   connection: (): Promise<{ url: string }> => ipcRenderer.invoke("tm:connection"),
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("tm:pick-directory"),
   userDataPath: (): Promise<string> => ipcRenderer.invoke("tm:user-data"),
+  // The session library. The renderer has no filesystem of its own; these five calls are all of it, and
+  // each one is answered by a handler that validates the id before it touches a path.
+  runsBegin: (id: string, world: string, goal: string, config: unknown) =>
+    ipcRenderer.invoke("tm:run-begin", id, world, goal, config),
+  runsSave: (artifact: unknown, meta: unknown) => ipcRenderer.invoke("tm:run-save", artifact, meta),
+  runsList: () => ipcRenderer.invoke("tm:runs-list"),
+  runsLoad: (id: string) => ipcRenderer.invoke("tm:run-load", id),
+  runsDelete: (id: string) => ipcRenderer.invoke("tm:run-delete", id),
+  runsDir: (): Promise<string> => ipcRenderer.invoke("tm:runs-dir"),
   versions: () => ({ electron: process.versions.electron, chrome: process.versions.chrome }),
 };
 
