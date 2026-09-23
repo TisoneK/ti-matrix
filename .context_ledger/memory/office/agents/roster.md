@@ -7,4 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
-| Wren | S002 | unknown | Session start — pull + kickoff orientation, awaiting task | Working |
+| Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
