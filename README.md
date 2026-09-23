@@ -89,6 +89,47 @@ async for event in engine.run(Goal("which of my python files changed most recent
     print(event.to_dict())        # every step: states, actions, outcomes — never hidden reasoning
 ```
 
+## The model is a seat, not an ingredient
+
+`proposer` and `evaluator` are two seats an object sits in, and nothing says a model has to sit in either. Put
+your own logic there and the engine runs with no model at all — no latency floor, no token cost, no endpoint:
+
+```python
+class ByThreshold:                       # a proposer that decides by rule
+    def __init__(self, tools): self.tools = tools
+    async def propose(self, state, n, avoid):
+        return [Action("read_tick")] if state.progress < 1.0 else []
+
+class ByRule:                            # an evaluator that decides by rule
+    async def evaluate(self, state, outcomes):
+        return [Evaluation(1.0, True, "the exit condition was met", "rule")
+                if "exit" in o.text else Evaluation(0.3, False, "", "still watching")
+                for o in outcomes]
+
+StateEngine(env, proposer=ByThreshold(env.tools()), evaluator=ByRule(), budget=EngineBudget(max_model_calls=2))
+```
+
+The engine's own tests run this way — `ScriptedProposer`, `FixedProposer`, `KnowsTheAnswer` — so it is a
+first-class configuration rather than a trick, and it is what makes the tool usable in worlds an LLM round trip
+would be too slow or too expensive for: a threshold rule, a state machine, a spread check across two APIs, a
+lookup table. The run above takes about a millisecond and makes no network call of any kind.
+
+One naming note: `EngineBudget` counts "model calls" whether or not a model is there — it is counting
+consultations of the two seats, which is what they cost when a model fills them. A rule-based run reports the
+same number, and what binds it there is depth and branches rather than the call budget. What the engine still gives you there is everything except the judgment: the search and the
+backtrack, the frozen read-only boundary, the hard budget, the honest stop, and the record of what was read.
+
+What each seat buys, so you can choose rather than inherit:
+
+| in the seat | you get | you pay |
+|---|---|---|
+| a model (`LLMMoveProposer`, `LLMEvaluator`) | judgment about a world you cannot enumerate in code | seconds and tokens per round |
+| your own logic | speed, no cost, exact behaviour | you have to write the rule |
+
+They mix: a model proposing while a rule scores, or a rule proposing while a model judges outcomes, are both
+ordinary configurations — and the `Simulator`, `Confirmer` and `Synthesizer` seats are all optional, so a
+model-free run simply leaves them empty.
+
 ## Play with it
 
 `examples/` holds four playgrounds — one file each, standard library plus this package, no build step and nothing
@@ -357,6 +398,31 @@ this page?" and "what price is shown for EUR/USD?" both did, with answers taken 
 summary is that the record's levers are ordering and dropping, and neither bounds exploration; if you want
 open-ended runs to be cheap, the lever is the evaluator's judgment, not the memory.
 
+## When it stops with something to say
+
+A run could end with an answer only if the model declared `done`, which left a specific hole: a run that read
+its way to ten useful facts and ran out of calls reported the facts and no answer. Four runs did exactly that
+on a live site — progress climbing the whole way (0.7, 0.85, 0.95, 0.98), so nothing had stalled; the budget
+had run out holding the answer.
+
+So the budget now pays for the report as well as the search. One call proposes a fan, one scores it, and the
+**last call belongs to the answer** when there is anything to answer from — a fan that would spend it is not
+proposed. With a `Synthesizer` (`LLMSynthesizer` over any `ModelPort`; every CLI has one), a stop that has
+facts is asked once what they amount to:
+
+```
+[stopped]  reason: budget · settled: false · model_calls: 7 (budget 8)
+           partial_answer: "Based only on the facts provided… CryptonicHub is presented as a Forex &
+                            Binary Trading Platform…"
+           answer_basis:   synthesised from 6 fact(s) established by real readings; NOT verified
+```
+
+An answer with an honest label, and deliberately not `done`: the field is `partial_answer` rather than
+`answer`, `settled` stays false, and the basis says how many readings it came from. A run that answered on the
+way out has to be distinguishable from one that earned it — that distinction is the reason this engine can be
+left unattended. A synthesizer that breaks or returns nothing leaves the stop exactly as it was, with a note
+saying so, and costs nothing.
+
 ## What happened, afterwards
 
 Every step of a run is an event, and nothing used to keep them — a run existed while it printed and then it was
@@ -418,16 +484,18 @@ explains why each piece is shaped the way it is.
 project's Context Ledger, a real browser, a hidden maze, any OpenAI-compatible endpoint), the tool set, the learning
 layer, the confirmer, and four playgrounds to drive them from a page. Run end-to-end against real model providers,
 a local filesystem, a real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI — including live
-against a real site with a hosted model, where narrow goals settle in two model calls. 199 tests cover the state,
+against a real site with a hosted model, where narrow goals settle in two model calls. 206 tests cover the state,
 the loop, the terminal conditions, the host boundary, what it asks before it acts, precedence between sources of
 tools, what the engine learns from its own events, the model port, a world that makes it retreat, the WebSocket and
 DevTools plumbing, the CLI contract against the real tool, and the playgrounds. Green on Python 3.10 through 3.13,
 and on Windows with 3.11; the browser tests skip themselves where no browser is installed.
 
-Next, in rough order: **the evaluator's judgment on open-ended goals**, which the live runs said is where the cost
-actually is (the record orders and drops proposals; it cannot bound exploration), then resuming a run from
-persisted state (`--record` is the substrate, and saving the state itself is the missing half), then a wider beam
-(a real search strategy, once a second strategy exists to justify the interface).
+Next, in rough order: **making an open-ended goal settle rather than merely get answered** — the label is honest
+and the facts are there, but a `done` would be better whenever the facts really are enough, and that is the
+evaluator's bar rather than the search's (it sits behind a model's judgment: the same goal, same site, same tools
+settled in two calls under a reasoning model and never settled under a chat model). Then resuming a run from
+persisted state (`--record` is the substrate; saving the state itself is the missing half), then a wider beam (a
+real search strategy, once a second strategy exists to justify the interface).
 
 ## License
 

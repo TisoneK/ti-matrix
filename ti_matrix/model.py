@@ -1,4 +1,10 @@
-"""The model's two jobs: propose actions, and judge outcomes. It never owns the state.
+"""The model's two jobs: propose actions, and judge outcomes — over a ``ModelPort``. It never owns the state.
+
+Both are *seats*, not ingredients: ``StateEngine`` takes any object with ``propose`` or ``evaluate``, and the
+engine's own tests drive it with plain classes and no model at all. What a model buys in a seat is judgment
+about a world you cannot enumerate in code; what it costs is a round trip per round. Put your own rule in
+either seat and that seat becomes instant and free — which is the whole difference between an engine that can
+only drive slow, unstructured worlds and one that can drive a spread check.
 
 Both are written against a ``ModelPort`` — anything that can answer a prompt with text:
 
@@ -123,3 +129,31 @@ class LLMEvaluator:
                 ev = Evaluation(ev.progress, False, "", "done without a grounded answer")
             out.append(ev)
         return out
+
+
+_SYNTH_CHARS = 1200  # room for a short answer, not an essay
+
+
+class LLMSynthesizer:
+    """Asks the model what the facts a run established amount to, when it stopped without settling.
+
+    Plain text rather than JSON, because this is the last thing a run says: it is read by a person, or by
+    whatever called the run, and the engine never parses it. The prompt's one hard rule is that the answer comes
+    from the facts shown and says what is missing when they are not enough — an answer invented here would be
+    the single thing this engine exists to prevent.
+    """
+
+    def __init__(self, model: ModelPort) -> None:
+        self._model = model
+
+    async def answer(self, state: AgentState) -> str:
+        constraints = f"CONSTRAINTS: {'; '.join(state.goal.constraints)}\n" if state.goal.constraints else ""
+        facts = "\n".join(f"- {fact}" for fact in state.facts) or "- (the run established nothing)"
+        prompt = (
+            f"GOAL: {state.goal.text}\n{constraints}\n"
+            "The run has stopped without settling the goal. Using ONLY these facts, answer the goal as far as "
+            "they allow, and if they cannot answer it say plainly what is missing. Do not invent anything that "
+            "is not in them, and do not claim the goal is settled.\n\n"
+            f"FACTS:\n{facts}\n\nAnswer:"
+        )
+        return " ".join((await self._model.complete(prompt, max_chars=_SYNTH_CHARS)).split())

@@ -37,6 +37,7 @@ async def _main(a) -> int:
         env,
         proposer=session.proposer(port, env.tools()),
         evaluator=LLMEvaluator(port),
+        synthesizer=session.synthesizer(port),
         simulator=LLMSimulator(port),  # the vault's write actions are declared: judge them, do not perform
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )

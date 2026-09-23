@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+uv.lock
 # the desktop app's npm + packaging surfaces (never the pip package's problem)
 app/node_modules/
 app/dist/
