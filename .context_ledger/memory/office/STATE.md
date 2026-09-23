@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T12:45:51Z_
+_Regenerated: 2026-09-23T12:55:41Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,12 +16,13 @@ _Regenerated: 2026-09-23T12:45:51Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Session start — pull + kickoff orientation, awaiting task
+- **Nadia** (S003) — Working — Back for a follow-up: a custom title bar in the app's own chrome (and the main-branch pus…
 
 ## Current task
 - **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*
 
 ## Backlog — High priority (the top of the queue)
-| B-2026-09-23-1 | Verify the app in a real Electron window (`npm run dev:electron` against the Vite renderer) — the rebuild was driven in a browser harness with the preload stubbed, so the Electron window itself, its CSP and its userData library path are still unverified on this machine. |
+(none)
 
 _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 

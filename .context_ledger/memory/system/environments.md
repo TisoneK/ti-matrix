@@ -29,9 +29,14 @@ block (and its "last verified" date) every time you run on it again.
   `cd app && npm run typecheck && npm run test && npm run build` (129 renderer assertions, Vite build) ·
   `node -e` / `npx esbuild` are both on PATH and usable for scratch work
 - **Quirks:** no `ws` package in `app/node_modules`, so a WebSocket test harness must go through the real
-  sidecar rather than a stub server; a GUI Electron window could not be launched in this session — the
-  renderer was driven by serving `app/dist` and stubbing `window.tm`, which works and is worth repeating;
-  `pkill -f` on a backgrounded node/python script is needed to stop test servers between runs
+  sidecar rather than a stub server; `pkill -f` on a backgrounded node/python script is needed to stop test
+  servers between runs
+- **The window CAN be launched and read here** (found later, 2026-09-23): `cd app && npm run dev:vite` in one
+  shell, `VITE_DEV=1 npx electron . --remote-debugging-port=9222` in another, then drive it over CDP —
+  `curl 127.0.0.1:9222/json` for the page target and `Runtime.evaluate` / `Page.captureScreenshot` for the
+  DOM and a picture of the window's own content. `screencapture` on the desktop shows nothing (this session's
+  WindowServer does not composite the app window), but the CDP capture renders the page regardless, which is
+  what the layout checks actually need. Node 24's built-in WebSocket is enough — no dependency needed.
 
 ---
 ## Lameck — the user's Windows desktop (last verified 2026-09-23)

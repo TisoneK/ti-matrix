@@ -64,7 +64,6 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 | ID | Summary |
 |----|---------|
-| B-2026-09-23-1 | Verify the app in a real Electron window (`npm run dev:electron` against the Vite renderer) — the rebuild was driven in a browser harness with the preload stubbed, so the Electron window itself, its CSP and its userData library path are still unverified on this machine. |
 
 ### Medium Priority
 
