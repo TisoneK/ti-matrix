@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T12:56:56Z_
+_Regenerated: 2026-09-23T13:25:39Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -21,9 +21,9 @@ _Regenerated: 2026-09-23T12:56:56Z_
 - **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*
 
 ## Backlog — High priority (the top of the queue)
-(none)
+| B-2026-09-23-4 | Reconnect the renderer's socket to the sidecar. A dropped connection leaves the window on "the sidecar is not running — restart the app" with no way back except reloading the page, and a real run (minutes long, 45s between frames) would be lost mid-flight. Needs a heartbeat check plus a retry/reconnect path in `renderer/protocol.ts` (`Sidecar`) and a visible retry in the UI. |
 
-_2 medium, 0 low priority row(s) — see tasks/backlog.md_
+_1 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 0 entries
