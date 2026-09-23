@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T20:18:24Z_
+_Regenerated: 2026-09-23T20:23:47Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,12 +16,13 @@ _Regenerated: 2026-09-23T20:18:24Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
+- **Mara** (S004) — Working — Back on the board: briefing the next session's music-duplicates work
 
 ## Current task
-- **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — `origin/main` fast-forwarded to `7fabe60`; nothing outstanding*
+- **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — `origin/main` fast-forwarded; nothing outstanding from S004's own work*
 
 ## Backlog — High priority (the top of the queue)
-(none)
+| B-2026-09-23-6 | **Point the files world at duplicate songs — the next session's focus, raised by the user.** An agent that decides which files are the same recording by reading tags, hashing the audio payload (not the file), and where that cannot settle it, decoding ~2 minutes and comparing a perceptual fingerprint. Design, the boundary-test constraint that rules out mutagen/numpy/pyacoustid, the proven stdlib-only tier, and three questions to ask the user first: `.context_ledger/memory/office/plans/music-duplicates-brief.md` (working spike beside it). |
 
 _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 

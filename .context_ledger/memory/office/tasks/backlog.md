@@ -62,7 +62,9 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 ### High Priority
 
-_none — B-2026-09-23-4 (the socket that never reconnected) was closed by Mara (S004) in `2de25ce`._
+| ID | Summary |
+|----|---------|
+| B-2026-09-23-6 | **Point the files world at duplicate songs — the next session's focus, raised by the user.** An agent that decides which files are the same recording by reading tags, hashing the audio payload (not the file), and where that cannot settle it, decoding ~2 minutes and comparing a perceptual fingerprint. Design, the boundary-test constraint that rules out mutagen/numpy/pyacoustid, the proven stdlib-only tier, and three questions to ask the user first: `.context_ledger/memory/office/plans/music-duplicates-brief.md` (working spike beside it). |
 
 ### Medium Priority
 
