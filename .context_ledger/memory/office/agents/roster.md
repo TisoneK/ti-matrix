@@ -8,3 +8,4 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
+| Mara | S004 | claude-opus-5 | Reconnect the app to the sidecar — make a run actually execute end to end | Working |
