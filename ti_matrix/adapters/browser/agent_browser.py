@@ -566,6 +566,9 @@ class AgentBrowser:
 
     def _run(self, action: Action, argv: list[str], stdin: Optional[str]) -> Observation:
         command = self.argv(action.tool, action.args)
+        # `available()` resolves this name through PATH, so running the unresolved one would contradict it: on
+        # Windows the CLI is a `.cmd` shim, and CreateProcess does not read PATHEXT the way a shell does.
+        command[0] = shutil.which(command[0]) or command[0]
         timeout = _LONG_TIMEOUT_S if action.tool in _LONG else self.timeout_s
         with self._lock:  # one session: two commands at once would interleave on one browser
             try:

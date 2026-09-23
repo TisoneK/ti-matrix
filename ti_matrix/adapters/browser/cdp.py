@@ -39,7 +39,9 @@ _DEFAULT_TIMEOUT_S = 30.0
 _POLL_S = 0.05
 _MAX_TEXT = 200_000  # a page's text, bounded: an observation is not a download
 
-# Where a browser usually is. A host that has one somewhere else passes `binary=`.
+# Where a browser usually is. A host that has one somewhere else passes `binary=`. Edge is listed on macOS and
+# not on Windows, where `msedge.exe` is a launcher that exits at once and hands the browser to another process:
+# the DevTools line this adapter waits for is never written by the process it is watching.
 _CANDIDATES = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -52,6 +54,9 @@ _CANDIDATES = (
     "/snap/bin/chromium",
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe",
 )
 
 # The keys a text field actually needs. Anything else is dispatched as a bare key code, which is enough to
@@ -77,13 +82,14 @@ class CdpError(BrowserError):
 def find_browser() -> Optional[str]:
     """The first browser on this machine that this adapter knows how to drive, if any."""
     for path in _CANDIDATES:
+        path = os.path.expandvars(path)  # a per-user install is named with %LOCALAPPDATA%, not a literal path
         if Path(path).is_file() and os.access(path, os.X_OK):
             return path
-    for name in ("google-chrome", "chromium", "chromium-browser", "chrome"):  # last resort: PATH
-        for directory in os.environ.get("PATH", "").split(os.pathsep):
-            candidate = Path(directory) / name
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                return str(candidate)
+    for name in ("google-chrome", "chromium", "chromium-browser", "chrome",  # last resort: PATH
+                 "brave", "brave-browser"):
+        found = shutil.which(name)  # `which` reads PATHEXT, so a bare `brave` finds brave.exe on Windows
+        if found:
+            return found
     return None
 
 
