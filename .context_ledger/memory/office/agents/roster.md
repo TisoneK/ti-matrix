@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
-| Mara | S004 | claude-opus-5 | Back on the board: briefing the next session's music-duplicates work | Working |

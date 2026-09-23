@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T20:23:47Z_
+_Regenerated: 2026-09-23T20:29:00Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,20 +16,20 @@ _Regenerated: 2026-09-23T20:23:47Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
-- **Mara** (S004) — Working — Back on the board: briefing the next session's music-duplicates work
 
 ## Current task
 - **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — `origin/main` fast-forwarded; nothing outstanding from S004's own work*
 
 ## Backlog — High priority (the top of the queue)
-| B-2026-09-23-6 | **Point the files world at duplicate songs — the next session's focus, raised by the user.** An agent that decides which files are the same recording by reading tags, hashing the audio payload (not the file), and where that cannot settle it, decoding ~2 minutes and comparing a perceptual fingerprint. Design, the boundary-test constraint that rules out mutagen/numpy/pyacoustid, the proven stdlib-only tier, and three questions to ask the user first: `.context_ledger/memory/office/plans/music-duplicates-brief.md` (working spike beside it). |
+| B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
+| B-2026-09-23-7 | **Show the page the browser world is driving, and what the run actually saw of it.** The engine already has `cdp.screenshot()`, `BrowserEnvironment(screenshot_dir=...)` and a `screenshot` action; the CLI uses them via `--shots`. The gap is one call site — `worlds.py::_browser_world` never passes `screenshot_dir` — plus a panel, a frame-per-decision written beside the run (not inside the artifact), and a `window.tm` channel to read one. **The agent reads text, never pixels**, so the panel must show the page *and* what the run extracted from it, distinguishably; a bare screenshot would imply the agent saw what the viewer sees. Sharpens B-2026-09-23-2 for the browser. Brief: `.context_ledger/memory/office/plans/browser-what-it-sees-brief.md`. |
 
 _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 0 entries
 - inefficiencies/log.md (project code/env friction): 1 entry, last added 2026-09-23
-- plans/decisions.md (ADRs in force — respected, not relitigated): 1 entry, last added 2026-09-23
+- plans/decisions.md (ADRs in force — respected, not relitigated): 2 entries, last added 2026-09-23
 
 ## Collaboration
 - 6 event(s) on file; most recent: `20260923T145847Z-Wren-eb33e108.json`
