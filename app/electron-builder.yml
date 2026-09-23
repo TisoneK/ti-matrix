@@ -1,0 +1,13 @@
+appId: dev.tisonek.ti-matrix
+productName: Ti Matrix
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+extraResources:
+  # The PyInstaller one-dir bundle, built by the CI (or scripts/build-sidecar) into this path.
+  - from: release/sidecar
+    to: sidecar
+    filter: ["**/*"]
+# Codesigning/notarization is a later milestone; unsigned artifacts for now.

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ti-matrix-server"
+version = "0.1.0"
+description = "The desktop app's Python sidecar — hosts a ti-matrix StateEngine behind a loopback WebSocket."
+requires-python = ">=3.10"
+license = "MIT"            # SPDX (PEP 639); the full text is in ../LICENSE
+license-files = ["../LICENSE"]
+dependencies = [
+    "ti-matrix>=0.1",
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pyinstaller>=6.0"]
+
+[project.scripts]
+ti-matrix-server = "appserver.main:main"
+
+[tool.setuptools.packages.find]
+include = ["appserver*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

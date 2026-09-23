@@ -1,0 +1,326 @@
+"""The sidecar: one loopback server, one run at a time, the engine's events as frames.
+
+What this process is. The desktop app spawns it as a child, reads one line from its stdout —
+`TM1 <port> <token>` — and from then on speaks only the frames in `protocol.py` over a WebSocket to
+`ws://127.0.0.1:<port>/ws?token=<token>`. Everything else is bookkeeping around that: the two HTTP
+endpoints a renderer needs besides the socket (`/healthz`, `/worlds`), and the one-run-at-a-time rule.
+
+The engine is the same `StateEngine` the CLIs drive, and it knows nothing about the server around it:
+the world comes from `worlds.py`, the model from the goal frame's config, the confirmer from
+`confirm_ws.py`, and the run's events stream through `events.py` in exactly the shapes
+`ti_matrix.adapters.run_log` writes to disk — the app's live view and the run's record are one format.
+
+Learning and recording are per-goal flags, straight from `session.py`'s semantics: `remember` loads a
+statistics file before the run and saves it back after (even when the run failed), `record` appends
+every event as a JSON line. The frames carry paths because the sidecar has no opinions about where an
+app keeps its files; the desktop app points both at its user-data directory.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Optional
+
+from aiohttp import WSMsgType, web
+
+from . import events as events_mod
+from . import protocol, worlds
+from .confirm_ws import WsConfirmer, parse_confirm_response
+from .protocol import decode, encode, parse_goal
+
+WS_AUTH = "token"
+
+
+class RunState:
+    """The one run this server may be driving, and what the socket handler needs to reach."""
+
+    def __init__(self) -> None:
+        self.task: Optional[asyncio.Task] = None
+        self.stop = False
+        self.environment: Any = None             # built by the goal frame, before the run starts
+        self.confirmer = WsConfirmer(send=lambda frame: None)  # re-bound per socket
+        self.recorder: Any = None                # the ledger's LedgerRecorder, when write-back was asked
+
+    @property
+    def running(self) -> bool:
+        return self.task is not None and not self.task.done()
+
+
+TOKEN_KEY: Any = web.AppKey("token", str)
+RUN_KEY: Any = web.AppKey("run", RunState)
+
+
+# ── building one run's engine ───────────────────────────────────────────────
+
+
+def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
+                  confirmer: WsConfirmer, stats_path: Optional[Path]):
+    """The engine for one run: the model from config, the world from the registry, the learning record
+    when a path for it exists — the wiring the CLIs do via `session.py`, stated plainly."""
+    from ti_matrix.adapters.openai_compat import OpenAICompatModel
+    from ti_matrix.learning import LearningProposer, Statistics
+    from ti_matrix.model import LLMEvaluator, LLMMoveProposer
+    from ti_matrix.search import EngineBudget, StateEngine
+    from ti_matrix.tools import EngineTools
+
+    base_url = str(config.get("base_url", "")).strip()
+    model_name = str(config.get("model", "")).strip()
+    if not base_url or not model_name:
+        raise ValueError("the goal config needs base_url and model (any OpenAI-compatible endpoint)")
+    key_env = str(config.get("api_key_env", "")).strip()
+    model = OpenAICompatModel(base_url, model_name, api_key_env=key_env or None)
+
+    statistics = Statistics()
+    environment = env
+    if stats_path is not None:
+        from ti_matrix.adapters import stats_file
+        if stats_path.exists():
+            statistics = stats_file.load(stats_path)
+        environment = EngineTools(env, memory=statistics)
+
+    budget_kwargs = {k: v for k, v in budget_in.items() if k in protocol.BUDGET_FIELDS}
+    proposer: Any = LLMMoveProposer(model, env.tools())
+    if stats_path is not None:
+        proposer = LearningProposer(proposer, statistics)
+    engine = StateEngine(environment, proposer=proposer, evaluator=LLMEvaluator(model),
+                         confirmer=confirmer, budget=EngineBudget(**budget_kwargs))
+    return engine, statistics
+
+
+def _maybe_recorder(world_name: str, config: dict[str, Any]) -> Any:
+    """The ledger's write-back, only when asked for. Writing the vault is host work, never an action."""
+    if world_name != "ledger" or not config.get("write_back"):
+        return None
+    from ti_matrix.adapters.context_ledger import LedgerRecorder
+
+    project = str(config.get("project", "")).strip()
+    if not project:
+        return None
+    return LedgerRecorder(project, model=str(config.get("model", "")))
+
+
+# ── the run's lifecycle on the socket ───────────────────────────────────────
+
+
+async def _send_frame(ws: web.WebSocketResponse, frame: str) -> None:
+    try:
+        await ws.send_str(frame)
+    except Exception:  # noqa: BLE001 — a socket that died mid-frame is not a crash
+        pass
+
+
+def answer_of(events: list[dict[str, Any]]) -> Optional[str]:
+    for ev in reversed(events):
+        if ev.get("kind") == "done":
+            return str(ev.get("answer") or "")
+    return None
+
+
+def reason_of(events: list[dict[str, Any]]) -> Optional[str]:
+    for ev in reversed(events):
+        if ev.get("kind") == "stopped":
+            return str(ev.get("reason") or "stopped")
+    return None
+
+
+async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world_name: str,
+                    config: dict[str, Any], budget_in: dict[str, int],
+                    stats_path: Optional[Path], record_path: Optional[Path]) -> None:
+    """Stream one goal to its end, then send the one `settled` frame that sums it up."""
+    state.stop = False
+    collected: list[dict[str, Any]] = []
+    answer: Optional[str] = None
+    reason: Optional[str] = None
+
+    async def on_event(frame: dict[str, Any]) -> None:
+        statistics.observe(_event_like(frame))  # in-run learning, whether or not it is persisted
+        collected.append(dict(frame))
+        if record_path is not None:
+            from ti_matrix.adapters import run_log
+            run_log.write(record_path, frame)
+        await _send_frame(ws, encode("event", **frame))
+
+    async def on_done(a: Optional[str], r: Optional[str]) -> None:
+        nonlocal answer, reason
+        answer, reason = a, r
+
+    try:
+        engine, statistics = _build_engine(state.environment, config, budget_in,
+                                           state.confirmer, stats_path)
+    except ValueError as exc:  # a config the engine cannot be built from is an error frame, not a dead task
+        await _send_frame(ws, encode("error", message=str(exc)))
+        return
+    try:
+        await events_mod.stream_run(engine, _goal(text), on_event=on_event,
+                                    on_done=on_done, stop_requested=lambda: state.stop)
+    except asyncio.CancelledError:
+        # A client stop cancels the task: it unwinds to here, is recorded as stopped, and the
+        # finally below still sends the settled frame with the same tail work any run gets.
+        if reason is None and state.stop:
+            reason = "stopped"
+        raise
+    except Exception as exc:  # noqa: BLE001 — a run's failure is a frame, not a dead task
+        reason = f"error: {exc}"
+    finally:
+        learned = ""
+        if stats_path is not None:
+            from ti_matrix.adapters import stats_file
+            stats_file.save(stats_path, statistics)
+            learned = f"remembered: {len(statistics.by_tool)} tool(s) known in {stats_path}"
+        recorded = None
+        if state.recorder is not None:
+            recorded = state.recorder.record(text).to_text()
+        await _send_frame(ws, encode(
+            "settled",
+            answer=answer, reason=reason,
+            events=len(collected),
+            summary=events_mod.events_digest(collected),
+            record=recorded, learned=learned or None,
+        ))
+
+
+def _goal(text: str):
+    from ti_matrix.protocols import Goal
+    return Goal(text)
+
+
+def _event_like(frame: dict[str, Any]):
+    """A wire frame reshaped as `Statistics.observe` expects it — it reads only kind and data."""
+    return SimpleNamespace(kind=frame.get("kind"), data=frame)
+
+
+# ── HTTP + WS handlers ──────────────────────────────────────────────────────
+
+
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("ti-matrix-server")
+    except Exception:  # noqa: BLE001 — a source checkout has no installed metadata
+        return "0.1.0"
+
+
+async def healthz(_request: web.Request) -> web.Response:
+    return web.json_response({"ok": True, "protocol": protocol.PROTOCOL, "version": _version()})
+
+
+async def worlds_handler(_request: web.Request) -> web.Response:
+    return web.json_response({"worlds": worlds.describe()})
+
+
+async def ws_handler(request: web.Request) -> web.WebSocketResponse:
+    if request.query.get(WS_AUTH) != request.app[TOKEN_KEY]:
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)  # complete the upgrade, then close it — there is no conversation
+        await ws.close(code=1008, message=b"bad token")  # 1008: RFC 6455 policy violation
+        return ws
+    ws = web.WebSocketResponse(heartbeat=30)
+    await ws.prepare(request)
+
+    state: RunState = request.app[RUN_KEY]
+    loop = asyncio.get_running_loop()
+    state.confirmer = WsConfirmer(send=lambda frame: loop.create_task(_send_frame(ws, frame)))
+    await _send_frame(ws, encode("worlds", worlds=worlds.describe()))
+
+    async def start_goal(body: dict[str, Any]) -> None:
+        try:
+            text, world_name, config, budget_in = parse_goal(body)
+            state.environment = worlds.build(world_name, config)
+        except ValueError as exc:
+            await _send_frame(ws, encode("error", message=str(exc)))
+            return
+        state.recorder = _maybe_recorder(world_name, config)
+        stats = Path(str(body["remember"])).expanduser() if body.get("remember") else None
+        record = Path(str(body["record"])).expanduser() if body.get("record") else None
+        state.stop = False
+        state.task = loop.create_task(
+            _run_goal(state, ws, text, world_name, config, budget_in, stats, record))
+
+    async for msg in ws:
+        if msg.type == WSMsgType.TEXT:
+            body = decode(msg.data)
+            if body is None:
+                continue  # a malformed frame is dropped, never a crash
+            kind = body.get("type")
+            if kind == "goal":
+                if state.running:
+                    await _send_frame(ws, encode("error",
+                                                 message="a run is already in flight — stop it first"))
+                else:
+                    await start_goal(body)
+            elif kind == "confirm-response":
+                parsed = parse_confirm_response(body)
+                if parsed is not None:
+                    state.confirmer.resolve(*parsed)
+            elif kind == "stop":
+                if state.running:
+                    state.stop = True
+                    state.task.cancel()  # a run waiting on the model stops now, not at its next event
+                else:
+                    await _send_frame(ws, encode("error", message="nothing is running"))
+            else:
+                await _send_frame(ws, encode("error", message=f"unknown frame type: {kind!r}"))
+        elif msg.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSING):
+            break
+
+    # The socket is gone: open confirmations are refusals, and a run in flight is finished
+    # (tail-awaited) rather than abandoned mid-write to the learning record.
+    state.confirmer.close()
+    if state.running:
+        state.stop = True
+        state.task.cancel()
+        try:
+            await state.task
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # noqa: BLE001 — the run already reported itself; never crash the handler
+            pass
+    return ws
+
+
+def create_app(token: str) -> web.Application:
+    app = web.Application()
+    app[TOKEN_KEY] = token
+    app[RUN_KEY] = RunState()
+    app.router.add_get("/healthz", healthz)
+    app.router.add_get("/worlds", worlds_handler)
+    app.router.add_get("/ws", ws_handler)
+    return app
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    ap = argparse.ArgumentParser(description="the ti-matrix desktop app's sidecar")
+    ap.add_argument("--port", type=int, default=0, help="bind this port (default: an ephemeral one)")
+    ap.add_argument("--quiet", action="store_true", help="do not print the handshake line")
+    args = ap.parse_args(argv)
+
+    # A parent process reads exactly one line from stdout — keep the pipe clean and encodable even
+    # on a Windows console defaulting to cp1252.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    token = protocol.new_token()
+    app = create_app(token)
+
+    async def _serve() -> None:
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", args.port)
+        await site.start()
+        bound = runner.addresses[0][1] if runner.addresses else args.port
+        if not args.quiet:
+            print(protocol.handshake_line(bound, token), flush=True)
+        await asyncio.Event().wait()  # killed by the parent; nothing else ends this
+
+    try:
+        asyncio.run(_serve())
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

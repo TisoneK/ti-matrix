@@ -5,3 +5,11 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+# the desktop app's npm + packaging surfaces (never the pip package's problem)
+app/node_modules/
+app/dist/
+app/dist-electron/
+app/release/
+server/build/
+# the sidecar bundle electron-builder consumes is a build artifact
+app/release/sidecar/
