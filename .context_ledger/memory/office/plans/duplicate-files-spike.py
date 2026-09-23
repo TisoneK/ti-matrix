@@ -1,14 +1,17 @@
 """Spike (Mara, S004, 2026-09-23) — kept because it proves the one risky claim in the brief.
 
-Question: can an adapter that may import NOTHING outside the standard library
-(tests/test_boundary.py) tell "same recording, different tags" from "different recording"?
+Question: can code that may import NOTHING outside the standard library
+(tests/test_boundary.py) tell "same content, different metadata" from "different content"?
 
-Answer: yes, and this is the whole of it. Parse the ID3v2 header by hand to find where the
-audio payload starts, then hash the payload rather than the file. Tags stop mattering; the
-audio decides. Run it with SP=<some writable dir> python music-duplicates-spike.py.
+Answer: yes, and this is the whole move — find where the PAYLOAD begins, and hash from
+there instead of hashing the file. Metadata stops mattering; the content decides. Shown
+here on audio because that was the motivating case, but it is the same move for every
+family in the brief: skip the ID3 tag, the EXIF block, the zip's timestamps.
 
-What it does NOT do is Tier 2 — telling a re-encode of a recording from a different
-recording. That needs a decoder; see the brief.
+Run it with SP=<some writable dir> python duplicate-files-spike.py.
+
+What it does NOT do is the expensive rung — telling a re-encode of something from a
+different something. That needs a decoder, and this machine has no ffmpeg; see the brief.
 """
 import hashlib, math, os, struct, wave
 

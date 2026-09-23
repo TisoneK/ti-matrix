@@ -64,7 +64,7 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 | ID | Summary |
 |----|---------|
-| B-2026-09-23-6 | **Point the files world at duplicate songs — the next session's focus, raised by the user.** An agent that decides which files are the same recording by reading tags, hashing the audio payload (not the file), and where that cannot settle it, decoding ~2 minutes and comparing a perceptual fingerprint. Design, the boundary-test constraint that rules out mutagen/numpy/pyacoustid, the proven stdlib-only tier, and three questions to ask the user first: `.context_ledger/memory/office/plans/music-duplicates-brief.md` (working spike beside it). |
+| B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
 
 ### Medium Priority
 
