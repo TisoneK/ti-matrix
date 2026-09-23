@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from "react";
 import { Decision, RunArtifact } from "../core/types";
+import { modelLabel } from "../core/models";
 import { MazeKnowledge, boundsOf, parseCellKey } from "../core/knowledge";
 import { project } from "../core/project";
 import { Confidence, Empty, Flags, PaneBody, PaneHead, Sparkline } from "../ui/atoms";
@@ -50,7 +51,7 @@ export function ComparePanel({ left, right, onPick, onExit }: {
         <PaneBody pad>
           <Empty title={!left && !right ? "Pick two runs" : "Pick one more run"}>
             Choose two saved runs — the same seed against two models is the comparison worth making — and
-            this view puts their maps, trees and ledgers under one cursor.
+            this view puts their maps, trees and decisions under one cursor.
           </Empty>
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
             <Button onClick={() => onPick("left")}>{left ? `left: ${left.name}` : "choose the left run"}</Button>
@@ -91,8 +92,8 @@ export function ComparePanel({ left, right, onPick, onExit }: {
         {sameShape && overlay ? (
           <div className="compare-col">
             <div className="overlay-legend">
-              <span><i className="dot a" />{left.model || "left"} — step {Math.min(cursor + 1, a!.decisions.length)}/{a!.decisions.length}</span>
-              <span><i className="dot b" />{right.model || "right"} — step {Math.min(cursor + 1, b!.decisions.length)}/{b!.decisions.length}</span>
+              <span><i className="dot a" />{modelLabel(left.model) || "left"} — step {Math.min(cursor + 1, a!.decisions.length)}/{a!.decisions.length}</span>
+              <span><i className="dot b" />{modelLabel(right.model) || "right"} — step {Math.min(cursor + 1, b!.decisions.length)}/{b!.decisions.length}</span>
               <span className="dim">lighter squares are the union of what both have seen</span>
             </div>
             <PaneBody>
@@ -100,16 +101,16 @@ export function ComparePanel({ left, right, onPick, onExit }: {
             </PaneBody>
             <div className="inspector">
               <div className="inspector-grid">
-                <Column title={`${left.model || "left"} at this step`} decision={a!.at} />
-                <Column title={`${right.model || "right"} at this step`} decision={b!.at} />
+                <Column title={`${modelLabel(left.model) || "left"} at this step`} decision={a!.at} />
+                <Column title={`${modelLabel(right.model) || "right"} at this step`} decision={b!.at} />
               </div>
             </div>
           </div>
         ) : (
           <>
-            <Column2 title={left.model || "left"} accent="a" artifact={left} decisions={a!.decisions} at={a!.at}
+            <Column2 title={modelLabel(left.model) || "left"} accent="a" artifact={left} decisions={a!.decisions} at={a!.at}
                      knowledge={a!.knowledge} cursor={cursor} />
-            <Column2 title={right.model || "right"} accent="b" artifact={right} decisions={b!.decisions} at={b!.at}
+            <Column2 title={modelLabel(right.model) || "right"} accent="b" artifact={right} decisions={b!.decisions} at={b!.at}
                      knowledge={b!.knowledge} cursor={cursor} />
           </>
         )}

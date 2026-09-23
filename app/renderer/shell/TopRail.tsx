@@ -44,7 +44,10 @@ export function TopRail({ view, onView, status, running, readouts, libraryCount,
     >
       <div className="brand">
         <h1><Wordmark /></h1>
-        <span className="ver">TM1</span>
+        {/* The wire protocol this window and the engine agree on. It is a real fact and worth showing —
+            a mismatch is the difference between "slow" and "these two cannot talk" — but as four bare
+            characters beside the name it was decoration. The title is what turns it back into a fact. */}
+        <span className="ver" title="TM1 — the protocol this window and the engine speak to each other">TM1</span>
       </div>
 
       <StatusLamp status={status} detail={running ? "running" : undefined} />

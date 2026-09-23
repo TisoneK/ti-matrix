@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from "react";
 import { ArtifactMeta } from "../core/types";
+import { modelLabel } from "../core/models";
 import { Badge, Empty, PaneHead } from "../ui/atoms";
 import { Button } from "../ui/controls";
 
@@ -111,7 +112,7 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
                   <td className="mono dim">{when(m.startedAt)}</td>
                   <td>{m.world}</td>
                   <td className="mono">{m.seed ?? "—"}</td>
-                  <td className="mono nowrap">{m.model || "—"}</td>
+                  <td className="mono nowrap">{modelLabel(m.model)}</td>
                   <td className="num">{m.decisions}</td>
                   <td className="num">{m.backtracks}</td>
                   <td className="num" style={{ color: m.surprises > 0 ? "var(--red)" : undefined }}>{m.surprises}</td>

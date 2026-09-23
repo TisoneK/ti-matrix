@@ -62,3 +62,36 @@ relitigating them. To reverse one, append a new ADR that supersedes it.
   - Pure-Python perceptual hashing is slower than numpy, which is acceptable only because the
     fingerprints are tiny — a 32×32 grid, not a spectrogram. If that stops being true, this ADR is the
     thing to revisit, not the boundary test.
+---
+## ADR-3: A name reaches the UI only if a stranger can act on it (2026-09-23)
+- **Status:** accepted
+- **Context:** The user kept finding internal vocabulary on screen, one term at a time: "Context Ledger"
+  and "the vault" as a world nobody outside this repo's engineering protocol could read; "sidecar" —
+  a deployment-pattern name — as the word for the thing that had stopped; `builtin`, a wire value,
+  printed raw in the library's model column beside `deepseek-flash`; "Ledger" naming two unrelated
+  things on one screen; and the same event called "retreat" in the tree header and "backtrack" in the
+  legend directly below it. Each was found by a person looking at the window, never by a test — the
+  typecheck and 149 renderer assertions passed through all of it.
+- **Decision:** A name is allowed on screen only if someone who has never seen the codebase can act on
+  it. Three questions, in order:
+  1. **Did the user choose it or can they change it?** (a world, a model, a goal, a budget, a seed) →
+     show it, in their words.
+  2. **Must they react to it?** (the engine stopped, a run hit its budget, a probe was refused) → show
+     it, and say what to do.
+  3. **Does it name how we built it?** (sidecar, adapter, probe, fold, projection, TM1, `builtin`,
+     event kinds) → internal. It belongs in code, comments and logs, not in the window.
+  The failure mode is not "jargon" — it is **naming the mechanism instead of the thing**. "Sidecar"
+  names our process topology; "the engine" names what it does for the person watching. Same process,
+  and only one of them is actionable.
+- **Consequences:**
+  - **One concept, one word, everywhere it appears.** Wire values and event kinds keep their internal
+    names (`backtrack`, `builtin`, `ledger`); the UI gets one label, applied through a helper
+    (`modelLabel`, `FLAGS[...].label`) rather than by printing the raw value.
+  - A raw identifier rendered straight into a cell is the tell. `{m.model}` printed `builtin`; it now
+    goes through `modelLabel`. Look for this whenever a wire value meets a template.
+  - **Worlds are named for the job, never the mechanism.** "The maze", "Local files", "Real browser"
+    are the strongest vocabulary the product has and are the model to follow. The queued work is where
+    this will be tested: the file-deduplication world is named for finding duplicates, not for
+    `dedupe/`, `inspect/` or hashing; chess is "Chess".
+  - **This cannot be tested, so it has to be looked at.** Every instance above survived a green suite.
+    A visual pass in the real window is part of finishing a UI change, not an optional extra.

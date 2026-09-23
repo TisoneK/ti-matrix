@@ -165,7 +165,7 @@ export function App() {
   const blocked = status === "crashed"
     ? (session.trouble ?? "the engine is not running")
     : status === "reconnecting" ? "the engine dropped — reconnecting…"
-      : status === "connecting" ? "reaching the sidecar…"
+      : status === "connecting" ? "starting the engine…"
         : running ? "a run is already in flight"
           : goal.trim() ? "" : "type a goal to run";
   // Trying again only helps when there is something to try: inside the app, with the socket down.
@@ -330,7 +330,7 @@ export function App() {
               <TreePanel tree={shown.tree} decisions={shown.decisions} cursor={playback.cursor} onSeek={playback.at}
                          onHover={setHover} peek={hover} />
             </section>
-            <section className="pane" aria-label="decision ledger">
+            <section className="pane" aria-label="decisions">
               <LogPanel decisions={shown.decisions} trust={shown.trust} cursor={playback.cursor}
                         bookmarks={playback.bookmarks} onSeek={playback.at} onBookmark={playback.toggleBookmark}
                         onHover={setHover} peek={hover} />

@@ -61,6 +61,15 @@ export function providerName(baseUrl: string): string {
   return host.replace(/^www\./, "").split(":")[0] || host;
 }
 
+/**
+ * How a model is named wherever a run is listed. `builtin` is a wire value — the string the goal frame
+ * carries — and it was being printed raw in the library's model column, a lowercase identifier sitting
+ * in a list beside "deepseek-flash" and "qwen2.5:7b" as though it were another vendor's model. It is the
+ * absence of one, and it should read that way everywhere it is shown.
+ */
+export const modelLabel = (model: string): string =>
+  (isBuiltin(model) ? "built-in rules" : model || "—");
+
 /** The one-line summary the settings button shows, so the model in play is visible without opening it. */
 export function modelSummary(config: Record<string, string | boolean>): string {
   const model = String(config["model"] ?? MODELS.defaults["model"]);

@@ -42,8 +42,11 @@ export const FLAGS: Record<Flag, FlagSpec> = {
     filled: false,
   },
   backtrack: {
+    // The id stays `backtrack` — that is the engine's event kind and the wire vocabulary. The label is
+    // "retreat" because two other places on the same screen already said retreat: the tree header reads
+    // "39 states · 1 retreat" while the legend under it read "backtrack 1", for the same event.
     id: "backtrack",
-    label: "backtrack",
+    label: "retreat",
     claim: "It gave a branch up and retreated to an ancestor to try something else.",
     path: "M0.6 0.6 L0.6 9.4 M0.6 0.6 L5.4 5 L0.6 9.4",
     filled: false,

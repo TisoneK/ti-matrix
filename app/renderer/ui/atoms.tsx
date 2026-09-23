@@ -139,12 +139,16 @@ export function Wordmark({ className = "" }: { className?: string }) {
 
 /* ── status ─────────────────────────────────────────────────────────────── */
 
+/* "Sidecar" is what this process is called in the codebase, and for a while it was what the window
+   called it too — "reaching the sidecar", "sidecar gone". It is a deployment-pattern name: it tells a
+   reader nothing unless they already know the architecture, and the same thing was being called "the
+   engine" three strings away. One word, and it is the one a person can act on. */
 const STATUS_TEXT: Record<Status, string> = {
-  connecting: "reaching the sidecar",
+  connecting: "starting the engine",
   ready: "idle",
   running: "running",
   reconnecting: "reconnecting…",
-  crashed: "sidecar gone",
+  crashed: "engine stopped",
 };
 
 export function StatusLamp({ status, detail }: { status: Status; detail?: string }) {
