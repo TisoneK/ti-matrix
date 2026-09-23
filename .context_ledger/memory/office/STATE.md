@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T09:08:56Z_
+_Regenerated: 2026-09-23T10:34:20Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -15,7 +15,7 @@ _Regenerated: 2026-09-23T09:08:56Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-(office empty — no live roster rows)
+- **Wren** (S002) — Working — Session start — pull + kickoff orientation, awaiting task
 
 ## Current task
 - **2026-09-23 — Buffy / unknown (S001)** — desktop-app skeleton (server/ sidecar + app/ Electron shell + CI) — built, verified, committed and pushed; session closed — *idle*
