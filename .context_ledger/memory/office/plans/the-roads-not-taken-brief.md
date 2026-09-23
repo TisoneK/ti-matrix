@@ -92,6 +92,13 @@ whiskers — the world itself barely branches. This pairs with **B-2026-09-23-9*
 world with ~35 moves per position). Neither works alone: stubs without a branching world
 draw nothing; a branching world without stubs hides 34 weighed alternatives per node.
 
+## And a third thing the tree will have to draw
+
+`DESIGN.md`: *"the beam of one walks a line while the log describes a graph."* Today the log is a tree
+because the engine cannot tell it has been somewhere before (B-2026-09-23-12). Once it can, a node
+reachable two ways has two parents and the panel needs a **join** as well as the sibling stubs here.
+Worth knowing now so the layout is not written assuming one parent per node.
+
 ## Why this matters more than it sounds
 
 This is the product's actual pitch. "Watch an AI agent think — and check whether to
