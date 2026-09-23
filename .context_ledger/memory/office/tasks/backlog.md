@@ -62,14 +62,13 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 ### High Priority
 
-| ID | Summary |
-|----|---------|
-| B-2026-09-23-4 | Reconnect the renderer's socket to the sidecar. A dropped connection leaves the window on "the sidecar is not running — restart the app" with no way back except reloading the page, and a real run (minutes long, 45s between frames) would be lost mid-flight. Needs a heartbeat check plus a retry/reconnect path in `renderer/protocol.ts` (`Sidecar`) and a visible retry in the UI. |
+_none — B-2026-09-23-4 (the socket that never reconnected) was closed by Mara (S004) in `2de25ce`._
 
 ### Medium Priority
 
 | ID | Summary |
 |----|---------|
+| B-2026-09-23-5 | The endpoint-backed path is weak on small models, independently of the sidecar. Measured this session against a real local `phi4-mini:latest`: one proposer call took 48s and returned two moves naming cell `0,0` (a wall — it is not in the maze), the evaluator then scored a successful, informative `entry()` probe at 0.0, and `NothingImproves` stopped the run at 9 events with `no_progress`. So a viewer who configures a small model correctly still gets a near-empty window. Two separable fixes: the proposer prompt never shows the model which cells it has actually entered (the maze states them in every fact, `LLMMoveProposer` just renders the state), and a run whose very first probe succeeds should not be able to stop on `no_progress` at depth 0. `ti_matrix/model.py`, `ti_matrix/search.py`. |
 | B-2026-09-23-2 | Rebuild the prose worlds' panels (files/ledger/browser) as rich surfaces — the parsers are intact and tested in `app/renderer/core/worlds/`, but `panels/WorldSurface.tsx` shows less than the views the old renderer had (directory tree, vault report, page view). See `.context_ledger/memory/office/reviews/2026-09-23-review-2.md`. |
 
 ### Low Priority

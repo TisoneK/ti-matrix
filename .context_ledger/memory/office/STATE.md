@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-23T19:31:44Z_
+_Regenerated: 2026-09-23T20:13:42Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,15 +16,14 @@ _Regenerated: 2026-09-23T19:31:44Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
-- **Mara** (S004) — Working — Reconnect the app to the sidecar — make a run actually execute end to end
 
 ## Current task
-- **2026-09-23 — Nadia / deepseek-flash (S003)** — the app renderer rebuilt from the ground up as a visualization-first run inspector — done, committed, pushed — *idle*
+- **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — but `origin/main` still needs the fast-forward from `app-ui-rebuild` (the sandbox blocked that push)*
 
 ## Backlog — High priority (the top of the queue)
-| B-2026-09-23-4 | Reconnect the renderer's socket to the sidecar. A dropped connection leaves the window on "the sidecar is not running — restart the app" with no way back except reloading the page, and a real run (minutes long, 45s between frames) would be lost mid-flight. Needs a heartbeat check plus a retry/reconnect path in `renderer/protocol.ts` (`Sidecar`) and a visible retry in the UI. |
+(none)
 
-_1 medium, 0 low priority row(s) — see tasks/backlog.md_
+_2 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 0 entries
