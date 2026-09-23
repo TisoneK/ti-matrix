@@ -16,6 +16,7 @@ const api = {
     ipcRenderer.on("tm:sidecar-exit", (_e, info) => cb(info));
   },
   // renderer -> main requests
+  connection: (): Promise<{ url: string }> => ipcRenderer.invoke("tm:connection"),
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("tm:pick-directory"),
   userDataPath: (): Promise<string> => ipcRenderer.invoke("tm:user-data"),
   versions: () => ({ electron: process.versions.electron, chrome: process.versions.chrome }),

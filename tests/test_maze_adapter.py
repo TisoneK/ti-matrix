@@ -106,6 +106,17 @@ async def test_walls_and_unentered_cells_are_refused_not_raised(env):
 
 
 @pytest.mark.asyncio
+async def test_a_cell_is_read_the_way_the_action_specs_write_it(env):
+    """The specs hand the model `<x,y>`; the bare `x,y` is what every caller here writes. Both land."""
+    assert (await env.probe(Action("entry", {}))).ok
+    for written in ("1,1", "<1,1>", " 1 , 1 ", "(1,1)"):
+        looked = await env.probe(Action("look", {"cell": written}))
+        assert looked.ok, f"{written!r} was refused"
+    stepped = await env.probe(Action("step", {"cell": "<1,1>", "direction": "south"}))
+    assert stepped.ok and "cell 1,2" in stepped.text
+
+
+@pytest.mark.asyncio
 async def test_a_step_hands_back_the_far_side_and_the_exit_announces_itself(env):
     walked = await env.probe(Action("step", {"cell": "1,1", "direction": "south"}))
     assert walked.ok and "from 1,1 south" in walked.text and "cell 1,2" in walked.text

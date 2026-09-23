@@ -36,17 +36,44 @@ export type Frame =
 
 export type Status = "connecting" | "ready" | "running" | "crashed";
 
+/** What the preload exposes as `window.tm` — the renderer's whole view of the machine. */
+export interface TmApi {
+  connection: () => Promise<{ url: string }>;
+  onReady: (cb: (conn: { url: string }) => void) => void;
+  onSidecarExit: (cb: (info: { code: number | null }) => void) => void;
+  pickDirectory: () => Promise<string | null>;
+  userDataPath: () => Promise<string>;
+  versions?: () => { electron: string; chrome: string };
+}
+
 export class Sidecar {
   private ws: WebSocket | null = null;
   private handlers: ((frame: Frame) => void)[] = [];
-  status: Status = "connecting";
+  private watchers: ((status: Status) => void)[] = [];
+  private current: Status = "connecting";
   worlds: WorldInfo[] = [];
 
   constructor(private url: string) {}
 
+  /** A socket that dies is not a silent thing: whoever draws the status hears about it. */
+  get status(): Status {
+    return this.current;
+  }
+
+  private setStatus(next: Status): void {
+    if (next === this.current) return;
+    this.current = next;
+    for (const w of this.watchers) w(next);
+  }
+
+  onStatus(watcher: (status: Status) => void): () => void {
+    this.watchers.push(watcher);
+    return () => { this.watchers = this.watchers.filter((w) => w !== watcher); };
+  }
+
   connect(): void {
     this.ws = new WebSocket(this.url);
-    this.ws.onopen = () => { this.status = "ready"; };
+    this.ws.onopen = () => { this.setStatus("ready"); };
     this.ws.onmessage = (m) => {
       let frame: Frame | null = null;
       try { frame = JSON.parse(m.data as string) as Frame; } catch { return; }
@@ -54,8 +81,8 @@ export class Sidecar {
       if (frame.type === "worlds") this.worlds = frame.worlds;
       for (const h of this.handlers) h(frame);
     };
-    this.ws.onclose = () => { this.status = "crashed"; };
-    this.ws.onerror = () => { this.status = "crashed"; };
+    this.ws.onclose = () => { this.setStatus("crashed"); };
+    this.ws.onerror = () => { this.setStatus("crashed"); };
   }
 
   onFrame(handler: (frame: Frame) => void): () => void {

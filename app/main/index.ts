@@ -19,13 +19,29 @@ const START_TIMEOUT_MS = 15000;
 
 let sidecar: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
+// The handshake lands before any window exists, and a window can be reloaded at any time — so the renderer
+// asks for the connection when it is ready to use it, and a request that arrives early waits here.
+let readyConn: { url: string } | null = null;
+let waiting: ((conn: { url: string }) => void)[] = [];
+
+function whenReady(): Promise<{ url: string }> {
+  if (readyConn) return Promise.resolve(readyConn);
+  return new Promise((resolve) => { waiting.push(resolve); });
+}
+
+function announceReady(conn: { url: string }): void {
+  readyConn = conn;
+  for (const resolve of waiting) resolve(conn);
+  waiting = [];
+}
 
 function sidecarCommand(): { cmd: string; args: string[]; cwd?: string } {
   if (process.env.VITE_DEV) {
     // __dirname is app/dist-electron/main at runtime; the repo root is three levels up.
     const repo = path.join(__dirname, "..", "..", "..");
+    const win = process.platform === "win32";
     const python = process.env.TI_MATRIX_PYTHON
-      || path.join(repo, ".venv", "Scripts", "python.exe");
+      || path.join(repo, ".venv", win ? "Scripts" : "bin", win ? "python.exe" : "python");
     // `python -m appserver` (see appserver/__main__.py), run from server/ so the package imports
     return { cmd: python, args: ["-X", "utf8", "-m", "appserver"], cwd: path.join(repo, "server") };
   }
@@ -80,10 +96,8 @@ function startSidecar(): Promise<void> {
       const token = match[3];
       if (protocol !== 1) { fail(new Error(`the sidecar speaks TM${protocol}, this app speaks TM1`)); return; }
       if (!(await waitForHealth(port))) { fail(new Error("the sidecar never became healthy")); return; }
+      announceReady({ url: `ws://127.0.0.1:${port}/ws?token=${token}` });
       resolve();
-      mainWindow?.webContents.send("tm:ready", {
-        url: `ws://127.0.0.1:${port}/ws?token=${token}`,
-      });
     });
     sidecar.stderr!.setEncoding("utf8");
     sidecar.stderr!.on("data", (chunk: string) => process.stderr.write(`[sidecar] ${chunk}`));
@@ -128,6 +142,8 @@ if (!gotLock) {
       return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
     });
     ipcMain.handle("tm:user-data", () => app.getPath("userData"));
+    // The renderer's way in: ask when you are ready, whether that is before or after the sidecar answered.
+    ipcMain.handle("tm:connection", () => whenReady());
 
     try {
       await startSidecar();
