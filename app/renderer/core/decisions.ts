@@ -19,6 +19,20 @@ import { pct } from "./format";
 /** Below this, a move the engine still made is a guess — it went without much conviction. */
 export const GUESS_BELOW = 0.5;
 
+/**
+ * The maze cell a move label lands on: `step(cell=1,3, direction=east)` names its origin and its
+ * heading, and the destination is one delta away. This is the map's end of the shared cursor — without
+ * it, hovering a ledger row could light the tree but never the map. Null for moves that are not steps.
+ */
+export function cellOf(move: string | null): string | null {
+  if (!move) return null;
+  const m = /cell=\s*(\d+)\s*,\s*(\d+)/.exec(move);
+  const dir = /direction=\s*(north|south|east|west)/.exec(move);
+  if (!m || !dir) return null;
+  const d = dir[1] === "north" ? [0, -1] : dir[1] === "south" ? [0, 1] : dir[1] === "east" ? [1, 0] : [-1, 0];
+  return `${Number(m[1]) + d[0]},${Number(m[2]) + d[1]}`;
+}
+
 interface StateInfo {
   depth: number;
   progress: number;
@@ -125,6 +139,7 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
         from: i,
         to: i,
         move: kind === "needs-action" ? text(head["needs"]) || null : null,
+        cell: null,
         confidence: kind === "done" ? 1 : 0,
         priorProgress: current.progress,
         evidence: kind === "needs-action" ? text(predicted?.["result"]) : text(head["partial_answer"]),
@@ -251,6 +266,7 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
       from: it.from,
       to: Math.max(it.from, i - 1),
       move: chosen?.label ?? null,
+      cell: cellOf(chosen?.label ?? null),
       confidence,
       priorProgress,
       evidence: chosen ? text(chosen.excerpt) : "",

@@ -23,6 +23,7 @@ import { ConfigDrawer } from "./shell/ConfigDrawer";
 import { CommandBar } from "./shell/CommandBar";
 import { ConfirmDialog } from "./shell/ConfirmDialog";
 import { TopRail, View } from "./shell/TopRail";
+import { Welcome } from "./shell/Welcome";
 import { Transport } from "./shell/Transport";
 import { ComparePanel } from "./panels/ComparePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
@@ -30,6 +31,7 @@ import { LogPanel } from "./panels/LogPanel";
 import { MapPanel } from "./panels/MapPanel";
 import { TreePanel } from "./panels/TreePanel";
 import { formatElapsed, pct } from "./core/format";
+import { loadSettings, saveSettings } from "./core/settings";
 
 export function App() {
   const [view, setView] = useState<View>("run");
@@ -39,6 +41,10 @@ export function App() {
   const [model, setModel] = useState<ModelConfig>({ ...MODELS.defaults });
   const [budget, setBudgetState] = useState<Budget>({ ...BUDGET.defaults });
   const [configOpen, setConfigOpen] = useState(false);
+  /** The pasted key, for this session only — never saved, never sent anywhere but the sidecar. */
+  const [apiKey, setApiKey] = useState("");
+  /** True once stored settings have been read, so hydration does not race the first save. */
+  const [hydrated, setHydrated] = useState(false);
 
   const [library, setLibrary] = useState<ArtifactMeta[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
@@ -47,6 +53,9 @@ export function App() {
   const [right, setRight] = useState<RunArtifact | null>(null);
   const [pendingSide, setPendingSide] = useState<"left" | "right" | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
+  /** The shared cursor: hover a ledger row, a tree node, or a map cell, and all three answer.
+   * One string, one meaning — the decision index under the pointer — null when nowhere. */
+  const [hover, setHover] = useState<number | null>(null);
 
   // The playback hook needs the decision count before the run it belongs to exists; the run's events
   // arrive first and the count follows, so the hook is fed the count it currently has and clamps.
@@ -86,6 +95,29 @@ export function App() {
     if (worlds.length > 0 && !worlds.some((w) => w.name === world)) setWorld(worlds[0].name);
   }, [worlds, world]);
 
+  // What the user set last time is what they see this time: hydrate once, before anything is saved.
+  useEffect(() => {
+    void loadSettings().then((s) => {
+      if (s) {
+        if (s.model) setModel((m) => ({ ...m, ...s.model }));
+        if (s.world) setWorld(s.world);
+        if (s.values) setValues(s.values);
+        if (s.goal) setGoal(s.goal);
+        if (s.budget) setBudgetState((b) => ({ ...b, ...s.budget }));
+      }
+      setHydrated(true);
+    });
+  }, []);
+
+  // And every change is kept — debounced, so typing writes one file, not one per keystroke.
+  useEffect(() => {
+    if (!hydrated) return;
+    const t = window.setTimeout(() => {
+      saveSettings({ model, world, values, goal, budget });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [hydrated, model, world, values, goal, budget]);
+
   const current = worlds.find((w) => w.name === world);
   const running = status === "running";
 
@@ -104,7 +136,10 @@ export function App() {
     base_url: model.base_url,
     model: model.model,
     api_key_env: model.api_key_env,
-  }), [worldValues, model]);
+    // A key pasted for this session rides with the run config; it is never written to settings and is
+    // stripped from the saved artifact (see useSidecar). Absent, the env-var name above is what counts.
+    ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+  }), [worldValues, model, apiKey]);
 
   const blocked = status === "crashed" ? "the sidecar is not running — restart the app"
     : status === "connecting" ? "reaching the sidecar…"
@@ -218,6 +253,7 @@ export function App() {
           values={worldValues} set={(name, value) => setValues((v) => ({ ...v, [name]: value }))}
           model={model} setModel={(name, value) => setModel((m) => ({ ...m, [name]: value }))}
           modelLabels={MODELS.labels}
+          apiKey={apiKey} setApiKey={setApiKey}
           budget={budget} setBudget={(name, value) => setBudgetState((b) => ({ ...b, [name]: value }))}
           onPick={async () => {
             const dir = await session.pickDirectory();
@@ -231,18 +267,28 @@ export function App() {
 
       {view === "run" ? (
         <main className="stage">
-          <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}
-                    liveStep={playback.cursor} focus={{ cell: focus, onFocus: setFocus, onPin: setFocus }} />
+          {projection.decisions.length === 0 && status !== "running" ? (
+            <Welcome onConfigure={() => setConfigOpen(true)} blocked={blocked}
+                     hint={status === "connecting" ? "reaching the sidecar…" : ""} />
+          ) : (
+            <>
+              <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}
+                        liveStep={playback.cursor} focus={{ cell: focus, onFocus: setFocus, onPin: setFocus }}
+                        hoverCell={hover === null ? null : shown.decisions[hover]?.cell ?? null} />
 
           <div className="pane right">
             <section className="pane" aria-label="search tree">
-              <TreePanel tree={shown.tree} decisions={shown.decisions} cursor={playback.cursor} onSeek={playback.at} />
+              <TreePanel tree={shown.tree} decisions={shown.decisions} cursor={playback.cursor} onSeek={playback.at}
+                         onHover={setHover} peek={hover} />
             </section>
             <section className="pane" aria-label="decision ledger">
               <LogPanel decisions={shown.decisions} trust={shown.trust} cursor={playback.cursor}
-                        bookmarks={playback.bookmarks} onSeek={playback.at} onBookmark={playback.toggleBookmark} />
+                        bookmarks={playback.bookmarks} onSeek={playback.at} onBookmark={playback.toggleBookmark}
+                        onHover={setHover} peek={hover} />
             </section>
-          </div>
+            </div>
+            </>
+          )}
         </main>
       ) : view === "library" ? (
         <main className="stage" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>

@@ -29,13 +29,15 @@ export interface MapFocus {
   onPin: (cell: string | null) => void;
 }
 
-export function MapPanel({ knowledge, decisions, world, events, focus, liveStep }: {
+export function MapPanel({ knowledge, decisions, world, events, focus, liveStep, hoverCell }: {
   knowledge: MazeKnowledge;
   decisions: Decision[];
   world: string;
   events: EngineEventFrame[];
   focus: MapFocus;
   liveStep: number;
+  /** The cell the shared cursor is over — a ledger row or tree node elsewhere in the window. */
+  hoverCell?: string | null;
 }) {
   const [heat, setHeat] = useState(false);
   const [ghost, setGhost] = useState(true);
@@ -76,7 +78,7 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep 
         ) : (
           <div className="mapwrap">
             <MapSvg knowledge={knowledge} bounds={bounds} heat={heat} ghost={ghost} showPath={path}
-                    zoom={zoom} focus={focus} />
+                    zoom={zoom} focus={focus} hoverCell={hoverCell} />
           </div>
         )}
       </PaneBody>
@@ -127,7 +129,7 @@ const lastEvidence = (decisions: Decision[]): string => {
  * The grid itself. Coordinates are the world's own — a cell at (1,1) is drawn at (1,1) — so a passage
  * between two cells lands exactly where the world says it is, and the drawing needs no rescaling.
  */
-function MapSvg({ knowledge, bounds, heat, ghost, showPath, zoom, focus }: {
+function MapSvg({ knowledge, bounds, heat, ghost, showPath, zoom, focus, hoverCell }: {
   knowledge: MazeKnowledge;
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
   heat: boolean;
@@ -135,6 +137,7 @@ function MapSvg({ knowledge, bounds, heat, ghost, showPath, zoom, focus }: {
   showPath: boolean;
   zoom: number;
   focus: MapFocus;
+  hoverCell?: string | null;
 }) {
   const cols = bounds.maxX - bounds.minX + 1;
   const rows = bounds.maxY - bounds.minY + 1;
@@ -177,6 +180,7 @@ function MapSvg({ knowledge, bounds, heat, ghost, showPath, zoom, focus }: {
           else classes.push("cell-unknown");
           if (cell && heat && cell.visits > 1) classes.push(`revisit-${Math.min(3, cell.visits - 1)}`);
           if (ghosts.has(key)) classes.push("cell-ghost");
+          if (hoverCell && key === hoverCell) classes.push("cell-peek");
           if (cell?.exit) classes.push("cell-exit");
           else if (cell?.start) classes.push("cell-start");
           return (

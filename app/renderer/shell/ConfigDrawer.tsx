@@ -5,8 +5,9 @@
  * product, and a window that gives them half its area has decided the wrong thing is interesting. So they
  * live behind one toggle, they start closed, and they close themselves when a run begins.
  *
- * The key is never held here: the field asks for the *name* of the environment variable that holds it, and
- * what travels to the sidecar is the name. There is nothing secret in this window's state to leak.
+ * One key field, and it is the masked one: a value pasted here is session memory, rides with the run,
+ * and is never saved. The env-var *name* stays as the durable setting for machines that keep the key in
+ * their environment — two fields for one secret was a trap nobody should have to read twice.
  */
 
 import { WorldField, WorldInfo } from "../protocol";
@@ -20,7 +21,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless, apiKey, setApiKey }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -34,6 +35,9 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   setBudget: (name: keyof Budget, value: number) => void;
   onPick: () => void;
   headless: boolean;
+  /** The pasted key: session memory only, sent with the run, never saved anywhere. */
+  apiKey: string;
+  setApiKey: (value: string) => void;
 }) {
   const current = worlds.find((w) => w.name === world);
   return (
@@ -47,8 +51,18 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
           {(f) => <input {...f} type="text" value={model.model} spellCheck={false}
                          onChange={(e) => setModel("model", e.target.value)} />}
         </Field>
-        <Field label="API key env var"
-               hint={model.api_key_env ? `reads $${model.api_key_env} — the value never enters this window` : "no key: the endpoint is asked without one"}>
+        <Field label="API key"
+               hint={apiKey.trim()
+                 ? "held in memory for this session only — never saved to disk"
+                 : model.api_key_env
+                   ? `empty: the key is read from $${model.api_key_env} in this machine's environment`
+                   : "empty and no env var set: the endpoint is asked without a key"}>
+          {(f) => <input {...f} type="password" value={apiKey} spellCheck={false} autoComplete="off"
+                         placeholder={model.api_key_env ? `leave empty to use $${model.api_key_env}` : "paste a key for this session"}
+                         onChange={(e) => setApiKey(e.target.value)} />}
+        </Field>
+        <Field label="Env var fallback"
+               hint={`advanced: which environment variable holds the key when the field above is empty`}>
           {(f) => <input {...f} type="text" value={model.api_key_env} spellCheck={false} placeholder="OPENAI_API_KEY"
                          onChange={(e) => setModel("api_key_env", e.target.value)} />}
         </Field>

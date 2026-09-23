@@ -56,6 +56,8 @@ export interface Decision {
   to: number;
   /** The move committed to, when one was. */
   move: string | null;
+  /** The maze cell the move landed on, parsed from the move label — the map's end of the shared cursor. */
+  cell: string | null;
   /** What the agent believed this move was worth, 0..1 — the evaluator's own score for it. */
   confidence: number;
   /** What it believed before it moved, so "did this help" is answerable. */

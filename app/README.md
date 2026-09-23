@@ -96,8 +96,10 @@ PYTHONUTF8=1 ../.venv/Scripts/python.exe -m pytest tests   # its own suite, real
 npm install
 npm run typecheck           # both tsconfigs, no emit
 npm run test                # the renderer's own checks: the folds, against hand-built runs
-npm run dev:vite            # in one shell
-npm run dev:electron        # in another (TI_MATRIX_PYTHON overrides the venv python)
+npm run dev                 # one command: vite, then electron, torn down together
+npm run dev:vite            # or the two-shell dance: vite in one shell,
+npm run dev:electron        # electron in another (gated on :5173 actually serving)
+npm run start               # no vite: rebuild dist/ and run against it
 
 # packaging
 python -m pip install -e . -e server[dev]

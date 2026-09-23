@@ -7,6 +7,8 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 
+export interface BootStageReport { id: "spawn" | "handshake" | "health" | "renderer"; status: "active" | "done" | "failed"; detail?: string }
+
 const api = {
   // main -> renderer lifecycle
   onReady: (cb: (conn: { url: string }) => void) => {
@@ -15,8 +17,16 @@ const api = {
   onSidecarExit: (cb: (info: { code: number | null }) => void) => {
     ipcRenderer.on("tm:sidecar-exit", (_e, info) => cb(info));
   },
+  // The boot, narrated: one report per stage as main clears or fails it. The splash is the audience.
+  onBootStage: (cb: (stage: BootStageReport) => void) => {
+    ipcRenderer.on("tm:boot-stage", (_e, report) => cb(report));
+  },
   // renderer -> main requests
   connection: (): Promise<{ url: string }> => ipcRenderer.invoke("tm:connection"),
+  // Stages reported before this page finished loading, so a splash that arrives late still shows them.
+  bootLog: (): Promise<BootStageReport[]> => ipcRenderer.invoke("tm:boot-log"),
+  // The splash's "try again": a fresh process, because a half-started sidecar may hold the port.
+  relaunch: (): Promise<void> => ipcRenderer.invoke("tm:relaunch"),
   // The window's own chrome. The rail is the title bar, so these are the buttons it draws — on macOS the
   // OS keeps its traffic lights instead and the rail leaves room for them.
   platform: process.platform,
@@ -40,6 +50,10 @@ const api = {
   runsLoad: (id: string) => ipcRenderer.invoke("tm:run-load", id),
   runsDelete: (id: string) => ipcRenderer.invoke("tm:run-delete", id),
   runsDir: (): Promise<string> => ipcRenderer.invoke("tm:runs-dir"),
+  // Settings that outlive the window. The value of an API key is not a setting and never travels here:
+  // the renderer sends the env-var *name* and the run-time key only ever goes through the goal config.
+  settingsLoad: (): Promise<unknown> => ipcRenderer.invoke("tm:settings-load"),
+  settingsSave: (value: unknown): Promise<boolean> => ipcRenderer.invoke("tm:settings-save", value),
   versions: () => ({ electron: process.versions.electron, chrome: process.versions.chrome }),
 };
 

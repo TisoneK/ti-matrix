@@ -81,6 +81,9 @@ export interface TmApi {
   runsLoad?: (id: string) => Promise<RunArtifact | null>;
   runsDelete?: (id: string) => Promise<boolean>;
   runsDir?: () => Promise<string>;
+  /** Settings that outlive the window. Absent in a plain browser tab; `core/settings.ts` copes. */
+  settingsLoad?: () => Promise<unknown>;
+  settingsSave?: (value: unknown) => Promise<boolean>;
 }
 
 export class Sidecar {

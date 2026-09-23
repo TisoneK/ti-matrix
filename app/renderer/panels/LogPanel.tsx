@@ -25,13 +25,16 @@ const KIND_LABEL: Record<Decision["kind"], string> = {
   "needs-action": "blocked",
 };
 
-export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookmark }: {
+export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookmark, onHover, peek }: {
   decisions: Decision[];
   trust: TrustCurve;
   cursor: number;
   bookmarks: number[];
   onSeek: (index: number) => void;
   onBookmark: (index: number) => void;
+  /** The shared cursor: rows answer it, and hovering a row moves it. */
+  onHover?: (index: number | null) => void;
+  peek?: number | null;
 }) {
   const [only, setOnly] = useState<Flag | null>(null);
   const counts = useMemo(() => flagCounts(decisions), [decisions]);
@@ -77,7 +80,8 @@ export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookma
         ) : (
           rows.map((d) => (
             <Row key={d.index} decision={d} current={d.index === cursor} future={d.index > cursor}
-                 booked={bookmarks.includes(d.index)} onSeek={onSeek} onBookmark={onBookmark} />
+                 booked={bookmarks.includes(d.index)} onSeek={onSeek} onBookmark={onBookmark}
+                 onHover={onHover} peek={peek === d.index} />
           ))
         )}
       </PaneBody>
@@ -95,23 +99,31 @@ export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookma
   );
 }
 
-function Row({ decision, current, future, booked, onSeek, onBookmark }: {
+function Row({ decision, current, future, booked, onSeek, onBookmark, onHover, peek }: {
   decision: Decision;
   current: boolean;
   future: boolean;
   booked: boolean;
   onSeek: (index: number) => void;
   onBookmark: (index: number) => void;
+  onHover?: (index: number | null) => void;
+  peek: boolean;
 }) {
   const confidence = decision.confidence;
+  // The strongest flag becomes the row's tone: the gutter tells the run's story before any word is read.
+  const tone = decision.flags.find((f) => f !== "confirmed") ?? (decision.flags[0] as Decision["flags"][number] | undefined);
   return (
     <div
-      className={`row ${future ? "cold" : ""}`}
+      className={`row ${future ? "cold" : ""} ${tone ? `tone-${tone}` : ""} ${peek ? "peek" : ""}`}
       role="button"
       tabIndex={0}
       aria-current={current}
       aria-label={`step ${decision.index + 1}: ${decision.headline}`}
       onClick={() => onSeek(decision.index)}
+      onMouseEnter={() => onHover?.(decision.index)}
+      onMouseLeave={() => onHover?.(null)}
+      onFocus={() => onHover?.(decision.index)}
+      onBlur={() => onHover?.(null)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek(decision.index); }
       }}

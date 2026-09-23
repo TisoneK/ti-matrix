@@ -135,12 +135,15 @@ export function useSidecar(bookmarks: number[]): Session {
     setSaved(null);
     setConfirm(null);
     setStatus("running");
+    // A pasted key rides to the sidecar and nowhere else: the run directory and the artifact are
+    // written to disk, and a secret has no business in either.
+    const { api_key, ...kept } = config as Record<string, unknown>;
     // A run directory first, so the engine's own JSON-lines log lands next to the artifact. If there is no
     // preload the run still happens — it simply will not outlive the window.
     const id = newRunId();
-    const started = await library.begin(id, world, goal, config).catch(() => null);
-    pending.current = { id, goal, world, config, startedAt: new Date().toISOString() };
-    sidecar.current?.goal(goal, world, config, { record: started?.recordPath ?? null, budget });
+    const started = await library.begin(id, world, goal, kept).catch(() => null);
+    pending.current = { id, goal, world, config: kept, startedAt: new Date().toISOString() };
+    sidecar.current?.goal(goal, world, api_key === undefined ? config : { ...kept, api_key }, { record: started?.recordPath ?? null, budget });
   }, [library]);
 
   const stop = useCallback(() => sidecar.current?.stop(), []);

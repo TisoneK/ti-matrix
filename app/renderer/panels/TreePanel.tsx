@@ -23,11 +23,14 @@ const COL = 46;
 const ROW = 44;
 const NODE = 7;
 
-export function TreePanel({ tree, decisions, cursor, onSeek }: {
+export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   tree: SearchTree;
   decisions: Decision[];
   cursor: number;
   onSeek: (decision: number) => void;
+  /** The shared cursor: nodes answer it, and hovering a node moves it. */
+  onHover?: (index: number | null) => void;
+  peek?: number | null;
 }) {
   const [foldDead, setFoldDead] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -81,10 +84,11 @@ export function TreePanel({ tree, decisions, cursor, onSeek }: {
                 const cls = `node-dot ${node.dead ? "cold" : isCurrent ? "live" : settled ? "settled" : "alive"}`;
                 const clickable = node.decision !== null;
                 const here = node.decision !== null && node.decision === cursor;
+                const seen = node.decision !== null && node.decision === peek;
                 return (
                   <g key={node.id}
-                     onMouseEnter={() => setHover(node.id)}
-                     onMouseLeave={() => setHover((h) => (h === node.id ? null : h))}>
+                     onMouseEnter={() => { setHover(node.id); if (node.decision !== null) onHover?.(node.decision); }}
+                     onMouseLeave={() => { setHover((h) => (h === node.id ? null : h)); onHover?.(null); }}>
                     <title>{nodeTitle(node.id, node.depth, node.progress, node.dead, node.current, siblingContext(tree, decisions, node.id))}</title>
                     <circle
                       className="node-hit"
@@ -106,6 +110,7 @@ export function TreePanel({ tree, decisions, cursor, onSeek }: {
                     )}
                     {fold ? <text className="fold-text" x={node.x} y={node.y + 3} textAnchor="middle">+{fold.hidden}</text> : null}
                     {here ? <circle className="node-selected" cx={node.x} cy={node.y} r={NODE + 4} /> : null}
+                    {seen && !here ? <circle className="node-peek" cx={node.x} cy={node.y} r={NODE + 3} /> : null}
                     {node.children.length === 0 || node.id === ROOT ? (
                       <text className="node-label" x={node.x} y={node.y + NODE + 11} textAnchor="middle">
                         {node.depth === 0 ? "entry" : shortMove(node.last)}

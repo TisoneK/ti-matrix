@@ -1,12 +1,20 @@
 /*
  * The Electron main process: the sidecar's parent and the renderer's gatekeeper.
  *
- * Responsibilities, in order: spawn the Python sidecar (dev: the repo venv; prod: the PyInstaller
- * bundle in resources/), read exactly one line of its stdout — the TM handshake — health-check it,
- * and only then tell the renderer where the socket is. The handshake token stays in this process:
- * the renderer receives a ready-to-use ws:// URL with the token already appended, spoken over IPC
- * the preload allows and nowhere else. On quit, the child and its whole process tree go with us —
- * on Windows explicitly, because orphans do not die on their own there.
+ * The boot, in order: a small splash window opens at once (app/splash.html — a maze that reveals itself
+ * stage by stage), the Python sidecar spawns underneath it (dev: the repo venv; prod: the PyInstaller
+ * bundle in resources/, with the venv as a fallback for a dev machine running the bare build), main reads
+ * exactly one line of the child's stdout — the TM handshake — and health-checks it while the splash
+ * reports each stage. Only then does the real app window load, hidden; the moment it has painted, it
+ * takes the screen and the splash closes. That swap is the difference between "it is starting" and a
+ * black frame: the splash stays up until there is something to replace it, so the two surfaces hand over
+ * with no gap where neither is showing.
+ *
+ * A boot that fails (bad handshake, never healthy, sidecar exited, renderer never loaded) fails *into
+ * the splash* — the reason, a restart button — instead of into a modal dialog that throws away the very
+ * window it is telling the user about. The handshake token stays in this process: the renderer receives
+ * a ready-to-use ws:// URL, spoken over IPC the preload allows and nowhere else. On quit, the child and
+ * its whole process tree go with us — on Windows explicitly, because orphans do not die on their own.
  *
  * It is also, and only, the filesystem: the renderer has none (context isolation, no node integration),
  * so the session library lives here. Every id that arrives over IPC is checked against a strict pattern
@@ -26,7 +34,13 @@ const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 let sidecar: ChildProcess | null = null;
+/** The splash: small, first on screen, closed the moment the app takes over. */
+let splashWindow: BrowserWindow | null = null;
+/** The app: loaded hidden while the splash still holds the screen, shown once it has painted. */
 let mainWindow: BrowserWindow | null = null;
+let revealed = false;
+/** When the boot began — the splash holds the screen at least SPLASH_MIN_MS past this. */
+let bootedAt = 0;
 // The handshake lands before any window exists, and a window can be reloaded at any time — so the renderer
 // asks for the connection when it is ready to use it, and a request that arrives early waits here.
 let readyConn: { url: string } | null = null;
@@ -43,19 +57,43 @@ function announceReady(conn: { url: string }): void {
   waiting = [];
 }
 
-function sidecarCommand(): { cmd: string; args: string[]; cwd?: string } {
-  if (process.env.VITE_DEV) {
-    // __dirname is app/dist-electron/main at runtime; the repo root is three levels up.
-    const repo = path.join(__dirname, "..", "..", "..");
-    const win = process.platform === "win32";
-    const python = process.env.TI_MATRIX_PYTHON
-      || path.join(repo, ".venv", win ? "Scripts" : "bin", win ? "python.exe" : "python");
-    // `python -m appserver` (see appserver/__main__.py), run from server/ so the package imports
-    return { cmd: python, args: ["-X", "utf8", "-m", "appserver"], cwd: path.join(repo, "server") };
-  }
-  const bundled = path.join(process.resourcesPath ?? "", "sidecar", "ti-matrix-server")
-    + (process.platform === "win32" ? ".exe" : "");
-  return { cmd: bundled, args: [] };
+// ── boot stages, streamed to the splash ─────────────────────────────────────
+
+type BootStage = "spawn" | "handshake" | "health" | "renderer";
+type BootStatus = "active" | "done" | "failed";
+interface BootReport { id: BootStage; status: BootStatus; detail?: string }
+
+const bootLog: BootReport[] = [];
+
+const stageNote = (detail: string): string =>
+  detail.length > 160 ? detail.slice(0, 157) + "…" : detail;
+
+function stage(id: BootStage, status: BootStatus, detail?: string): void {
+  const report: BootReport = { id, status, detail: detail ? stageNote(detail) : undefined };
+  if (status === "failed") bootLog.push(report);
+  // Whoever is on screen hears it: the splash while it holds the window, the app afterwards.
+  const audience = splashWindow && !splashWindow.isDestroyed() ? splashWindow
+    : mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (audience) audience.webContents.send("tm:boot-stage", report);
+}
+
+/** Which engine runs the world: the PyInstaller bundle in prod, the repo venv in dev — or as a fallback. */
+function sidecarCommand(): { cmd: string; args: string[]; cwd?: string; note?: string } {
+  const win = process.platform === "win32";
+  // __dirname is app/dist-electron/main at runtime; the repo root is three levels up.
+  const repo = path.join(__dirname, "..", "..", "..");
+  const venv = {
+    cmd: process.env.TI_MATRIX_PYTHON
+      || path.join(repo, ".venv", win ? "Scripts" : "bin", win ? "python.exe" : "python"),
+    args: ["-X", "utf8", "-m", "appserver"],
+    cwd: path.join(repo, "server"),
+  };
+  if (process.env.VITE_DEV) return venv;
+  // Prod prefers the bundled engine. But a dev machine running the bare build (plain `npx electron .`)
+  // has no bundle — falling back to the repo venv beats dead-ending on a missing exe.
+  const bundled = path.join(process.resourcesPath ?? "", "sidecar", "ti-matrix-server") + (win ? ".exe" : "");
+  if (fs.existsSync(bundled)) return { cmd: bundled, args: [] };
+  return { ...venv, note: "no bundled engine — using the repo's python" };
 }
 
 function healthz(port: number): Promise<boolean> {
@@ -78,7 +116,7 @@ async function waitForHealth(port: number): Promise<boolean> {
   return false;
 }
 
-function startSidecar(): Promise<void> {
+function startSidecar(onExit: (code: number | null) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const { cmd, args, cwd } = sidecarCommand() as { cmd: string; args: string[]; cwd?: string };
     if (!fs.existsSync(cmd)) {
@@ -103,15 +141,29 @@ function startSidecar(): Promise<void> {
       const port = Number(match[2]);
       const token = match[3];
       if (protocol !== 1) { fail(new Error(`the sidecar speaks TM${protocol}, this app speaks TM1`)); return; }
-      if (!(await waitForHealth(port))) { fail(new Error("the sidecar never became healthy")); return; }
+      stage("handshake", "done", `TM1 on port ${port}`);
+      stage("health", "active", `port ${port}`);
+      if (!(await waitForHealth(port))) {
+        fail(new Error(`the engine never became healthy within ${Math.round(START_TIMEOUT_MS / 1000)}s (port ${port})`));
+        return;
+      }
+      stage("health", "done");
       announceReady({ url: `ws://127.0.0.1:${port}/ws?token=${token}` });
       resolve();
     });
     sidecar.stderr!.setEncoding("utf8");
     sidecar.stderr!.on("data", (chunk: string) => process.stderr.write(`[sidecar] ${chunk}`));
+    sidecar.on("error", (err) => fail(err));
     sidecar.on("exit", (code) => {
       sidecar = null;
-      mainWindow?.webContents.send("tm:sidecar-exit", { code });
+      // A sidecar that dies while the splash is still up is a boot failure, not a lifecycle event.
+      if (!readyConn) fail(new Error(`the engine exited while starting (code ${code ?? "signal"})`));
+      // Always forwarded: before the renderer exists nobody is listening (harmless), after it the app
+      // marks itself crashed.
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("tm:sidecar-exit", { code });
+      }
+      onExit(code);
     });
   });
 }
@@ -218,7 +270,8 @@ function registerLibrary(): void {
 //
 // macOS keeps its traffic lights and insets them over the rail (`hiddenInset`) — a Mac user reaches for
 // those in muscle memory, and reimplementing them would only be worse. Everywhere else the frame is gone
-// and the rail draws its own minimize/maximize/close.
+// and the rail draws its own minimize/maximize/close. The splash drags itself by the same rule — its
+// title strip only, never the whole page.
 
 function registerWindow(): void {
   const win = (): BrowserWindow | null => mainWindow;
@@ -229,11 +282,41 @@ function registerWindow(): void {
     if (!w) return;
     if (w.isMaximized()) w.unmaximize(); else w.maximize();
   });
-  ipcMain.handle("tm:window-close", () => { win()?.close(); });
+  ipcMain.handle("tm:window-close", () => {
+    // From the app, close the app; from the splash (the quit button), close the process.
+    const w = win();
+    if (w) w.close(); else app.quit();
+  });
   ipcMain.handle("tm:window-state", () => ({
     maximized: Boolean(mainWindow?.isMaximized()),
     fullScreen: Boolean(mainWindow?.isFullScreen()),
   }));
+  // The splash's "try again" — a fresh process is the only honest retry, because a half-started sidecar
+  // may hold the port.
+  ipcMain.handle("tm:relaunch", () => { app.relaunch(); app.exit(0); });
+  // A splash that loads after a stage was reported replays the log instead of sitting idle forever.
+  ipcMain.handle("tm:boot-log", () => bootLog);
+  // Settings that outlive the window. One JSON file under userData, written whole on every change —
+  // small enough that atomicity is a rename away, and never holding a secret (the renderer strips
+  // key values before they get here; this side never accepts one).
+  ipcMain.handle("tm:settings-load", async () => {
+    try {
+      return await readJson<Record<string, unknown>>(path.join(app.getPath("userData"), "settings.json"));
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.handle("tm:settings-save", async (_e, value: unknown) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    try {
+      await fs.promises.writeFile(
+        path.join(app.getPath("userData"), "settings.json"),
+        JSON.stringify(value, null, 2), "utf8");
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Both of these change how the rail should draw its button, so both are pushed rather than polled. */
@@ -250,32 +333,127 @@ function watchWindowState(window: BrowserWindow): void {
   window.on("leave-full-screen", tell);
 }
 
-function createWindow(): void {
+/** The splash: small, fast, and the whole story of the boot until the app replaces it. */
+function createSplash(): void {
   const mac = process.platform === "darwin";
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 760,
-    minHeight: 520,
+  splashWindow = new BrowserWindow({
+    width: 440,
+    height: 620,
     backgroundColor: "#090c12",
-    // A one-pixel sliver of the rail showing above the traffic lights reads as a bug; the rail's own
-    // padding below is what makes room for them.
     titleBarStyle: mac ? "hiddenInset" : "hidden",
     trafficLightPosition: mac ? { x: 14, y: 15 } : undefined,
     frame: mac ? undefined : false,
+    show: false,
+    resizable: false,
+    maximizable: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  watchWindowState(mainWindow);
-  // Dev mode serves the renderer from Vite (hot reload); prod loads the built bundle.
+  splashWindow.loadFile(path.join(__dirname, "..", "..", "splash.html"))
+    .catch(() => { splashWindow?.loadURL("data:text/html,<body style=\"background:#090c12\"></body>"); });
+  splashWindow.once("ready-to-show", () => splashWindow?.show());
+}
+
+/** The app window: created hidden, shown only once it has actually painted — see revealApp. */
+function createAppWindow(): void {
+  const mac = process.platform === "darwin";
+  const appWin = new BrowserWindow({
+    width: 1280,
+    height: 860,
+    minWidth: 760,
+    minHeight: 520,
+    backgroundColor: "#090c12",
+    titleBarStyle: mac ? "hiddenInset" : "hidden",
+    trafficLightPosition: mac ? { x: 14, y: 15 } : undefined,
+    frame: mac ? undefined : false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload", "index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  watchWindowState(appWin);
+  mainWindow = appWin;
+  stage("renderer", "active", process.env.VITE_DEV ? "from the vite dev server" : "from the built bundle");
   if (process.env.VITE_DEV) {
-    mainWindow.loadURL("http://localhost:5173");
+    // The dev server may still be waking up; a refused connection here is worth a few retries before
+    // it counts as "not running".
+    let tries = 0;
+    const load = (): void => {
+      appWin.loadURL("http://localhost:5173").catch(() => {
+        if (tries < 20) { tries += 1; setTimeout(load, 500); return; }
+        rendererFailed("could not reach the dev server at http://localhost:5173 — is `npm run dev` running?");
+      });
+    };
+    load();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+    appWin.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"))
+      .catch((err: Error) => rendererFailed(err.message));
   }
+  appWin.webContents.on("did-fail-load", (_e, code, desc, _url, isMainFrame) => {
+    if (isMainFrame && !revealed) rendererFailed(`${desc} (${code})`);
+  });
+  appWin.webContents.on("did-finish-load", () => {
+    // Fires for the splash too; the renderer stage is only done once the *real* app is up.
+    const url = appWin.webContents.getURL();
+    const isRenderer = process.env.VITE_DEV ? url.startsWith("http://localhost:5173") : url.includes("dist");
+    if (isRenderer) revealApp();
+  });
+  // A paint event that never arrives (a throttled hidden window, say) must not leave the app invisible
+  // forever: after five seconds the handover happens anyway, worst case a frame early.
+  setTimeout(revealApp, 5000);
+}
+
+/** How long the splash stays readable even on a warm boot, so the maze gets its moment. */
+const SPLASH_MIN_MS = 1600;
+
+/** The handover: the app takes the screen, the splash closes. Nothing goes dark between the two. */
+function revealApp(): void {
+  if (revealed || !mainWindow || mainWindow.isDestroyed() || !readyConn) return;
+  revealed = true;
+  stage("renderer", "done");
+  const hold = SPLASH_MIN_MS - (Date.now() - bootedAt);
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.show();
+    const dead = splashWindow;
+    splashWindow = null;
+    if (dead && !dead.isDestroyed()) dead.close();
+    mainWindow.focus();
+  }, Math.max(0, hold));
+}
+
+/** The renderer never came up: say so on the splash, and discard the hidden window — the splash's
+ * "try again" is the way out, and it relaunches the whole process rather than half of it. */
+function rendererFailed(detail: string): void {
+  stage("renderer", "failed", detail);
+  if (!revealed && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+    mainWindow = null;
+  }
+}
+
+/**
+ * The boot: sidecar up, handshake read, health confirmed — then, and only then, the real renderer,
+ * loaded hidden behind the splash and revealed when it has painted. Every stage streams to the splash;
+ * every failure fails into it.
+ */
+async function boot(): Promise<void> {
+  const { cmd, args, note } = sidecarCommand();
+  const label = args.length > 0 ? `${path.basename(cmd)} -m ${args[args.length - 1]}` : path.basename(cmd);
+  stage("spawn", "active", note ? `${label} — ${note}` : label);
+  try {
+    await startSidecar(() => undefined);
+  } catch (err) {
+    stage("spawn", "failed", String(err instanceof Error ? err.message : err));
+    return; // the splash holds the failure; the window stays up with a way out
+  }
+  stage("spawn", "done");
+  createAppWindow();
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -283,7 +461,8 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow) { mainWindow.restore(); mainWindow.focus(); }
+    const w = mainWindow ?? splashWindow;
+    if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
   });
 
   app.whenReady().then(async () => {
@@ -298,15 +477,11 @@ if (!gotLock) {
     registerLibrary();
     registerWindow();
 
-    try {
-      await startSidecar();
-    } catch (err) {
-      const { dialog } = await import("electron");
-      dialog.showErrorBox("Ti Matrix could not start", String(err));
-      app.quit();
-      return;
-    }
-    createWindow();
+    // The splash opens now; the sidecar boots underneath it. Nothing modal stands between the user and
+    // the window — a failed boot is drawn where it happened.
+    createSplash();
+    bootedAt = Date.now();
+    void boot();
   });
 
   app.on("window-all-closed", () => {

@@ -71,7 +71,10 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     if not base_url or not model_name:
         raise ValueError("the goal config needs base_url and model (any OpenAI-compatible endpoint)")
     key_env = str(config.get("api_key_env", "")).strip()
-    model = OpenAICompatModel(base_url, model_name, api_key_env=key_env or None)
+    # A key pasted into the window rides the run config directly — it wins over the env var, and never
+    # outlives the run: it is read here, given to the adapter, and nothing writes it down.
+    api_key = str(config.get("api_key", "")).strip() or None
+    model = OpenAICompatModel(base_url, model_name, api_key=api_key, api_key_env=key_env or None)
 
     statistics = Statistics()
     environment = env
