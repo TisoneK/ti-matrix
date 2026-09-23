@@ -84,6 +84,14 @@ rendering job, not a fold.
 considered, because a search that weighed 54 options and a walk that weighed none look
 identical today.
 
+## Necessary, but not on its own
+
+Measured after this brief was written: the maze offers **1.35 candidates per decision**
+across 202 decisions. So drawing the siblings turns a line into a line with occasional
+whiskers — the world itself barely branches. This pairs with **B-2026-09-23-9** (chess, a
+world with ~35 moves per position). Neither works alone: stubs without a branching world
+draw nothing; a branching world without stubs hides 34 weighed alternatives per node.
+
 ## Why this matters more than it sounds
 
 This is the product's actual pitch. "Watch an AI agent think — and check whether to
