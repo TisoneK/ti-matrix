@@ -64,13 +64,13 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 | ID | Summary |
 |----|---------|
+| B-2026-09-23-4 | Reconnect the renderer's socket to the sidecar. A dropped connection leaves the window on "the sidecar is not running — restart the app" with no way back except reloading the page, and a real run (minutes long, 45s between frames) would be lost mid-flight. Needs a heartbeat check plus a retry/reconnect path in `renderer/protocol.ts` (`Sidecar`) and a visible retry in the UI. |
 
 ### Medium Priority
 
 | ID | Summary |
 |----|---------|
 | B-2026-09-23-2 | Rebuild the prose worlds' panels (files/ledger/browser) as rich surfaces — the parsers are intact and tested in `app/renderer/core/worlds/`, but `panels/WorldSurface.tsx` shows less than the views the old renderer had (directory tree, vault report, page view). See `.context_ledger/memory/office/reviews/2026-09-23-review-2.md`. |
-| B-2026-09-23-3 | Run the app against a real LLM once, end to end. Every functional check this session used a scripted local endpoint; no run has been watched against a real model. |
 
 ### Low Priority
 
