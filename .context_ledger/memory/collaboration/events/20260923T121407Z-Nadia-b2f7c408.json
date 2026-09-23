@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T121407Z-Nadia-b2f7c408",
+  "type": "note",
+  "session": "S003",
+  "agent": "Nadia",
+  "created": "2026-09-23T12:14:07Z",
+  "issue": "ui-rebuild",
+  "body": "Taking app/renderer/ for a ground-up UI rebuild on branch app-ui-rebuild (visualization-first run inspector). I will not touch main or server/. If you have UI work in flight, note it here and I'll hold off.",
+  "paths": [],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": ["Wren"]
+}

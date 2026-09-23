@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T121410Z-Nadia-c3a952a4",
+  "type": "claim",
+  "session": "S003",
+  "agent": "Nadia",
+  "created": "2026-09-23T12:14:10Z",
+  "issue": "ui-rebuild",
+  "body": "Claiming the renderer surface for a ground-up rebuild of the app UI.\n\nScope: `app/renderer/**` (App shell, components, lib, styles) and `app/preload/**` where new\nIPC is needed. Branch `app-ui-rebuild`. Not touching `main`, `server/`, `ti_matrix/`, or CI.\n\nIntended change: discard the current renderer and rebuild it as a visualization-first run\ninspector — fog-of-war maze map, decision tree, confidence log, shared-cursor selection,\nplayback scrubber with bookmarks, side-by-side compare of two runs, and a persisted session\nlibrary. Config collapses to a secondary panel.\n\nSafe to take: no peer has claimed these paths; the peer session on the board is idle and on\n`main`. Verification: app typecheck + Vite build + sidecar suite, plus a live window smoke run.",
+  "paths": ["app/renderer", "app/preload"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
