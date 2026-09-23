@@ -7,3 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
+| Nadia | S002 | deepseek-flash | Discarding the current renderer; rebuilding the app UI from scratch as a visualization-first run inspector (fog-of-war map, decision tree, confidence log, playback scrubber, compare mode, session library) | Working |
