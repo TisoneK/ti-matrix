@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArtifactMeta, RunArtifact } from "./core/types";
-import { MODELS, modelSummary } from "./core/models";
+import { BUDGET, Budget, MODELS, modelSummary } from "./core/models";
 import { project } from "./core/project";
 import { useSidecar } from "./hooks/useSidecar";
 import { usePlayback } from "./hooks/usePlayback";
@@ -37,6 +37,7 @@ export function App() {
   const [goal, setGoal] = useState("");
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [model, setModel] = useState<ModelConfig>({ ...MODELS.defaults });
+  const [budget, setBudgetState] = useState<Budget>({ ...BUDGET.defaults });
   const [configOpen, setConfigOpen] = useState(false);
 
   const [library, setLibrary] = useState<ArtifactMeta[]>([]);
@@ -115,8 +116,8 @@ export function App() {
     setConfigOpen(false);
     setView("run");
     setBookmarks([]);
-    void session.run(goal.trim(), world, runConfig);
-  }, [blocked, goal, session, world, runConfig]);
+    void session.run(goal.trim(), world, runConfig, { ...budget });
+  }, [blocked, goal, session, world, runConfig, budget]);
 
   // The keys a person actually reaches for. Global, so they work wherever the focus happens to be — except
   // in a text field, where the arrows and space belong to the cursor.
@@ -217,6 +218,7 @@ export function App() {
           values={worldValues} set={(name, value) => setValues((v) => ({ ...v, [name]: value }))}
           model={model} setModel={(name, value) => setModel((m) => ({ ...m, [name]: value }))}
           modelLabels={MODELS.labels}
+          budget={budget} setBudget={(name, value) => setBudgetState((b) => ({ ...b, [name]: value }))}
           onPick={async () => {
             const dir = await session.pickDirectory();
             if (!dir) return;

@@ -43,7 +43,7 @@ export interface Session {
   /** True when there is no preload — a browser tab, where nothing can be saved to disk. */
   headless: boolean;
   library: LibraryBackend;
-  run: (goal: string, world: string, config: Record<string, unknown>) => Promise<void>;
+  run: (goal: string, world: string, config: Record<string, unknown>, budget?: Record<string, number>) => Promise<void>;
   stop: () => void;
   answer: (granted: boolean) => void;
   pickDirectory: () => Promise<string | null>;
@@ -127,7 +127,8 @@ export function useSidecar(bookmarks: number[]): Session {
     return () => { cancelled = true; };
   }, [tm, library]);
 
-  const run = useCallback(async (goal: string, world: string, config: Record<string, unknown>) => {
+  const run = useCallback(async (goal: string, world: string, config: Record<string, unknown>,
+                                 budget?: Record<string, number>) => {
     collected.current = [];
     setEvents([]);
     setSettled(null);
@@ -139,7 +140,7 @@ export function useSidecar(bookmarks: number[]): Session {
     const id = newRunId();
     const started = await library.begin(id, world, goal, config).catch(() => null);
     pending.current = { id, goal, world, config, startedAt: new Date().toISOString() };
-    sidecar.current?.goal(goal, world, config, { record: started?.recordPath ?? null });
+    sidecar.current?.goal(goal, world, config, { record: started?.recordPath ?? null, budget });
   }, [library]);
 
   const stop = useCallback(() => sidecar.current?.stop(), []);

@@ -11,6 +11,7 @@
 
 import { WorldField, WorldInfo } from "../protocol";
 import { Button } from "../ui/controls";
+import { Budget, BUDGET } from "../core/models";
 import { Field, Fieldset } from "../ui/atoms";
 
 export interface ModelConfig {
@@ -19,7 +20,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, onPick, headless }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -29,6 +30,8 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   model: ModelConfig;
   setModel: (name: keyof ModelConfig, value: string) => void;
   modelLabels: Record<string, string>;
+  budget: Budget;
+  setBudget: (name: keyof Budget, value: number) => void;
   onPick: () => void;
   headless: boolean;
 }) {
@@ -65,6 +68,13 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
                                   onChange={(e) => set(f.name, e.target.value)} />}
             </Field>
           )
+        ))}
+
+        {BUDGET.fields.map((f) => (
+          <Field key={f.name} label={f.label} hint={f.hint}>
+            {(props) => <input {...props} type="number" min={1} max={999} value={budget[f.name]}
+                                onChange={(e) => setBudget(f.name, Math.max(1, Math.min(999, Number(e.target.value) || 1)))} />}
+          </Field>
         ))}
 
         {fields.some((f) => f.name === "root" || f.name === "project") ? (

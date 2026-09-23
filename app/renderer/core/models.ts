@@ -28,3 +28,31 @@ export function modelSummary(config: Record<string, string | boolean>): string {
   try { host = new URL(url).host; } catch { /* a half-typed URL is not worth a throw */ }
   return `${model} · ${host}`;
 }
+
+/**
+ * What a run may spend. Mirrors `EngineBudget`'s own defaults, so the drawer opens showing what an
+ * untouched run would actually get — the numbers are the engine's, not the app's invention.
+ *
+ * These are the first thing a real model makes you care about: a maze run against a live endpoint spends
+ * 20–45 seconds per decision, so the default depth of six ends the run long before the exit, and without
+ * these controls there is nothing a viewer can do about it from the window.
+ */
+export interface Budget {
+  max_depth: number;
+  max_branches: number;
+  max_model_calls: number;
+  max_backtracks: number;
+}
+
+export const BUDGET: {
+  defaults: Budget;
+  fields: { name: keyof Budget; label: string; hint: string }[];
+} = {
+  defaults: { max_depth: 6, max_branches: 3, max_model_calls: 16, max_backtracks: 2 },
+  fields: [
+    { name: "max_depth", label: "Steps", hint: "how deep the search may go — one step is one decision" },
+    { name: "max_branches", label: "Options per step", hint: "how many moves it may weigh at once" },
+    { name: "max_model_calls", label: "Model calls", hint: "the hard ceiling: a proposer call and an evaluator call per step" },
+    { name: "max_backtracks", label: "Retreats", hint: "how many times it may give a branch up" },
+  ],
+};

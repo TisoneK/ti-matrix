@@ -75,6 +75,10 @@ and the session library is the one thing it needs — `app/main/index.ts` owns `
 holding `run.json` (the artifact), `meta.json` (the library row) and `events.jsonl` (the engine's own run
 log, written by the sidecar as the run streams, so the CLIs can read it back).
 
+The config drawer also carries **what a run may spend** — steps, options per step, model calls, retreats —
+seeded with the engine's own defaults. Against a real endpoint the defaults are the thing that ends a run:
+a live model spends 20–45 seconds per decision, so depth six runs out long before the exit does.
+
 ## Endless scenarios
 
 The maze world takes a **seed**: blank means a brand-new procedural maze every run (recursive

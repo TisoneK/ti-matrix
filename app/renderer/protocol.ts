@@ -127,8 +127,13 @@ export class Sidecar {
     return () => { this.handlers = this.handlers.filter((h) => h !== handler); };
   }
 
-  goal(text: string, world: string, config: Record<string, unknown>, options: { record?: string | null } = {}): void {
-    this.send({ type: "goal", text, world, config, ...(options.record ? { record: options.record } : {}) });
+  goal(text: string, world: string, config: Record<string, unknown>,
+       options: { record?: string | null; budget?: Record<string, number> } = {}): void {
+    this.send({
+      type: "goal", text, world, config,
+      ...(options.record ? { record: options.record } : {}),
+      ...(options.budget ? { budget: options.budget } : {}),
+    });
   }
 
   confirm(id: string, granted: boolean): void {
