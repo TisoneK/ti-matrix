@@ -203,6 +203,150 @@ class MazeReasoner:
         return out
 
 
+# `list_dir` writes entries as "📁 name" / "📄 name (123 B)" joined by " · "; `find_files` writes
+# absolute paths joined by the same separator. Both are read back here rather than re-derived.
+_DIR_ENTRY = re.compile(r"📁 ([^·\n(]+)")
+_FILE_ENTRY = re.compile(r"📄 ([^·\n(]+?) \(")
+_ABS_PATH = re.compile(r"(/[^\s·]+)")
+_LISTED = re.compile(r"Contents of ([^\s—]+)")
+# Words too common to tell one file from another; a goal is mostly these.
+_STOPWORDS = frozenset("""a an and are as at be by do does find for from get give how i in is it its
+me my of on or say tell that the then there this to what when where which who why with you your""".split())
+
+# Directories that are somebody else's code or this machine's bookkeeping. A filesystem goal is almost
+# never answered inside one, and they dwarf the real tree — searching this repo for "project" returns
+# 412 files, nearly all of them under node_modules. Without this the first rule-based files run settled
+# on `node_modules/iconv-lite/.idea/inspectionProfiles/Project_Default.xml`, which is a correct match
+# and a useless answer.
+_NOISE = frozenset("""node_modules .venv venv .git .hg .svn __pycache__ .pytest_cache .mypy_cache
+dist build target out .next .cache .idea .vscode .tox site-packages vendor Pods .gradle""".split())
+
+
+def is_noise(path: str) -> bool:
+    """Whether a path runs through a directory whose contents are not this project's answer."""
+    parts = path.split("/")
+    return any(p in _NOISE or p.endswith(".egg-info") for p in parts)
+
+
+def goal_words(text: str) -> list[str]:
+    """The words in a goal worth searching a filesystem for, longest first."""
+    words = {w.strip(".,:;!?'\"()[]") for w in str(text).split()}
+    kept = [w for w in words if len(w) > 2 and w.lower() not in _STOPWORDS]
+    return sorted(kept, key=len, reverse=True)[:4]
+
+
+class FilesReasoner:
+    """Both seats for a filesystem: look for what the goal names, then read it.
+
+    Why this is not the survey below. `SurveyReasoner` proposes each action with no arguments, and
+    every action this world has needs a `path` — so every probe came back "bad arguments for
+    list_dir", the first evaluation scored zero, and the run stopped on `no_progress` at its second
+    event. That made `builtin` — which is the app's default — functional for exactly one of the four
+    shipped worlds while the window offered all four as equals. A reasoner for a world whose actions
+    take arguments has to know where to start, and for a rooted filesystem that is simply the root.
+    """
+
+    def __init__(self, specs: Optional[dict[str, ActionSpec]] = None, env: Any = None) -> None:
+        self._specs = specs or {}
+        # `RootedFiles` carries the directory the world begins at. Without one there is nowhere to
+        # start, and this reasoner says so by proposing nothing rather than guessing at "/".
+        root = getattr(env, "root", None)
+        self._root = str(root) if root is not None else ""
+
+    def _known(self, state: AgentState) -> tuple[set[str], set[str], set[str]]:
+        """Directories seen, files seen, and directories already listed — from the run's own facts."""
+        dirs: set[str] = set()
+        files: set[str] = set()
+        listed: set[str] = set()
+        for fact in state.facts:
+            here = _LISTED.search(fact)
+            base = here.group(1) if here else self._root
+            if here:
+                listed.add(here.group(1))
+            for name in _DIR_ENTRY.findall(fact):
+                dirs.add(f"{base.rstrip('/')}/{name.strip()}")
+            for name in _FILE_ENTRY.findall(fact):
+                files.add(f"{base.rstrip('/')}/{name.strip()}")
+            if "with '" in fact:  # a find_files answer: absolute paths, already whole
+                files.update(p for p in _ABS_PATH.findall(fact) if not is_noise(p))
+        return dirs, files, listed
+
+    async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
+        if not self._root:
+            return []
+        wanted: list[Action] = []
+
+        def offer(action: Action) -> None:
+            fp = action.fingerprint()
+            if fp in avoid or fp in state.failed:
+                return
+            if any(fp == a.fingerprint() for a in wanted):
+                return
+            wanted.append(action)
+
+        dirs, files, listed = self._known(state)
+        words = goal_words(state.goal.text)
+
+        # The root first: nothing can be proposed about a tree nobody has looked at.
+        if not listed:
+            offer(Action("list_dir", {"path": self._root}, "what is at the root"))
+            for word in words[:2]:
+                offer(Action("find_files", {"path": self._root, "contains": word},
+                             f"anything named like {word!r}"))
+            return wanted[:n]
+
+        # A file whose name carries a word from the goal is the best thing to read next — but "best"
+        # has to be ranked, or the first match wins and the first match is whatever sorted() found in
+        # somebody else's vendored tree. Shallowest path first, and never through a noise directory.
+        def rank(path: str) -> tuple[int, int, str]:
+            name = path.rsplit("/", 1)[-1].lower()
+            exact = 0 if any(name.startswith(w.lower()) for w in words) else 1
+            return (exact, path.count("/"), path)
+
+        for word in words:
+            hits = [p for p in files if word.lower() in p.rsplit("/", 1)[-1].lower() and not is_noise(p)]
+            for path in sorted(hits, key=rank):
+                offer(Action("read_file", {"path": path}, f"{word!r} is in this file's name"))
+                if len(wanted) >= n:
+                    return wanted[:n]
+
+        # Then widen: search by name, and open directories nobody has opened.
+        for word in words:
+            offer(Action("find_files", {"path": self._root, "contains": word}, f"search for {word!r}"))
+        for path in sorted(dirs - listed, key=lambda p: (p.count("/"), p)):
+            if path.rsplit("/", 1)[-1].startswith(".") or is_noise(path):
+                continue  # dot-directories and vendored trees are rarely the answer, and are enormous
+            offer(Action("list_dir", {"path": path}, "not looked in yet"))
+            if len(wanted) >= n:
+                break
+        return wanted[:n]
+
+    async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:
+        _dirs, files, listed = self._known(state)
+        standing = len(files) + len(listed)
+        words = [w.lower() for w in goal_words(state.goal.text)]
+        out: list[Evaluation] = []
+        for obs in outcomes:
+            if not obs.ok:
+                out.append(Evaluation(0.0, False, "", "probe failed"))
+                continue
+            # Reading a file the goal named, and getting real content back, is as settled as a rule
+            # can honestly be: the answer is the file's own text, not an inference from it.
+            read = obs.move.tool == "read_file"
+            named = any(w in str(obs.move.args.get("path", "")).lower() for w in words)
+            if read and named and not obs.predicted and obs.text.strip():
+                head = " ".join(obs.text.split())[:200]
+                out.append(Evaluation(1.0, True, f"{obs.move.args.get('path')}: {head}",
+                                      "read the file the goal named"))
+                continue
+            # Otherwise progress is how much of the tree is known, which only ever grows.
+            gain = len(_ABS_PATH.findall(obs.text)) + len(_FILE_ENTRY.findall(obs.text))
+            share = min(0.9, (standing + gain) / 60)
+            out.append(Evaluation(round(share, 4), False, "",
+                                  f"{standing + gain} path(s) known" if gain else "nothing new here"))
+        return out
+
+
 class SurveyReasoner:
     """The fallback seats: try each action once, and score by what actually came back.
 
@@ -241,9 +385,18 @@ class SurveyReasoner:
         return out
 
 
-def reasoner_for(world: str, specs: Optional[dict[str, ActionSpec]] = None) -> Any:
-    """The rule-based seats for a world: the maze walker, or the generic survey."""
-    return MazeReasoner(specs) if world == "maze" else SurveyReasoner(specs)
+def reasoner_for(world: str, specs: Optional[dict[str, ActionSpec]] = None,
+                 env: Any = None) -> Any:
+    """The rule-based seats for a world: the maze walker, the filesystem reader, or the survey.
+
+    `env` is optional because a caller may only have the specs, but a world whose actions take
+    arguments generally needs it — `FilesReasoner` reads the root it is allowed to start from.
+    """
+    if world == "maze":
+        return MazeReasoner(specs)
+    if world == "files":
+        return FilesReasoner(specs, env)
+    return SurveyReasoner(specs)
 
 
 def is_builtin(model_name: str) -> bool:
@@ -251,4 +404,5 @@ def is_builtin(model_name: str) -> bool:
     return str(model_name).strip().lower() == BUILTIN
 
 
-__all__ = ["BUILTIN", "MazeKnowledge", "MazeReasoner", "SurveyReasoner", "is_builtin", "reasoner_for"]
+__all__ = ["BUILTIN", "FilesReasoner", "MazeKnowledge", "MazeReasoner", "SurveyReasoner",
+           "goal_words", "is_builtin", "is_noise", "reasoner_for"]

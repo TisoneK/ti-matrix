@@ -72,7 +72,7 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
     # other model name is an OpenAI-compatible endpoint, exactly as before.
     if is_builtin(model_name):
-        reasoner = reasoner_for(world_name, env.tools())
+        reasoner = reasoner_for(world_name, env.tools(), env)
         seats: tuple[Any, Any] = (reasoner, reasoner)
     else:
         from ti_matrix.adapters.openai_compat import OpenAICompatModel

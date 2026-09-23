@@ -18,10 +18,13 @@ import pytest
 from ti_matrix import EngineBudget, Goal, StateEngine
 from ti_matrix.adapters.builtin import (
     BUILTIN,
+    FilesReasoner,
     MazeKnowledge,
     MazeReasoner,
     SurveyReasoner,
+    goal_words,
     is_builtin,
+    is_noise,
     reasoner_for,
 )
 from ti_matrix.adapters.maze import MazeEnvironment
@@ -142,7 +145,7 @@ def test_the_survey_never_claims_to_have_settled_anything():
     assert verdict.done is False and verdict.progress > 0
 
 
-@pytest.mark.parametrize("world,expected", [("maze", MazeReasoner), ("files", SurveyReasoner),
+@pytest.mark.parametrize("world,expected", [("maze", MazeReasoner), ("files", FilesReasoner),
                                             ("ledger", SurveyReasoner), ("", SurveyReasoner)])
 def test_each_world_gets_the_seats_that_suit_it(world, expected):
     assert isinstance(reasoner_for(world), expected)
@@ -153,3 +156,78 @@ def test_each_world_gets_the_seats_that_suit_it(world, expected):
 def test_the_builtin_name_is_recognised_however_it_is_typed(name, expected):
     assert is_builtin(name) is expected
     assert BUILTIN == "builtin"
+
+
+# ── the filesystem's seats ──────────────────────────────────────────────────
+#
+# These exist because `builtin` is the app's default and it was functional for exactly one of the four
+# shipped worlds. `SurveyReasoner` proposed every action with no arguments; every files action needs a
+# `path`; so every probe came back "bad arguments for list_dir", and the run stopped on `no_progress`
+# at its second event while the window offered all four worlds as equals.
+
+
+class _Rooted:
+    """Stands in for `RootedFiles` — the reasoner only ever reads `.root` off the environment."""
+
+    def __init__(self, root: str) -> None:
+        self.root = root
+
+
+def test_a_files_run_starts_somewhere_instead_of_proposing_bare_actions():
+    moves = asyncio.run(FilesReasoner({}, _Rooted("/w")).propose(
+        AgentState(GoalType("find the README")), 3, set()))
+    assert moves, "the reasoner proposed nothing at all"
+    # The failure this replaces: every action proposed with empty args.
+    assert all(m.args for m in moves), [m.label() for m in moves]
+    assert any(m.tool == "list_dir" and m.args.get("path") == "/w" for m in moves), [m.label() for m in moves]
+
+
+def test_with_no_root_it_proposes_nothing_rather_than_guessing_at_slash():
+    moves = asyncio.run(FilesReasoner({}, None).propose(AgentState(GoalType("find x")), 3, set()))
+    assert moves == []
+
+
+def test_the_goal_decides_what_is_searched_for():
+    assert "README" in goal_words("find the README and say what this project is")
+    # Stopwords would otherwise dominate; a search for "the" is a search for everything.
+    assert not {"the", "and", "what", "is"} & set(goal_words("find the README and what is"))
+
+
+@pytest.mark.parametrize("path,noisy", [
+    ("/w/app/node_modules/x/Project.xml", True),
+    ("/w/.venv/lib/python3.10/site-packages/a.py", True),
+    ("/w/ti_matrix.egg-info/PKG-INFO", True),
+    ("/w/app/renderer/core/project.ts", False),
+    ("/w/README.md", False),
+])
+def test_somebody_elses_code_is_not_this_project_s_answer(path, noisy):
+    assert is_noise(path) is noisy
+
+
+def test_a_vendored_match_never_beats_a_real_one():
+    """The first rule-based files run settled on a file inside node_modules. It was a correct match."""
+    state = AgentState(GoalType("what is this project"), facts=(
+        "list_dir(path=/w) -> ok: Contents of /w — 2 entries: 📁 app · 📄 README.md (10 B)",
+        "find_files(path=/w, contains=project) -> ok: 2 file(s) under /w with 'project' in the name: "
+        "/w/app/node_modules/iconv/.idea/Project_Default.xml · /w/app/renderer/core/project.ts",
+    ))
+    moves = asyncio.run(FilesReasoner({}, _Rooted("/w")).propose(state, 3, set()))
+    reads = [m.args.get("path") for m in moves if m.tool == "read_file"]
+    assert reads, [m.label() for m in moves]
+    assert not any("node_modules" in str(p) for p in reads), reads
+
+
+def test_reading_the_file_the_goal_named_settles_it_with_the_file_s_own_words():
+    r = FilesReasoner({}, _Rooted("/w"))
+    move = Action("read_file", {"path": "/w/README.md"}, "")
+    obs = Observation(move, True, "Ti Matrix is an engine for state-driven search.")
+    [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find the README")), [obs]))
+    assert verdict.done is True
+    assert "README.md" in verdict.answer and "state-driven" in verdict.answer
+
+
+def test_a_files_probe_that_failed_still_scores_nothing():
+    r = FilesReasoner({}, _Rooted("/w"))
+    obs = Observation(Action("list_dir", {"path": "/nope"}, ""), False, "no such directory")
+    [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find x")), [obs]))
+    assert verdict.progress == 0.0 and verdict.done is False
