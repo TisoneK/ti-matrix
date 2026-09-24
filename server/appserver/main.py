@@ -72,12 +72,16 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     # is what the model is shown. Building the seats before this is what made `recall` invisible: the
     # engine would answer the probe, and the model was never told the action existed.
     statistics = Statistics()
-    environment = env
-    if stats_path is not None:
+    remembering = stats_path is not None
+    if remembering:
         from ti_matrix.adapters import stats_file
         if stats_path.exists():
             statistics = stats_file.load(stats_path)
-        environment = EngineTools(env, memory=statistics)
+    # Always wrapped, whether or not anything is remembered across runs. The wrapper's other half is the
+    # within-run record, which needs no storage and no setting: it is built from the probes passing
+    # through it, and it is how a model asks for the part of what it has learned that it needs instead
+    # of being handed the whole list. `memory=` adds earlier runs on top when a host asked for them.
+    environment = EngineTools(env, memory=statistics if remembering else None)
 
     # The two seats. `builtin` fills them with rules and touches no network, so a window with no
     # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any

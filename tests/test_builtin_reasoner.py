@@ -310,3 +310,94 @@ def test_never_two_navigations_in_one_fan():
     tried = {Action(t, {}, "").fingerprint() for t in ("title_and_url", "page_text", "links")}
     moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 5, tried))
     assert len([m for m in moves if m.tool == "goto"]) <= 1, [m.label() for m in moves]
+
+
+# ── the run's own memory ────────────────────────────────────────────────────
+#
+# A proposer is handed one flat AgentState — no node id, no parent, no structure — so it cannot select
+# from what the run has learned. Showing everything is the floor, not selection, and it stops working
+# the moment a world is large. `recall` is how a seat asks for the part it needs, and because it is an
+# action, what it chose to look up is in the record like any other move.
+
+
+def test_the_run_remembers_what_passed_through_it_and_nothing_else():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    m.observe(Observation(Action("grid", {}, ""), True, "a 9x8 grid holding 27 cells"))
+    m.observe(Observation(Action("look", {"cell": "9,9"}, ""), False, "not a cell of this maze"))
+    m.observe(Observation(Action("step", {"cell": "1,1"}, ""), True, "predicted!", predicted=True))
+    assert len(m) == 1, "a failed probe or a prediction is not a fact"
+
+
+def test_the_same_fact_twice_is_remembered_once():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for _ in range(3):
+        m.observe(Observation(Action("grid", {}, ""), True, "a 9x8 grid"))
+    assert len(m) == 1
+
+
+def test_recall_selects_on_the_words_asked_for():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for cell in ("1,1", "4,7", "9,2"):
+        m.observe(Observation(Action("step", {"cell": cell}, ""), True, f"cell {cell} — open: north"))
+    hit = m.recall("4,7")
+    assert "4,7" in hit and "1,1" not in hit and "9,2" not in hit, hit
+
+
+def test_recall_with_no_words_gives_the_most_recent():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for i in range(10):
+        m.observe(Observation(Action("step", {"i": i}, ""), True, f"fact {i}"))
+    hit = m.recall(limit=3)
+    assert "fact 9" in hit and "fact 0" not in hit and len(hit.splitlines()) == 3
+
+
+def test_a_run_gets_recall_with_no_stored_memory_at_all():
+    """The within-run half needs no storage and no setting — that is what makes it always available."""
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    env = EngineTools(MazeEnvironment())        # no `memory=`
+    assert "recall" in env.tools()
+
+    async def go():
+        await env.probe(Action("grid", {}, ""))
+        return await env.probe(Action("recall", {"text": "grid"}, ""))
+
+    out = asyncio.run(go())
+    assert out.ok and "this run:" in out.text and "9x8" in out.text, out.text
+
+
+def test_recall_says_which_record_a_fact_came_from():
+    """This run's facts are about the world now; earlier runs' are a weaker claim about how it behaved."""
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    class Remembered:
+        def recall(self, text: str = "", limit: int = 8) -> str:
+            return "- step(...) -> ok: worked last time"
+
+    env = EngineTools(MazeEnvironment(), memory=Remembered())
+
+    async def go():
+        await env.probe(Action("grid", {}, ""))
+        return await env.probe(Action("recall", {"text": "grid"}, ""))
+
+    out = asyncio.run(go())
+    assert "this run:" in out.text and "earlier runs:" in out.text, out.text
+
+
+def test_recall_is_honest_when_it_knows_nothing():
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    env = EngineTools(MazeEnvironment())
+    out = asyncio.run(env.probe(Action("recall", {"text": "the exit"}, "")))
+    assert out.ok and "nothing established" in out.text, out.text

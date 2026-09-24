@@ -411,10 +411,10 @@ class BrowserReasoner:
         # ONE navigation per fan, and it is a stopgap rather than a fix. The engine probes a fan
         # concurrently (`asyncio.gather`) and this world holds a single page, so two `goto` candidates
         # in one fan race: probing example.com and iana.org together returns "loaded iana.org" for
-        # *both*, and the fact recorded against the first names a page it never visited. ADR-4 rule 1
-        # is what actually fixes this — a navigation action carrying the URL it acts on — and until the
-        # world is changed, any other proposer (a model, say) can still produce the same fan. Logged as
-        # B-2026-09-23-10; do not delete this guard without doing that.
+        # *both*, and the fact recorded against the first names a page it never visited. The real fix
+        # is an action carrying the URL it acts on, the way the maze's `step` carries its cell — and until the
+        # world is changed, any other proposer (a model, say) can still produce the same fan. Do not
+        # delete this guard without making that change.
         for word in words:
             for href, text in sorted(links.items()):
                 if href in loaded:
