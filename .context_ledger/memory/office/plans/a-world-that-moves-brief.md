@@ -40,19 +40,68 @@ than a tuple of records, and it lets the feature land without a breaking change.
 reasoning that made `Counting` an optional duck-typed protocol rather than a change to `Proposer`:
 **an optional capability that nothing has to know about beats a correct shape nobody can adopt.**
 
-## The open choice: declared or measured
+## A world has several clocks, not one
 
-**Declared** — a world states its own shelf life. One line per world (`stable_for_ms`, or per
-`ActionSpec` since a price moves and a page title does not). Free at runtime. But it is the developer's
-guess about their own world, and this engine's whole posture is that a claim is worth less than a
-measurement.
+**Corrected after the user's note that the world rotates *and* revolves.** The first draft of this
+brief asked whether a *world* declares or measures its shelf life, and put the real point in a
+parenthesis. The real point is that the question has no world-level answer.
 
-**Measured** — the run re-probes a fact and sees whether it changed. Checkable, world-agnostic, needs
-no cooperation from the world. Costs probes, and probes are the budget.
+Every one of these is a fact about the same page:
 
-**Recommendation: measured, with the world allowed to declare a hint.** Consistent with how everything
-else here earns its claims — the branch counts, the perft numbers, the 60% re-probing measurement that
-overturned my own brief — and the hint keeps the first probe from being wasted.
+| fact | good for |
+|---|---|
+| the last digit | about a second |
+| the digit frequencies | tens of seconds |
+| the account balance | until a trade settles |
+| which symbols exist | hours |
+
+A single shelf life is wrong in **both** directions simultaneously: re-probe everything at the fastest
+rate and the budget goes on facts that never move; trust everything at the slowest and act on a price
+from a minute ago. So the unit is the observation, not the environment.
+
+That also makes it measurable, which the world-level version never was. *"Did this action's answer
+change between two probes"* is a real question with a cheap answer. *"How volatile is this world"* is
+not a question at all.
+
+## The open choice, restated: declared or measured — **per action**
+
+**Declared** — an `ActionSpec` says how long its answer holds. That is where it belongs: `look` on a
+chess position is good until someone moves, `page_text` on a price is good for a tick, `grid()` on a
+maze is good forever. One field, and worlds already declare `read_only` in the same place, so the
+precedent and the shape both exist.
+
+**Measured** — probe the same action twice and compare. Targeted and cheap, because it is one action
+rather than a survey of the world, and it needs no cooperation from a world someone else wrote.
+
+**Recommendation unchanged in spirit, sharper in form: both, per action, measurement winning.** The
+spec's number is a hint that saves the first probe; what the run actually observes overrides it. This
+is how everything else here earns its claims, and a declaration that turns out to be wrong is exactly
+the failure the engine should catch rather than inherit.
+
+## A third way to adapt, which the metaphor surfaced
+
+ADR-5 names three: re-check, narrow the fan, stop. Per-fact rates add a fourth and it may be the best
+of them:
+
+**Prefer the slow facts.** If a goal can be answered from things that are not moving, answer it from
+those. "Which digit came up most often in the last hundred ticks" is nearly as stale-proof as the
+symbol list; "what is the last digit right now" cannot be made safe at all. A run that notices it is
+being beaten by the clock and *reframes onto slower evidence* is adapting in the way the user
+described, and unlike narrowing the fan it costs nothing and makes the answer better rather than just
+faster.
+
+It also changes what re-checking costs. Re-probing "the one fact the decision rests on" is cheap when
+you know which fact that is and that it is the fast one — the first draft implied re-probing broadly.
+
+## Periodic, not just drifting
+
+Rotation and revolution are cycles, not random walk. Some world change is predictable: a page that
+polls on a timer, a market session, a job on a schedule. A run that measured a *period* could time
+itself against it rather than race it.
+
+Out of scope for a first pass and recorded so nobody designs it out — the shape above (a rate per
+action, measured) extends to a period per action without being rebuilt, and a design that assumed one
+global drift rate would not.
 
 ## Build order, cheapest first
 
@@ -86,10 +135,14 @@ agent cannot read at all.
 
 ## Questions for the user
 
-1. **Declared, measured, or both?** The recommendation above is both, measured-led. It is the only
-   choice that changes the shape of the code.
+1. **Declared, measured, or both — per action?** The recommendation is both, measured-led, with the
+   `ActionSpec` carrying a hint. It is the only choice that changes the shape of the code, and the
+   per-action part is not optional: a world-level rate is wrong in both directions at once.
 2. **Does step 1 ship alone?** Reporting staleness without adapting is small, safe, and useful on its
    own. Steps 2 and 3 spend budget and change how runs behave.
-3. **Is there a world to test against that is fast but free?** A market needs an account and moves on
+3. **Is "prefer the slow facts" worth building, or just worth knowing?** It is the most interesting of
+   the four adaptations and the least like the others — it changes which question gets answered rather
+   than how fast. It may belong to the seats (a reasoner's judgement) rather than to the engine.
+4. **Is there a world to test against that is fast but free?** A market needs an account and moves on
    its own schedule. A local world that changes on a timer would make the "too fast to act" case
    reproducible in the suite, which the real one never will be.

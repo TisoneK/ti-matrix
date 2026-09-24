@@ -172,6 +172,35 @@ relitigating them. To reverse one, append a new ADR that supersedes it.
   4. **Staleness is the same category of caveat as `predicted`.** A predicted outcome is already never
      learned as a fact. An aged fact is a fact that has stopped being one, and it should be marked in
      the record the same way rather than silently trusted.
+  5. **Staleness belongs to the fact, not to the world** — *added the same day, see the amendment.*
+- **Amendment (2026-09-24, same day, sharpening clause 5 — not a reversal):** the first draft of this
+  decision and its brief treated "the world moves" as one property with one rate. A world does not have
+  a rate. It has several at once, and the user's correction is the cleanest statement of it: *the world
+  rotates and revolves.* Two motions, both real, orders of magnitude apart, running simultaneously.
+
+  On the page that prompted this, all of these are facts about one world:
+
+  | fact | good for |
+  |---|---|
+  | the last digit | about a second |
+  | the digit frequencies | tens of seconds |
+  | the account balance | until a trade settles |
+  | which symbols exist | hours |
+
+  A single shelf life is wrong in both directions at once: re-probe everything at the fastest rate and
+  the budget is gone on facts that never move, or trust everything at the slowest and act on a price
+  from a minute ago. **The rate is a property of the observation, not of the environment**, which also
+  makes it measurable — "did *this* action's answer change between two probes" is a real question, where
+  "how volatile is this world" is not.
+
+  Two further consequences of taking the metaphor seriously:
+
+  - **Some change is periodic, not drift.** A page that polls on a timer, a market session, a job on a
+    schedule. A run that measured a period could time itself against it instead of racing it. Out of
+    scope for a first pass; recorded so nobody designs it out.
+  - **You do not feel the Earth turn.** A fact goes stale with no signal — no error, no exception, just
+    a belief that quietly stopped being true. That is exactly the browser false-facts bug fixed in
+    `9daf9a4`, and it is the argument for measuring rather than trusting a declaration.
 - **Consequences:**
   - `AgentState` is engine core, under `test_boundary` and 278 tests. Prefer an **additive** shape —
     the observation times alongside the facts — over changing `facts` itself, because every reader in
