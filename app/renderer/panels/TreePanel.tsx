@@ -51,11 +51,16 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   const width = Math.max(240, view.width + COL);
   const height = Math.max(120, view.height + ROW);
   const hidden = view.folds.reduce((sum, f) => sum + f.hidden, 0);
+  // How many candidates this run probed and did not take. A search that weighed sixty options and a
+  // walk that weighed none read identically before this — both were "N states".
+  const weighed = decisions.reduce((n, d) => n + d.options.filter((o) => !o.chosen).length, 0);
 
   return (
     <>
       <PaneHead title="Search tree"
-                sub={`${tree.states} state${tree.states === 1 ? "" : "s"} · ${tree.backtracks} retreat${tree.backtracks === 1 ? "" : "s"}${hidden > 0 ? ` · ${hidden} folded` : ""}`}>
+                sub={`${tree.states} state${tree.states === 1 ? "" : "s"} · ${tree.backtracks} retreat${tree.backtracks === 1 ? "" : "s"}`
+                  + (weighed > 0 ? ` · ${weighed} weighed and passed over` : "")
+                  + (hidden > 0 ? ` · ${hidden} folded` : "")}>
         <Chip label="fold cold branches" pressed={foldDead} onClick={() => setFoldDead((v) => !v)}
               title="fold a branch the run has already given up" />
       </PaneHead>
@@ -76,6 +81,44 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                   d={`M${edge.from.x} ${edge.from.y + NODE} C${edge.from.x} ${edge.from.y + ROW * 0.6}, ${edge.to.x} ${edge.to.y - ROW * 0.6}, ${edge.to.x} ${edge.to.y - NODE}`}
                 />
               ))}
+
+              {/* The roads not taken. Every candidate in a fan is probed against the real world and
+                  scored; one is applied and becomes a node. The rest were folded into
+                  `Decision.options` from the start and the tree never drew them, so a branch point
+                  looked exactly like a corridor.
+
+                  They are stubs, not nodes, and that is the honest shape: each was probed exactly
+                  once and has no subtree. Drawing them as branches would invent a search that never
+                  happened. They hang off the node they were weighed at and end in an open marker. */}
+              {view.visible.map((node) => {
+                if (node.decision === null) return null;
+                const passed = (decisions[node.decision]?.options ?? []).filter((o) => !o.chosen);
+                if (passed.length === 0) return null;
+                return (
+                  <g key={`stubs-${node.id}`} className={node.dead ? "stubs cold" : "stubs"}>
+                    {passed.map((option, i) => {
+                      // Fan them to the right of the trunk, so the applied edge stays the vertical one.
+                      const spread = (i - (passed.length - 1) / 2) * 0.34;
+                      const dx = Math.sin(spread + 0.9) * COL * 0.62;
+                      const dy = Math.cos(spread + 0.9) * ROW * 0.42;
+                      const refused = option.ok === false;
+                      return (
+                        <g key={option.fp} className={`stub ${refused ? "refused" : ""}`}>
+                          <title>
+                            {`${option.label} — ${refused ? "the world refused this"
+                              : option.progress === undefined ? "not scored"
+                                : `scored ${Math.round(option.progress * 100)}%`}`}
+                            {option.excerpt ? `\n${option.excerpt.slice(0, 160)}` : ""}
+                          </title>
+                          <path className="stub-edge"
+                                d={`M${node.x} ${node.y} L${node.x + dx} ${node.y + dy}`} />
+                          <circle className="stub-dot" cx={node.x + dx} cy={node.y + dy} r={2.6} />
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
 
               {view.visible.map((node) => {
                 const fold = view.folds.find((f) => f.from === node.id);

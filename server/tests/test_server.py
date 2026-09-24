@@ -23,7 +23,7 @@ async def test_healthz_and_worlds_need_no_token(server):
             assert resp.status == 200 and body["ok"] is True and body["protocol"] == protocol.PROTOCOL
         async with session.get(f"{server.url}/worlds") as resp:
             names = {w["name"] for w in (await resp.json())["worlds"]}
-            assert names == {"maze", "files", "browser"}
+            assert names == {"maze", "files", "chess", "browser"}
 
 
 async def test_a_socket_without_the_token_never_reaches_the_run(server, client_factory):

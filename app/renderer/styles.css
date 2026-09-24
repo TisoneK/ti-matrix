@@ -905,3 +905,22 @@ svg { display: block; }
 .alt.refused { border-color: rgba(255, 106, 106, 0.32); }
 .alt.refused b { color: var(--red); }
 .row.cold .row-alts { opacity: 0.55; }
+
+/* ── the roads not taken, in the tree ─────────────────────────────────────
+   A stub is a candidate that was probed against the real world, scored, and not
+   applied. It is a leaf with no subtree — it was looked at exactly once — so it
+   is drawn shorter, thinner and dimmer than a real edge. Anything heavier would
+   claim a search that did not happen. */
+.stub-edge {
+  stroke: var(--line-2); stroke-width: 1; fill: none; opacity: 0.75;
+}
+.stub-dot {
+  fill: var(--bg); stroke: var(--fg-4); stroke-width: 1;
+}
+/* Weighed and passed over: the amber the ledger already uses for a move taken on a hunch. */
+.stub:hover .stub-edge { stroke: var(--amber); opacity: 1; }
+.stub:hover .stub-dot { stroke: var(--amber); }
+/* The world pushed back on this one — the same red a surprise gets in the gutter. */
+.stub.refused .stub-dot { stroke: var(--red); opacity: 0.85; }
+.stub.refused .stub-edge { stroke: rgba(255, 106, 106, 0.4); stroke-dasharray: 2 2; }
+.stubs.cold { opacity: 0.35; }

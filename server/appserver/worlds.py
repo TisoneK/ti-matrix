@@ -87,6 +87,15 @@ def _files_world(config: dict[str, Any]) -> RootedFiles:
     return RootedFiles(root)
 
 
+def _chess_world(config: dict[str, Any]) -> Any:
+    from ti_matrix.adapters.chess import ChessEnvironment
+
+    seed = config.get("seed")
+    seed_i = int(seed) if str(seed).strip() not in ("", "None") else None
+    fen = str(config.get("fen", "")).strip()
+    return ChessEnvironment(fen, seed=seed_i, opponent=str(config.get("opponent", "greedy")))
+
+
 def _browser_world(config: dict[str, Any]) -> Any:
     from ti_matrix.adapters.browser import BrowserEnvironment
 
@@ -117,6 +126,13 @@ WORLDS: dict[str, World] = {
               "Every action reads. Paths resolve under the root; one that escapes it is refused.",
               ({"name": "root", "label": "Read files under", "default": "", "placeholder": "C:\\path\\or\\/home/you/code"},),
               _files_world),
+        World("chess", "Chess",
+              "A game against a simple opponent. Every position offers about thirty-five legal moves, "
+              "so this is the world where the search has something real to choose between.",
+              ({"name": "seed", "label": "Seed (blank = a new game every run)", "default": ""},
+               {"name": "fen", "label": "Start from a position (blank = the opening)", "default": "",
+                "placeholder": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}),
+              _chess_world),
         World("browser", "Real browser",
               "A real Chrome at the URL you name. Clicks and typing are asked before they happen.",
               ({"name": "url", "label": "Start URL", "default": "", "placeholder": "https://example.com"},

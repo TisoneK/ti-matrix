@@ -15,7 +15,7 @@ from ti_matrix.protocols import Action
 
 def test_the_registry_describes_every_world_with_its_form():
     worlds = {w["name"]: w for w in describe()}
-    assert set(worlds) == {"maze", "files", "browser"}
+    assert set(worlds) == {"maze", "files", "chess", "browser"}
     assert {f["name"] for f in worlds["maze"]["fields"]} == {"width", "height", "seed"}
     assert {f["name"] for f in worlds["files"]["fields"]} == {"root"}
     assert {f["name"] for f in worlds["browser"]["fields"]} == {"url", "headless"}
