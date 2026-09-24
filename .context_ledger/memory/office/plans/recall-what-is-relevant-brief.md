@@ -38,6 +38,18 @@ That asymmetry is the finding. **The rule-based seats select; the model seat is 
 model given forty facts has to re-derive on every call what `MazeKnowledge` computes once, and it has
 no way to ask for anything it was not given.
 
+## Status: the cheap half shipped (`76a0590`)
+
+`recall` now answers from the run's own observations as well as from earlier runs, labelled by which.
+It needed no protocol change: `EngineTools` already sits in the probe path, so the within-run record
+builds itself from traffic going by. `memory=` became optional and the sidecar always wraps, so every
+run has it with no storage and no setting.
+
+**What that does not do**, and the reason this row stays open: it selects *facts*, lexically. It does
+not let a seat select **nodes**. A proposer still receives one flat state with no structure, so a
+question like "what did I learn down the branch I abandoned?" is still unanswerable. That is option A
+or B below and it is a protocol change.
+
 ## Three ways to close it
 
 **A. Pass the structure to the proposer.** Change the protocol so a proposer receives the history or
