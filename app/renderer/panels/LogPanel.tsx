@@ -164,7 +164,14 @@ function Row({ decision, current, future, booked, onSeek, onBookmark, onHover, p
             different claims, and only the second is a decision you can check. */}
         {passedOver.length > 0 ? (
           <span className="row-alts">
-            <span className="alts-label">passed over</span>
+            {/* "4 of 35" is the number that makes this a decision rather than a list. Shown only
+                when the proposer could say — a filesystem has no denominator, and inventing one
+                would be worse than the silence. */}
+            <span className="alts-label">
+              {decision.available !== undefined
+                ? `weighed ${decision.options.length} of ${decision.available}`
+                : "passed over"}
+            </span>
             {passedOver.map((o) => (
               <span key={o.fp} className={`alt ${o.ok === false ? "refused" : ""}`}
                     title={o.ok === false ? `the world refused this: ${o.excerpt ?? ""}` : o.excerpt ?? o.why}>

@@ -397,3 +397,25 @@ def test_a_file_that_is_not_a_database_is_reported_rather_than_read_as_empty(tmp
     path.write_bytes(b"")  # an empty file is a new database, not an error
     with SqliteStore(path) as store:
         assert store.counts() == {"tools": 0, "actions": 0, "facts": 0}
+
+
+def test_the_learning_wrapper_does_not_swallow_the_move_count():
+    """An optional capability has to survive being wrapped, or it is only optional in the sense that
+    it usually disappears.
+
+    The engine asks the proposer it holds how many actions were available. With learning on, the
+    proposer it holds is `LearningProposer`, so chess reported "4 of 35" with learning off and nothing
+    at all with it on — and the app turns learning on by default.
+    """
+    from ti_matrix.adapters.builtin import ChessReasoner, SurveyReasoner
+    from ti_matrix.adapters.chess.rules import START_FEN
+    from ti_matrix.learning import LearningProposer, Statistics
+    from ti_matrix.protocols import Goal
+    from ti_matrix.state import AgentState
+
+    state = AgentState(Goal("win"), facts=(f"position() -> ok: FEN {START_FEN} | White to move",))
+    inner = ChessReasoner()
+    assert LearningProposer(inner, Statistics()).considered(state) == inner.considered(state) == 20
+
+    # And a proposer that cannot count is still not made to guess through the wrapper.
+    assert LearningProposer(SurveyReasoner(), Statistics()).considered(state) is None

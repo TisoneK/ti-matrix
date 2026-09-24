@@ -127,6 +127,13 @@ class MazeReasoner:
 
     # ── the proposer's seat ──
 
+    def considered(self, state: AgentState) -> Optional[int]:
+        """Every unexplored opening the run could have taken from what it knows."""
+        known = MazeKnowledge(state)
+        if not known.open:
+            return None            # nothing entered yet: the opening moves are not a frontier
+        return len(known.frontier())
+
     async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
         known = MazeKnowledge(state)
         wanted: list[Action] = []
@@ -488,6 +495,18 @@ class ChessReasoner:
             if found:
                 return found.group(1)
         return None
+
+    def considered(self, state: AgentState) -> Optional[int]:
+        """How many legal moves this position offered. The denominator a chess decision needs."""
+        from ti_matrix.adapters.chess.rules import Position, legal_moves
+
+        fen = self._here(state)
+        if fen is None:
+            return None
+        try:
+            return len(legal_moves(Position.from_fen(fen)))
+        except ValueError:
+            return None
 
     async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
         wanted: list[Action] = []

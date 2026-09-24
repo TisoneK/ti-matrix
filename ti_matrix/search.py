@@ -211,9 +211,21 @@ class StateEngine:
                 yield await self._stopped(f"proposer_error: {exc}", state, calls)
                 return
             calls += 1
+            # How many this was chosen from, when the proposer can say. Weighing four of thirty-five
+            # legal moves and four of four are different decisions, and the engine cannot tell them
+            # apart on its own: it sees the candidates, never the space they came from. Optional, and
+            # absent rather than guessed for a world where the question has no answer — see `Counting`.
+            considered = getattr(self.proposer, "considered", None)
+            available = None
+            if callable(considered):
+                try:
+                    available = considered(state)
+                except Exception:  # noqa: BLE001 — a proposer's bookkeeping must never end a run
+                    available = None
             yield EngineEvent(
                 "candidates",
-                {"moves": [{"fp": m.fingerprint(), "label": m.label(), "tool": m.tool, "why": m.why} for m in actions]},
+                {"moves": [{"fp": m.fingerprint(), "label": m.label(), "tool": m.tool, "why": m.why} for m in actions],
+                 **({"available": int(available)} if isinstance(available, int) and available >= 0 else {})},
             )
 
             # Which of these can this environment run? An action it does not have is remembered as failed;

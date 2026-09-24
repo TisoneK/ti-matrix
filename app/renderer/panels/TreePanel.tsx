@@ -54,12 +54,18 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   // How many candidates this run probed and did not take. A search that weighed sixty options and a
   // walk that weighed none read identically before this — both were "N states".
   const weighed = decisions.reduce((n, d) => n + d.options.filter((o) => !o.chosen).length, 0);
+  // And how many there were to weigh, where the proposer could count. Summed only over the decisions
+  // that reported it, so the ratio is never quietly made up of two different populations.
+  const counted = decisions.filter((d) => d.available !== undefined);
+  const offered = counted.reduce((n, d) => n + (d.available ?? 0), 0);
+  const looked = counted.reduce((n, d) => n + d.options.length, 0);
 
   return (
     <>
       <PaneHead title="Search tree"
                 sub={`${tree.states} state${tree.states === 1 ? "" : "s"} · ${tree.backtracks} retreat${tree.backtracks === 1 ? "" : "s"}`
                   + (weighed > 0 ? ` · ${weighed} weighed and passed over` : "")
+                  + (offered > 0 ? ` · it looked at ${looked} of ${offered} it could have` : "")
                   + (hidden > 0 ? ` · ${hidden} folded` : "")}>
         <Chip label="fold cold branches" pressed={foldDead} onClick={() => setFoldDead((v) => !v)}
               title="fold a branch the run has already given up" />

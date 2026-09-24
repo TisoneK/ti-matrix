@@ -202,3 +202,40 @@ def test_progress_rises_as_the_game_goes_on_so_a_level_position_does_not_stall()
                                             [Observation(Action("play", {}, ""), True, f"FEN {fen} | x")]))[0].progress
               for fen in (early, late)]
     assert scores[1] > scores[0], scores
+
+
+def test_the_record_says_how_many_moves_there_were_to_choose_from():
+    """The engine sees the candidates a proposer returns, never the space they came from.
+
+    Weighing four of thirty-five legal moves and four of four are different decisions, and without a
+    denominator the record cannot tell them apart. Only the proposer knows, so it says — optionally,
+    because a filesystem admits any path and has no honest answer.
+    """
+    import collections
+
+    from ti_matrix import EngineBudget, StateEngine
+
+    env = ChessEnvironment(seed=2)
+    reasoner = reasoner_for("chess", env.tools(), env)
+    engine = StateEngine(env, proposer=reasoner, evaluator=reasoner,
+                         budget=EngineBudget(max_depth=4, max_branches=3, max_model_calls=40))
+
+    async def go():
+        return [e async for e in engine.run(Goal("win material"))]
+
+    events = asyncio.run(go())
+    fans = [e for e in events if e.kind == "candidates" and "available" in e.data]
+    assert fans, "no fan reported how many moves were available"
+    for fan in fans:
+        assert fan.data["available"] >= len(fan.data["moves"]), fan.data
+    # The opening offers twenty; a fan of three is what the budget allowed.
+    assert any(f.data["available"] == 20 for f in fans), collections.Counter(
+        f.data["available"] for f in fans)
+
+
+def test_a_proposer_that_cannot_count_is_not_made_to_guess():
+    """A world with no finite action space must leave the number out, not invent one."""
+    from ti_matrix.adapters.builtin import FilesReasoner, SurveyReasoner
+
+    assert not hasattr(SurveyReasoner(), "considered")
+    assert not hasattr(FilesReasoner(), "considered")

@@ -68,6 +68,14 @@ export interface Decision {
   headline: string;
   flags: Flag[];
   options: Candidate[];
+  /**
+   * How many actions this decision was chosen from, when the proposer could say.
+   *
+   * Weighing four of thirty-five legal moves and four of four are different decisions, and without
+   * this the record cannot tell them apart. Undefined where the question has no answer — a filesystem
+   * admits any path — and undefined is shown as nothing rather than as a guess.
+   */
+  available?: number;
   /** Actions the search proposed and could not run (refused, or a tool this world does not have). */
   refused: string[];
   /** Everything the state knows after the decision — the engine's own fact text. */
