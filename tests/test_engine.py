@@ -149,12 +149,30 @@ async def test_unselected_probes_still_teach_facts():
     assert st.data["facts"] == 2  # the winner's fact + the runner-up's real observation
 
 
-def test_state_is_immutable_and_render_is_bounded():
+def test_state_is_immutable_and_render_is_bounded_per_fact_not_by_count():
+    """The bound is `_FACT_CHARS` on each observation, not a cap on how many the model may see.
+
+    `render` used to show only the last eight facts, which cost 60% of a maze run's probes to
+    re-learning places it already knew (see `AgentState.render`). The truncation that matters is this
+    one: a 5,000-character read enters the state at 320, so every fact can be shown without the prompt
+    growing without limit.
+    """
     s0 = AgentState(GOAL)
     s1 = s0.apply(Observation(mv(), True, "x" * 5000), Evaluation(0.5))
     assert s0.depth == 0 and s1.depth == 1 and s0.facts == ()
     assert len(s1.render()) < 900 and s1.progress == 0.5
     assert mv(path="/a").fingerprint() == mv(path="/a").fingerprint() != mv(path="/b").fingerprint()
+
+
+def test_the_model_is_shown_every_fact_the_run_has_established():
+    state = AgentState(GOAL)
+    for i in range(30):
+        state = state.apply(Observation(mv(path=f"/f{i}"), True, f"fact {i}"), Evaluation(0.1))
+    shown = [line for line in state.render().splitlines() if line.startswith("  - ")]
+    assert len(shown) == 30, f"the run holds 30 facts and showed {len(shown)}"
+    assert "fact 0" in state.render(), "the earliest fact was dropped"
+    # A caller that wants a narrower view can still ask for one.
+    assert len([l for l in state.render(5).splitlines() if l.startswith("  - ")]) == 5
 
 
 def test_parse_json_survives_fences_and_prose():

@@ -6,7 +6,7 @@ for the model, and fingerprinted so an action that failed is never proposed twic
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Optional
 
 from ti_matrix.protocols import Action, Evaluation, Goal, Observation
 
@@ -53,14 +53,38 @@ class AgentState:
         """An action that led nowhere is remembered so it is not proposed again."""
         return self if fingerprint in self.failed else replace(self, failed=self.failed + (fingerprint,))
 
-    def render(self, max_facts: int = 8) -> str:
-        """Compact canonical view for the model (bounded, no chat history)."""
+    def render(self, max_facts: Optional[int] = None) -> str:
+        """Canonical view for the model: everything known, bounded per fact rather than by count.
+
+        This used to show the last eight facts. Measured, that was the most expensive line in the
+        engine. Holding one reasoner constant and varying only this window against the maze:
+
+            last 8 facts   266 probes, 160 re-learned a known place  (60%)
+            last 16        226 probes, 106                           (47%)
+            last 32        140 probes,  20                           (14%)
+            every fact     120 probes,   0                           ( 0%)
+
+        Forgetting more than doubled the work. Real runs agreed: `deepseek-flash` re-probed places it
+        already knew on 42% and 48% of its successful probes, while the rule-based seats — which read
+        every fact — did it zero times in 320. At probe thirty of forty the model was being shown the
+        last eight places it had been and had no record of the first twenty-two.
+
+        Nothing was bought with that. A complete forty-probe run's entire fact set is 1,888 characters,
+        about 470 tokens; eight facts is about 98. The bound that matters is already in place and is a
+        real one — `_FACT_CHARS` truncates each observation as it becomes a fact, so a 5,000-character
+        page read enters the state at 320 — and the run's own budget caps how many there can be. A
+        hundred-probe run at the per-fact ceiling is roughly 8,000 tokens, which is the worst case, not
+        the typical one. A second bound on top of those cost more than half the probes in the run.
+
+        `max_facts` stays for a caller that wants a smaller view on purpose.
+        """
         lines = [f"GOAL: {self.goal.text}"]
         if self.goal.constraints:
             lines.append("CONSTRAINTS: " + "; ".join(self.goal.constraints))
         lines.append(f"PROGRESS: {self.progress:.2f}   DEPTH: {self.depth}")
         lines.append("KNOWN FACTS:" + ("" if self.facts else " (none yet)"))
-        lines += [f"  - {f}" for f in self.facts[-max_facts:]]
+        shown = self.facts if max_facts is None else self.facts[-max_facts:]
+        lines += [f"  - {f}" for f in shown]
         if self.trail:
             lines.append("MOVES SO FAR: " + " | ".join(self.trail[-6:]))
         return "\n".join(lines)
