@@ -408,13 +408,11 @@ class BrowserReasoner:
         # Then follow a link whose text or href carries a word from the goal — never an arbitrary one,
         # because "click the first link" is how a run wanders off a site forever.
         #
-        # ONE navigation per fan, and it is a stopgap rather than a fix. The engine probes a fan
-        # concurrently (`asyncio.gather`) and this world holds a single page, so two `goto` candidates
-        # in one fan race: probing example.com and iana.org together returns "loaded iana.org" for
-        # *both*, and the fact recorded against the first names a page it never visited. The real fix
-        # is an action carrying the URL it acts on, the way the maze's `step` carries its cell — and until the
-        # world is changed, any other proposer (a model, say) can still produce the same fan. Do not
-        # delete this guard without making that change.
+        # ONE navigation per fan. The world no longer *lies* when two share one — each goto reports the
+        # page it actually landed on, and every read names the page it read — but the waste is real:
+        # there is a single page behind the whole fan, so the second navigation throws away the first,
+        # and the engine may then apply the one whose page is gone. Proposing navigation on its own is
+        # what the design asked for; this is the seat honouring it rather than a comment hoping for it.
         for word in words:
             for href, text in sorted(links.items()):
                 if href in loaded:

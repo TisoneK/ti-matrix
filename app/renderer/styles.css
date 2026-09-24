@@ -864,3 +864,44 @@ svg { display: block; }
 }
 .seatpick button[aria-pressed="true"] small { color: var(--fg-2); }
 @media (max-width: 720px) { .seatpick { grid-template-columns: 1fr; } }
+
+/* "the world said more than the run was shown" — a marker, never more text. The engine truncates a long
+   read and leaves its own tail note; showing that note verbatim would read as part of the world's answer,
+   and hiding it entirely is what the ledger did until now, which let a fragment pass for the whole thing. */
+.row-evidence .cut {
+  display: inline-block;
+  margin-left: var(--s2);
+  padding: 0 5px;
+  border: 1px solid var(--amber);
+  border-radius: 99px;
+  font: 500 9.5px/1.5 var(--mono);
+  font-style: normal;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+/* ── what the run passed over ────────────────────────────────────────────
+   Every candidate in a fan is probed and scored; one is applied. The rest were
+   folded into `Decision.options` from the start and nothing drew them, so the
+   ledger said what happened and never what else was on the table. Quiet by
+   default — the decision is the headline, these are the evidence for it. */
+.row-alts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  margin-top: 5px;
+}
+.alts-label {
+  font: 500 9.5px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--fg-4); margin-right: 1px;
+}
+.alt {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 2px 6px; border-radius: var(--r-1);
+  border: 1px solid var(--line); background: var(--plate);
+  font: 10.5px/1.4 var(--mono); color: var(--fg-3);
+}
+.alt b { color: var(--fg-2); font-weight: 600; }
+/* The world pushed back on this one — the same red a surprise gets in the gutter. */
+.alt.refused { border-color: rgba(255, 106, 106, 0.32); }
+.alt.refused b { color: var(--red); }
+.row.cold .row-alts { opacity: 0.55; }

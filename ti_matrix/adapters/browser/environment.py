@@ -163,7 +163,10 @@ class BrowserEnvironment:
         # `perform` says so, and a confirmer may grant one action at the moment it matters. Refusing here as
         # well made a granted click impossible: the grant was recorded, and the environment threw it away.
         try:
-            # The protocol is blocking and the engine probes a fan at once; each call takes the page's lock.
+            # The engine probes a fan at once and there is one page behind all of it, so an action runs
+            # whole or not at all. The lock used to guard only lazy page creation, not the action: `_goto`
+            # navigated and read the title with nothing held, so two concurrent gotos interleaved on one
+            # page and *both* reported the second URL — a fact naming a page its action never visited.
             return Observation(action, *await asyncio.to_thread(self._run, action))
         except (CdpError, BrowserError, OSError) as exc:
             return Observation(action, False, f"{type(exc).__name__}: {exc}"[:400])
@@ -207,8 +210,14 @@ class BrowserEnvironment:
             return self._page
 
     def _run(self, action: Action) -> tuple[bool, str]:
-        """One action, performed. Raises for a real failure; the caller turns that into an observation."""
-        return getattr(self, f"_{action.tool}")(**action.args)
+        """One action, performed whole. Raises for a real failure; the caller turns that into an observation.
+
+        Held across the entire action, not just page creation. Everything here reads or changes one shared
+        page, so an action that released between navigating and reading would report on whatever a sibling
+        probe had done in the gap.
+        """
+        with self._lock:
+            return getattr(self, f"_{action.tool}")(**action.args)
 
     # ── the reads ──
 
@@ -218,16 +227,31 @@ class BrowserEnvironment:
 
     def _page_text(self, selector: Optional[str] = None) -> tuple[bool, str]:
         text = " ".join(self.page().text(selector).split()) if selector else self.page().text()
-        return True, text[:_MAX_OBS]
+        return True, self._sourced(text[:_MAX_OBS])
 
     def _html(self, selector: Optional[str] = None, max_chars: int = 8000) -> tuple[bool, str]:
-        return True, self.page().html(selector, max_chars=max(200, min(int(max_chars), 40_000)))
+        return True, self._sourced(self.page().html(selector, max_chars=max(200, min(int(max_chars), 40_000))))
+
+    def _sourced(self, text: str) -> str:
+        """Name the page this reading came from.
+
+        One page serves the whole run, so "the current page" is a moving target: a read that shares a fan
+        with a navigation, or follows one the engine did not apply, is about a different page than the
+        reader assumes. Naming the URL cannot stop that — only proposing navigation on its own does — but
+        it means the fact is never *false*. It says what it is about, and a mismatch is visible in the
+        record instead of silently wrong.
+        """
+        try:
+            return f"[{self.page().url()}]\n{text}"
+        except Exception:  # noqa: BLE001 — a page that cannot say where it is must not break the read
+            return text
 
     def _links(self, limit: int = _LINKS_SHOWN) -> tuple[bool, str]:
         found = self.page().links(limit=max(1, min(int(limit), 200)))
         if not found:
             return True, "this page has no links"
-        return True, "\n".join(f"- {l.get('text') or '(no text)'} — {l.get('href')}" for l in found)[:_MAX_OBS]
+        listed = "\n".join(f"- {l.get('text') or '(no text)'} — {l.get('href')}" for l in found)
+        return True, self._sourced(listed[:_MAX_OBS])
 
     def _find(self, selector: str) -> tuple[bool, str]:
         found = self.page().find(str(selector))

@@ -295,10 +295,11 @@ def test_the_page_s_own_words_are_the_answer_when_they_carry_the_goal():
 
 
 def test_never_two_navigations_in_one_fan():
-    """A fan is probed concurrently against one page, so two gotos race and both report the last URL.
+    """A fan is probed concurrently against one page, so a second navigation throws away the first.
 
-    Demonstrated on the real world: probing example.com and iana.org together returned "loaded
-    iana.org" for both, which writes a false fact. This is a guard, not the fix — see ADR-4 rule 1.
+    The world no longer reports falsely when it happens (see `tests/test_browser.py`), but the waste is
+    real and the engine may apply the goto whose page is already gone. The design asked for navigation
+    to be proposed on its own; this is the seat honouring it.
     """
     state = AgentState(GoalType("find the pricing and the plans"), facts=(
         "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",
