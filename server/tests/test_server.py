@@ -157,3 +157,31 @@ async def test_builtin_needs_no_base_url_but_a_named_model_still_does(server, cl
     await client.send(type="goal", text="x", world="maze", config={"base_url": "", "model": ""})
     err = await client.drain_until("error")
     assert "builtin" in err["message"], err["message"]
+
+
+async def test_a_remembering_run_shows_the_model_the_recall_tool(server, client_factory, tmp_path):
+    """`recall` is added by wrapping the environment, so the seats must be built after the wrap.
+
+    They were not: `LLMMoveProposer` was constructed from `env.tools()` before `EngineTools` wrapped
+    it, so the engine would answer a `recall` probe and the model was never told the action existed —
+    the one tool that lets it ask what earlier runs established, invisible in the prompt.
+    """
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.learning import Statistics
+    from ti_matrix.tools import EngineTools
+
+    raw = MazeEnvironment()
+    assert "recall" not in raw.tools()
+    assert "recall" in EngineTools(raw, memory=Statistics()).tools()
+
+    # And end to end: a run that remembers leaves a record behind and says so.
+    stats = tmp_path / "maze.json"
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": "", "model": "builtin"},
+                      remember=str(stats),
+                      budget={"max_depth": 40, "max_model_calls": 300, "max_backtracks": 20})
+    settled = await client.settle()
+    assert settled["reason"] is None, settled["reason"]
+    assert settled["learned"] and "remembered" in settled["learned"], settled["learned"]
+    assert stats.exists(), "the run remembered nothing"

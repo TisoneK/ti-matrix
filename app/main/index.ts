@@ -223,6 +223,23 @@ async function readJson<T>(file: string): Promise<T | null> {
 }
 
 function registerLibrary(): void {
+  /**
+   * Where a world's accumulated experience lives. One file per world, because what the maze taught a
+   * run has nothing to say about a filesystem, and pooling them would make the record noise.
+   *
+   * The engine has shipped `recall` and `LearningProposer` since v0.1 and `benchmarks/bench.py`
+   * measures what they are worth — once the record holds anything, the same goals settle in 1 round
+   * and 3 probes instead of 2 and 6. The app never sent `remember`, so `stats_path` was always None,
+   * so neither was ever constructed. The whole layer was switched off in the product that most needed
+   * it, where a model call is twenty to forty-five seconds.
+   */
+  ipcMain.handle("tm:memory-path", async (_e, world: unknown) => {
+    if (typeof world !== "string" || !/^[a-z][a-z0-9_-]{0,31}$/.test(world)) return null;
+    const dir = path.join(app.getPath("userData"), "memory");
+    await fs.promises.mkdir(dir, { recursive: true });
+    return path.join(dir, `${world}.json`);
+  });
+
   ipcMain.handle("tm:runs-dir", async () => {
     await fs.promises.mkdir(runsDir(), { recursive: true });
     return runsDir();

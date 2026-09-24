@@ -81,6 +81,8 @@ export interface TmApi {
   runsLoad?: (id: string) => Promise<RunArtifact | null>;
   runsDelete?: (id: string) => Promise<boolean>;
   runsDir?: () => Promise<string>;
+  /** The file holding what previous runs in this world established. Absent in a plain browser tab. */
+  memoryPath?: (world: string) => Promise<string | null>;
   /** Settings that outlive the window. Absent in a plain browser tab; `core/settings.ts` copes. */
   settingsLoad?: () => Promise<unknown>;
   settingsSave?: (value: unknown) => Promise<boolean>;
@@ -205,10 +207,14 @@ export class Sidecar {
   }
 
   goal(text: string, world: string, config: Record<string, unknown>,
-       options: { record?: string | null; budget?: Record<string, number> } = {}): void {
+       options: { record?: string | null; remember?: string | null;
+                  budget?: Record<string, number> } = {}): void {
     this.send({
       type: "goal", text, world, config,
       ...(options.record ? { record: options.record } : {}),
+      // `remember` turns on the engine's own memory: it loads this world's record before the run and
+      // saves it after, which is what makes `recall` and `LearningProposer` exist for that run.
+      ...(options.remember ? { remember: options.remember } : {}),
       ...(options.budget ? { budget: options.budget } : {}),
     });
   }

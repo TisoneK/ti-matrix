@@ -68,6 +68,17 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     model_name = str(config.get("model", "")).strip()
     world_name = str(config.get("world", "")).strip() or getattr(env, "name", "")
 
+    # The environment first, and its memory, because wrapping changes the tool list — and the tool list
+    # is what the model is shown. Building the seats before this is what made `recall` invisible: the
+    # engine would answer the probe, and the model was never told the action existed.
+    statistics = Statistics()
+    environment = env
+    if stats_path is not None:
+        from ti_matrix.adapters import stats_file
+        if stats_path.exists():
+            statistics = stats_file.load(stats_path)
+        environment = EngineTools(env, memory=statistics)
+
     # The two seats. `builtin` fills them with rules and touches no network, so a window with no
     # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
     # other model name is an OpenAI-compatible endpoint, exactly as before.
@@ -87,15 +98,11 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
         # never outlives the run: it is read here, given to the adapter, and nothing writes it down.
         api_key = str(config.get("api_key", "")).strip() or None
         model = OpenAICompatModel(base_url, model_name, api_key=api_key, api_key_env=key_env or None)
-        seats = (LLMMoveProposer(model, env.tools()), LLMEvaluator(model))
-
-    statistics = Statistics()
-    environment = env
-    if stats_path is not None:
-        from ti_matrix.adapters import stats_file
-        if stats_path.exists():
-            statistics = stats_file.load(stats_path)
-        environment = EngineTools(env, memory=statistics)
+        # `environment.tools()`, not `env.tools()` — with memory on this is the world's actions plus
+        # `recall`, which is the one tool that lets a model ask what earlier runs established here
+        # instead of re-deriving it. The rules above keep the raw world: they read every fact directly
+        # and would only propose `recall()` with no arguments.
+        seats = (LLMMoveProposer(model, environment.tools()), LLMEvaluator(model))
 
     budget_kwargs = {k: v for k, v in budget_in.items() if k in protocol.BUDGET_FIELDS}
     proposer: Any = seats[0]

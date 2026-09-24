@@ -95,6 +95,15 @@ export interface RunArtifact {
   seed: string | null;
   startedAt: string;
   endedAt: string;
+  /**
+   * Whether this run carried what earlier runs in the same world had established.
+   *
+   * Recorded because Compare exists to hold two runs against each other, and a run that started with
+   * a record is not comparable to one that started cold — the benchmark has the warm pass settling the
+   * same goals in half the rounds. Without this the view would show the difference and attribute it to
+   * the model.
+   */
+  remembered?: boolean;
   events: EngineEventFrame[];
   outcome: {
     settled: boolean;

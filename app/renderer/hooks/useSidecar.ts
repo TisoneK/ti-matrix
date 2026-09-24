@@ -43,7 +43,8 @@ export interface Session {
   /** True when there is no preload — a browser tab, where nothing can be saved to disk. */
   headless: boolean;
   library: LibraryBackend;
-  run: (goal: string, world: string, config: Record<string, unknown>, budget?: Record<string, number>) => Promise<void>;
+  run: (goal: string, world: string, config: Record<string, unknown>, budget?: Record<string, number>,
+        remember?: boolean) => Promise<void>;
   stop: () => void;
   answer: (granted: boolean) => void;
   pickDirectory: () => Promise<string | null>;
@@ -85,7 +86,8 @@ export function useSidecar(bookmarks: number[]): Session {
   const collected = useRef<EngineEventFrame[]>([]);
   const bookmarksRef = useRef<number[]>(bookmarks);
   bookmarksRef.current = bookmarks;
-  const pending = useRef<{ id: string; goal: string; world: string; config: Record<string, unknown>; startedAt: string } | null>(null);
+  const pending = useRef<{ id: string; goal: string; world: string; config: Record<string, unknown>;
+                          startedAt: string; remembered: boolean } | null>(null);
 
   useEffect(() => {
     if (!tm) {
@@ -160,7 +162,7 @@ export function useSidecar(bookmarks: number[]): Session {
   }, [tm]);
 
   const run = useCallback(async (goal: string, world: string, config: Record<string, unknown>,
-                                 budget?: Record<string, number>) => {
+                                 budget?: Record<string, number>, remember = true) => {
     collected.current = [];
     setEvents([]);
     setSettled(null);
@@ -174,9 +176,15 @@ export function useSidecar(bookmarks: number[]): Session {
     // preload the run still happens — it simply will not outlive the window.
     const id = newRunId();
     const started = await library.begin(id, world, goal, kept).catch(() => null);
-    pending.current = { id, goal, world, config: kept, startedAt: new Date().toISOString() };
-    sidecar.current?.goal(goal, world, api_key === undefined ? config : { ...kept, api_key }, { record: started?.recordPath ?? null, budget });
-  }, [library]);
+    // What earlier runs in this world established. The sidecar loads it before the run and saves it
+    // after, which is what puts `recall` in the model's tools and wraps the proposer in the learning
+    // layer. A browser tab has no filesystem, so it simply runs without a memory.
+    const memory = remember && tm?.memoryPath ? await tm.memoryPath(world).catch(() => null) : null;
+    pending.current = { id, goal, world, config: kept, startedAt: new Date().toISOString(),
+                        remembered: memory !== null };
+    sidecar.current?.goal(goal, world, api_key === undefined ? config : { ...kept, api_key },
+                          { record: started?.recordPath ?? null, remember: memory, budget });
+  }, [library, tm]);
 
   const stop = useCallback(() => sidecar.current?.stop(), []);
 
@@ -239,7 +247,8 @@ export function useSidecar(bookmarks: number[]): Session {
 
 /** The run as an artifact: the events verbatim, the world, the model, and how it ended. */
 function buildArtifact(
-  run: { id: string; goal: string; world: string; config: Record<string, unknown>; startedAt: string },
+  run: { id: string; goal: string; world: string; config: Record<string, unknown>; startedAt: string;
+         remembered: boolean },
   events: EngineEventFrame[],
   info: Settled,
   bookmarks: number[],
@@ -252,6 +261,7 @@ function buildArtifact(
     baseUrl: String(run.config["base_url"] ?? ""),
     seed: seedPart || null,
     endedAt: new Date().toISOString(),
+    remembered: run.remembered,
     events,
     outcome: {
       settled: info.error === undefined && info.reason === null && info.answer !== null,

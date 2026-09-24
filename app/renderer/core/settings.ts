@@ -26,6 +26,8 @@ export interface AppSettings {
   budget?: { max_depth?: number; max_branches?: number; max_model_calls?: number; max_backtracks?: number };
   /** True once the first-run welcome has been dismissed — it never nags again. */
   welcomeSeen?: boolean;
+  /** Whether a run carries what earlier runs in the same world established. Default on. */
+  remember?: boolean;
 }
 
 interface SettingsBridge {
@@ -77,6 +79,7 @@ export async function loadSettings(): Promise<AppSettings | null> {
       out.budget = budget;
     }
     if (typeof s["welcomeSeen"] === "boolean") out.welcomeSeen = s["welcomeSeen"];
+    if (typeof s["remember"] === "boolean") out.remember = s["remember"];
     return migrate(out);
   } catch {
     return null; // unreadable settings are not an error, they are defaults

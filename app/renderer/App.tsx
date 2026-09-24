@@ -48,6 +48,8 @@ export function App() {
   const [hydrated, setHydrated] = useState(false);
   /** The first-run welcome: shown until dismissed (or a run exists), and never again after that. */
   const [welcomeSeen, setWelcomeSeen] = useState(false);
+  // On by default: the benchmark has a warm run settling the same goals in half the rounds.
+  const [remember, setRemember] = useState(true);
 
   const [library, setLibrary] = useState<ArtifactMeta[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
@@ -108,6 +110,7 @@ export function App() {
         if (s.goal) setGoal(s.goal);
         if (s.budget) setBudgetState((b) => ({ ...b, ...s.budget }));
         if (s.welcomeSeen) setWelcomeSeen(true);
+        if (typeof s.remember === "boolean") setRemember(s.remember);
       }
       setHydrated(true);
     });
@@ -131,10 +134,10 @@ export function App() {
   useEffect(() => {
     if (!hydrated) return;
     const t = window.setTimeout(() => {
-      saveSettings({ model, world, values, goal, budget, welcomeSeen });
+      saveSettings({ model, world, values, goal, budget, welcomeSeen, remember });
     }, 500);
     return () => window.clearTimeout(t);
-  }, [hydrated, model, world, values, goal, budget, welcomeSeen]);
+  }, [hydrated, model, world, values, goal, budget, welcomeSeen, remember]);
 
   const current = worlds.find((w) => w.name === world);
   const running = status === "running";
@@ -177,8 +180,8 @@ export function App() {
     setConfigOpen(next.configOpen);
     setView(next.view);
     setBookmarks([]);
-    void session.run(goal.trim(), world, runConfig, { ...budget });
-  }, [blocked, goal, session, world, runConfig, budget, view, configOpen]);
+    void session.run(goal.trim(), world, runConfig, { ...budget }, remember);
+  }, [blocked, goal, session, world, runConfig, budget, view, configOpen, remember]);
 
   // The keys a person actually reaches for. Global, so they work wherever the focus happens to be — except
   // in a text field, where the arrows and space belong to the cursor.
@@ -321,6 +324,7 @@ export function App() {
           modelLabels={MODELS.labels}
           apiKey={apiKey} setApiKey={setApiKey}
           budget={budget} setBudget={(name, value) => setBudgetState((b) => ({ ...b, [name]: value }))}
+          remember={remember} setRemember={setRemember}
           onPick={async () => {
             const dir = await session.pickDirectory();
             if (!dir) return;

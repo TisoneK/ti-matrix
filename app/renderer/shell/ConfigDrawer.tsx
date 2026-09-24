@@ -22,7 +22,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, onPick, headless, apiKey, setApiKey, onClose }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, remember, setRemember, onPick, headless, apiKey, setApiKey, onClose }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -34,6 +34,9 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   modelLabels: Record<string, string>;
   budget: Budget;
   setBudget: (name: keyof Budget, value: number) => void;
+  /** Whether a run carries what earlier runs in this world established. */
+  remember: boolean;
+  setRemember: (value: boolean) => void;
   onPick: () => void;
   headless: boolean;
   /** The pasted key: session memory only, sent with the run, never saved anywhere. */
@@ -146,6 +149,21 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
                                 onChange={(e) => setBudget(f.name, Math.max(1, Math.min(999, Number(e.target.value) || 1)))} />}
           </Field>
         ))}
+
+        {/* The engine's own memory. Off by default for the app's whole life until now, which meant a
+            model re-derived a world's affordances from scratch on every run — `benchmarks/bench.py`
+            has the warm pass settling the same goals in 1 round and 3 probes against 2 and 6. Shown
+            rather than silent because it makes two runs of the same goal non-identical, and Compare
+            exists to hold two runs against each other. */}
+        <div className="field check">
+          <input id="f-remember" type="checkbox" checked={remember}
+                 onChange={(e) => setRemember(e.target.checked)} />
+          <label className="field-label" htmlFor="f-remember">
+            {remember
+              ? "Memory: this run starts with what earlier runs in this world learned, and adds to it"
+              : "Memory: this run starts cold, and leaves the record untouched"}
+          </label>
+        </div>
 
         {fields.some((f) => f.name === "root" || f.name === "project") ? (
           <Fieldset label="Browse" hint="fills the directory field above">
