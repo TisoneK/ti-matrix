@@ -64,6 +64,12 @@ They are **leaves that were looked at once and rejected** — each with one real
 and one score. Drawing them as speculative branches would invent a search that never
 happened; drawing them as stubs off the node they were considered at is exactly true.
 
+## Status: the ledger half shipped (`9daf9a4`)
+
+Every decision row now carries a `passed over` line — each candidate the fan weighed and did not take,
+with its score, and refusals marked in the red the gutter already uses. 14 of 27 rows in a live run
+show one. The tree is still a spine; the stubs below are what is left.
+
 ## What to build
 
 **1. Sibling stubs in the tree.** At each node, a short spur per rejected candidate,
