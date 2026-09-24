@@ -92,12 +92,14 @@ whiskers — the world itself barely branches. This pairs with **B-2026-09-23-9*
 world with ~35 moves per position). Neither works alone: stubs without a branching world
 draw nothing; a branching world without stubs hides 34 weighed alternatives per node.
 
-## And a third thing the tree will have to draw
+## One parent per node, for now
 
-`DESIGN.md`: *"the beam of one walks a line while the log describes a graph."* Today the log is a tree
-because the engine cannot tell it has been somewhere before (B-2026-09-23-12). Once it can, a node
-reachable two ways has two parents and the panel needs a **join** as well as the sibling stubs here.
-Worth knowing now so the layout is not written assuming one parent per node.
+`DESIGN.md` says *"the beam of one walks a line while the log describes a graph"*, and an earlier draft
+of this brief warned that joins were coming and the layout should not assume a single parent. That was
+predicated on engine-level confluence detection, which is now **parked** — the re-probing it was meant
+to fix turned out to be a prompt window, not a state-identity gap (see
+`same-place-different-state-brief.md`). Assume one parent per node. If that ever changes it will be a
+deliberate, measured decision, not a surprise.
 
 ## Why this matters more than it sounds
 
