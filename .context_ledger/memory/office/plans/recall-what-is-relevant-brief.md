@@ -50,6 +50,12 @@ not let a seat select **nodes**. A proposer still receives one flat state with n
 question like "what did I learn down the branch I abandoned?" is still unanswerable. That is option A
 or B below and it is a protocol change.
 
+## And it does not age anything
+
+`RunMemory` is append-only, which is right for a world that holds still and wrong for one that does
+not: it will return an old reading with the confidence of a fresh one. ADR-5 and B-2026-09-24-2 cover
+that; noted here because this is the code that has to change.
+
 ## Three ways to close it
 
 **A. Pass the structure to the proposer.** Change the protocol so a proposer receives the history or

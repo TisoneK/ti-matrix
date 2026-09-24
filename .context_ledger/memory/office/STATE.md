@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-24T07:26:04Z_
+_Regenerated: 2026-09-24T09:24:56Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -23,6 +23,7 @@ _Regenerated: 2026-09-24T07:26:04Z_
 ## Backlog — High priority (the top of the queue)
 | B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
 | B-2026-09-23-7 | **Show the page the browser world is driving, and what the run actually saw of it.** The engine already has `cdp.screenshot()`, `BrowserEnvironment(screenshot_dir=...)` and a `screenshot` action; the CLI uses them via `--shots`. The gap is one call site — `worlds.py::_browser_world` never passes `screenshot_dir` — plus a panel, a frame-per-decision written beside the run (not inside the artifact), and a `window.tm` channel to read one. **The agent reads text, never pixels**, so the panel must show the page *and* what the run extracted from it, distinguishably; a bare screenshot would imply the agent saw what the viewer sees. Sharpens B-2026-09-23-2 for the browser. Brief: `.context_ledger/memory/office/plans/browser-what-it-sees-brief.md`. |
+| B-2026-09-24-2 | **A fact is true as of a moment — a world that moves underneath the run.** Every shipped world holds still, so the loop's assumption (observe → the state is true → decide → act) has never been tested. The engine already stamps `t_ms` on every event and records each probe's duration, and then throws it away: `AgentState.facts` is a tuple of bare strings, and the within-run memory from `76a0590` returns a forty-second-old reading with the confidence of a fresh one. Contract in **ADR-5**; "adapt" means re-check, narrow the fan, or stop — nothing else counts, and stopping because the world is too fast is a success. Build order is cheapest first and **step 1 is the whole first pass**: report the staleness, spend no probes. Shape must be additive — every reader in the repo parses `facts`, and worlds are about to open to users. Brief: `.context_ledger/memory/office/plans/a-world-that-moves-brief.md`. |
 | B-2026-09-23-11 | **Let people bring their own world.** The `Environment` protocol is four members and the README promises a new world is one row — true inside this repo, false outside it: `worlds.py` is a hardcoded dict and there is no discovery mechanism at all. Add a loader over `ti_matrix.worlds` entry points plus a `~/.ti-matrix/worlds/` directory, a template world that is correct by construction, and an order-dependence check at registration — because ADR-4 rule 1 is the rule nobody guesses and the one whose failure looks like model hallucination. Options, costs and three questions for the user: `.context_ledger/memory/office/plans/worlds-users-can-bring-brief.md`. |
 | B-2026-09-23-12 | **Selection over the state space — the within-run half is done; the structural half is not.** `76a0590` gave every run a `recall` action answering from its own observations, built inside `EngineTools` from probes already passing through it, so `Environment.probe` kept its signature and no world implements anything. What is still true: a proposer is handed one flat `AgentState` with no node id, no parent and no structure, and the tree is stamped onto *events*, so a seat still cannot select **nodes** — only facts, and only lexically. If the search's shape is ever wanted at proposal time ("what did I learn down the branch I abandoned?"), that needs the history passed to the proposer or a `Retriever` port, and it is a protocol change that should land before B-2026-09-23-11 opens worlds to users. Brief: `.context_ledger/memory/office/plans/recall-what-is-relevant-brief.md`. |
 
@@ -31,7 +32,7 @@ _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 0 entries
 - inefficiencies/log.md (project code/env friction): 1 entry, last added 2026-09-23
-- plans/decisions.md (ADRs in force — respected, not relitigated): 4 entries, last added 2026-09-23
+- plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
 - 6 event(s) on file; most recent: `20260923T145847Z-Wren-eb33e108.json`
