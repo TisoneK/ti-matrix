@@ -7,3 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
+| Marlowe | S002 | claude-sonnet-5 | Discussing civilization-worlds feature direction | Working |
