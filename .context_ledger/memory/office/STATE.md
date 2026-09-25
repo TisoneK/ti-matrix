@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-24T12:15:36Z_
+_Regenerated: 2026-09-25T12:58:52Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,6 +16,7 @@ _Regenerated: 2026-09-24T12:15:36Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
+- **Marlowe** (S005) — Working — Discussing civilization-worlds feature direction
 
 ## Current task
 - **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — `origin/main` fast-forwarded; nothing outstanding from S004's own work*
