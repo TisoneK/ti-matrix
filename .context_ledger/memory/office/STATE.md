@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-25T12:58:52Z_
+_Regenerated: 2026-09-25T13:06:18Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-23)
@@ -16,10 +16,9 @@ _Regenerated: 2026-09-25T12:58:52Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
-- **Marlowe** (S005) — Working — Discussing civilization-worlds feature direction
 
 ## Current task
-- **2026-09-23 — Mara / claude-opus-5 (S004)** — made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the we… — *idle — `origin/main` fast-forwarded; nothing outstanding from S004's own work*
+- **2026-09-25 — Marlowe / claude-sonnet-5 (S005)** — advisory only — discussed whether to build a "civilization" world (Civ-style: cities, tech trees, diplomacy). No product code touched. — *idle — session closing out, nothing outstanding from S005's own work*
 
 ## Backlog — High priority (the top of the queue)
 | B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |

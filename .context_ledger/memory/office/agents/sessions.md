@@ -149,3 +149,13 @@ the sheet up; the readouts disappear on Compare and return on a run.
 - **Open items:** B-2026-09-23-5 (the endpoint-backed path is weak on small models — the proposer never sees which cells the run has entered, and a run whose first probe succeeds can still stop on `no_progress` at depth 0), B-2026-09-23-2 (the prose worlds' panels), B-2026-09-23-3 (a run against a large hosted model — session 3's DeepSeek runs stand; this session only drove a small local one)
 - **Notes:** .context_ledger/memory/office/sessions/2026-09-23-4/notes.md — driving the real Electron window over CDP, and the persisted-default trap that no test could see
 - **Report:** none (not a review task)
+
+---
+## 2026-09-25 — Session 5 (civilization-world question — advisory only)
+- **Agent:** Marlowe | **Model:** claude-sonnet-5 | **Platform:** bao's Mac — macOS (darwin 24.6.0) | **Role:** engineer | **Core:** 2.0.4
+- **Task:** user asked "should we build civilization worlds?" — a Civ-style world (cities, tech trees, diplomacy, long time horizons) as a new `Environment`. Checked in, merged a large batch of remote history the local clone hadn't seen (chess world, ADR-5/world-that-moves, within-run recall, browser/rail/welcome fixes — S002 Wren through S004 Mara), then oriented from `STATE.md`, the four shipped-worlds contract (ADR-4), and the `worlds-users-can-bring-brief.md` / `a-world-that-moves-brief.md` briefs before answering.
+- **Commits:** 3, pushed, ledger-only (no product code touched): merge commit resolving a roster.md conflict (kept Wren's S002 row, added this session's row), `chore(ledger): regenerate STATE.md at check-in`, `chore(ledger): park the civilization-world question (P-2026-09-25-1)`
+- **Outcome:** done — advisory answer given, not implementation: lean toward not shipping it as a fifth first-party world yet (too large a scope jump from maze/chess/files/browser, would stress every open architecture question — staleness/ADR-5, state-identity, structural recall — at once instead of letting them settle first); best fit is as the flagship example for bring-your-own-world (B-2026-09-23-11) once that loader ships. Recorded, not promoted — no owner or next step yet.
+- **Open items:** none new. Existing High-priority backlog (B-2026-09-23-6/7/11/12, B-2026-09-24-2/3) untouched by this session.
+- **Notes:** none
+- **Report:** none (not a review task)
