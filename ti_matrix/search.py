@@ -66,6 +66,14 @@ class EngineEvent:
         return {"seq": self.seq, "t_ms": self.t_ms, "kind": self.kind, **self.data}
 
 
+def _fact_ages_ms(state: AgentState) -> list[int]:
+    """Surfaced at the honest end of a run: how old every known fact is, paired index-for-index with
+    ``state.facts`` — not just the bounded UI window ``AgentState.to_dict`` shows, because a stop is
+    exactly the moment a reader most wants to know whether the answer rests on something stale."""
+    now = time.monotonic()
+    return [int((now - t) * 1000) for t in state.fact_times]
+
+
 # ─── Terminal conditions: the ways a search can be over ─────────────────────
 # Each is small, tabled and testable on its own; the loop asks them where it would otherwise run on.
 # The reason strings are the ones the UI and the tests already speak.
@@ -274,8 +282,12 @@ class StateEngine:
                 yield ev
                 continue
 
+            probe_t0 = time.monotonic()
             timed = await asyncio.gather(*(self._probe(m, predicted.get(m.fingerprint())) for m in runnable))
             outcomes: list[Observation] = [o for o, _ in timed]
+            # The moment each probe actually returned, not "now" — an evaluator call (awaited below) can
+            # sit between a probe returning and the winning outcome becoming a fact.
+            observed_at = {o.move.fingerprint(): probe_t0 + ms / 1000.0 for o, ms in timed}
             for o, ms in timed:
                 yield EngineEvent(
                     "probe",
@@ -320,7 +332,7 @@ class StateEngine:
             if not ranked or (not best_done and best_progress <= state.progress):
                 # Nothing beats where we stand: keep what the real probes taught, then back up.
                 for o in outcomes:
-                    state = state.learn(o).with_failed(o.move.fingerprint())
+                    state = state.learn(o, observed_at.get(o.move.fingerprint())).with_failed(o.move.fingerprint())
                 ctx = self._ctx(state, calls, backtracks, len(runnable), False, best_progress, len(history))
                 if self._stop_reason(state, ctx, "no_improvement"):
                     yield await self._stopped("no_progress", state, calls)
@@ -336,13 +348,13 @@ class StateEngine:
             history.append(state)
             for o in outcomes:
                 if o is not best_obs:
-                    state = state.learn(o)
+                    state = state.learn(o, observed_at.get(o.move.fingerprint()))
                 if not o.ok:
                     # A probe that really failed is remembered as failed HERE too, not only on a backtrack:
                     # the same action would fail again at the next state, and the point of fingerprinting is
                     # that it is not proposed twice.
                     state = state.with_failed(o.move.fingerprint())
-            state = state.apply(best_obs, best_eval)
+            state = state.apply(best_obs, best_eval, observed_at.get(best_obs.move.fingerprint()))
             yield EngineEvent(
                 "selected",
                 {"fp": best_obs.move.fingerprint(), "move": best_obs.move.label(), "progress": best_eval.progress},
@@ -410,7 +422,8 @@ class StateEngine:
         return EngineEvent(
             "stopped",
             {
-                "reason": "needs_action", "settled": False, "facts": list(state.facts), "trail": list(state.trail),
+                "reason": "needs_action", "settled": False, "facts": list(state.facts),
+                "fact_ages_ms": _fact_ages_ms(state), "trail": list(state.trail),
                 "model_calls": calls,
                 "needs": obs.move.label(), "needs_why": obs.move.why,
                 "predicted": {"ok": obs.ok, "result": obs.text, "progress": evaluation.progress},
@@ -426,6 +439,7 @@ class StateEngine:
         """
         data: dict[str, Any] = {
             "reason": reason, "settled": False, "facts": list(state.facts),
+            "fact_ages_ms": _fact_ages_ms(state),
             "trail": list(state.trail), "model_calls": calls,
         }
         if "error" not in reason and state.facts and self.synthesizer is not None:

@@ -25,6 +25,7 @@ the same name wins by default — unless the host prefers otherwise.
 """
 from __future__ import annotations
 
+import time
 from typing import Optional, Protocol, runtime_checkable
 
 from ti_matrix.protocols import Action, ActionSpec, Observation
@@ -53,6 +54,7 @@ class RunMemory:
 
     def __init__(self) -> None:
         self._facts: list[str] = []
+        self._times: list[float] = []  # `time.monotonic()` when each fact was observed, paired by index
         self._seen: set[str] = set()
 
     def observe(self, observation: Observation) -> None:
@@ -64,6 +66,7 @@ class RunMemory:
             return
         self._seen.add(fact)
         self._facts.append(fact)
+        self._times.append(time.monotonic())
 
     def __len__(self) -> int:
         return len(self._facts)
@@ -74,23 +77,34 @@ class RunMemory:
         Scoring is lexical and deliberately dumb — how many of the asked-for words a fact contains. A
         cleverer ranking would be an unverifiable belief in the one place this engine refuses to keep
         them, and the caller can see the words it asked with.
+
+        Every line is marked with how long ago it was observed, so a forty-second-old reading is never
+        handed back with the confidence of a fresh one. It needs no new probe and no new control flow:
+        the model already asked to be shown its own memory.
         """
         limit = max(1, min(int(limit), 40))
         wanted = [w for w in _words(text) if w]
         if not wanted:
-            return _render(self._facts[-limit:])
-        scored = [(sum(w in fact.lower() for w in wanted), -i, fact)
-                  for i, fact in enumerate(self._facts)]
-        hits = [f for score, _, f in sorted(scored, reverse=True) if score > 0][:limit]
-        return _render(hits)
+            idx = list(range(len(self._facts)))[-limit:]
+        else:
+            scored = [(sum(w in self._facts[i].lower() for w in wanted), -i, i) for i in range(len(self._facts))]
+            idx = [i for score, _, i in sorted(scored, reverse=True) if score > 0][:limit]
+        return _render([(self._facts[i], self._times[i]) for i in idx])
 
 
 def _words(text: str) -> list[str]:
     return [w.strip(".,:;!?'\"()[]<>").lower() for w in str(text).split()]
 
 
-def _render(facts: list[str]) -> str:
-    return "\n".join(f"- {f}" for f in facts)
+def _render(pairs: list[tuple[str, float]]) -> str:
+    now = time.monotonic()
+    return "\n".join(f"- {fact} ({_age(now - t)} ago)" for fact, t in pairs)
+
+
+def _age(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    return f"{seconds / 60:.1f}m"
 
 
 class EngineTools:

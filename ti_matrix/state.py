@@ -5,6 +5,7 @@ for the model, and fingerprinted so an action that failed is never proposed twic
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 from typing import Any, Optional
 
@@ -18,18 +19,29 @@ _UI_FACTS = 12  # how many facts a state carries to the UI (the model sees the l
 class AgentState:
     goal: Goal
     facts: tuple[str, ...] = ()  # what real observations established
+    fact_times: tuple[float, ...] = ()  # when each fact was observed — `time.monotonic()`, paired
+    # index-for-index with `facts` rather than folded into it, so every existing reader of `facts` (render,
+    # to_dict, the reasoners, RunMemory) keeps working unchanged. A fact and its time are always appended
+    # together — the two tuples are always the same length.
     failed: tuple[str, ...] = ()  # action fingerprints that failed or led nowhere
     tried: tuple[str, ...] = ()  # every action fingerprint applied on this path
     progress: float = 0.0
     depth: int = 0
     trail: tuple[str, ...] = ()  # human-readable path of applied actions
 
-    def apply(self, obs: Observation, evaluation: Evaluation) -> "AgentState":
-        """State[n] + Action + Outcome -> State[n+1] (a predicted outcome is never applied as fact)."""
+    def apply(self, obs: Observation, evaluation: Evaluation, observed_at: Optional[float] = None) -> "AgentState":
+        """State[n] + Action + Outcome -> State[n+1] (a predicted outcome is never applied as fact).
+
+        ``observed_at`` is the moment (``time.monotonic()``) the underlying probe actually returned — the
+        caller knows this more precisely than "now" (an evaluator call may sit between the two). Defaults
+        to "now" for callers that do not track it.
+        """
         fp = obs.move.fingerprint()
+        learns = obs.ok and not obs.predicted
         return replace(
             self,
-            facts=self.facts + ((obs.fact(),) if obs.ok and not obs.predicted else ()),
+            facts=self.facts + ((obs.fact(),) if learns else ()),
+            fact_times=self.fact_times + ((observed_at if observed_at is not None else time.monotonic(),) if learns else ()),
             failed=self.failed + ((fp,) if not obs.ok else ()),
             tried=self.tried + (fp,),
             progress=max(self.progress, evaluation.progress) if obs.ok else self.progress,
@@ -37,16 +49,23 @@ class AgentState:
             trail=self.trail + (obs.move.label(),),
         )
 
-    def learn(self, obs: Observation) -> "AgentState":
+    def learn(self, obs: Observation, observed_at: Optional[float] = None) -> "AgentState":
         """A real observation from a probe that was NOT selected is still a fact."""
         if not obs.ok or obs.predicted:
             return self
-        return replace(self, facts=self.facts + (obs.fact(),))
+        return replace(
+            self,
+            facts=self.facts + (obs.fact(),),
+            fact_times=self.fact_times + (observed_at if observed_at is not None else time.monotonic(),),
+        )
 
     def retreat_to(self, parent: "AgentState") -> "AgentState":
         """Back up to ``parent`` from a dead end: keep every real fact learned, remember every failed
         action, and prune the action that led INTO this dead end so the branch is not re-taken."""
-        restored = replace(parent, facts=self.facts, failed=tuple(dict.fromkeys(parent.failed + self.failed)))
+        restored = replace(
+            parent, facts=self.facts, fact_times=self.fact_times,
+            failed=tuple(dict.fromkeys(parent.failed + self.failed)),
+        )
         return restored.with_failed(self.tried[-1]) if self.tried else restored
 
     def with_failed(self, fingerprint: str) -> "AgentState":
@@ -99,6 +118,9 @@ class AgentState:
             # model is shown — never reasoning), the fingerprints of the actions this state has ruled out,
             # and the path of applied actions that reached it. All bounded; a UI can read the search.
             "fact_list": [f[:_FACT_CHARS] for f in self.facts[-_UI_FACTS:]],
+            # Paired index-for-index with `fact_list` — how old each shown fact is, as of right now. A
+            # reader zips the two rather than the engine folding age into the text itself.
+            "fact_ages_ms": [int((time.monotonic() - t) * 1000) for t in self.fact_times[-_UI_FACTS:]],
             "failed_fps": list(self.failed),
             "trail": list(self.trail),
         }

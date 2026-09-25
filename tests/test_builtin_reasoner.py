@@ -360,6 +360,20 @@ def test_recall_with_no_words_gives_the_most_recent():
     assert "fact 9" in hit and "fact 0" not in hit and len(hit.splitlines()) == 3
 
 
+def test_recall_marks_every_line_with_how_long_ago_it_was_observed(monkeypatch):
+    """A reading handed back through `recall` must never carry the confidence of a fresh one when it
+    is not — the model asked for its own memory, and the age is the one thing it cannot infer itself."""
+    from ti_matrix.tools import engine_tools
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    ticks = iter([100.0, 105.0])  # observed at t=100s, recalled at t=105s
+    monkeypatch.setattr(engine_tools.time, "monotonic", lambda: next(ticks))
+    m = RunMemory()
+    m.observe(Observation(Action("step", {}, ""), True, "cell 1,1 — open: north"))
+    hit = m.recall()
+    assert "cell 1,1" in hit and "(5.0s ago)" in hit, hit
+
+
 def test_a_run_gets_recall_with_no_stored_memory_at_all():
     """The within-run half needs no storage and no setting — that is what makes it always available."""
     from ti_matrix.adapters.maze import MazeEnvironment
