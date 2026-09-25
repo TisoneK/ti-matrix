@@ -29,6 +29,122 @@ the confirmer is `server/appserver/confirm_ws.py`, which turns the engine's ask 
 `confirm-request` frame and the app's Allow/Deny button into the answer. A dropped socket is a
 refusal — the safe default, exactly like `--ask` at a terminal.
 
+## The window
+
+The renderer is a **run inspector**: the visualization is the product, and everything else is pushed to
+one side of it. Three views, one run:
+
+- **Run** — the map (what the run believes about the world, filled in as it observes it), the search tree
+  (the states it stood on, the candidates it weighed and passed over drawn as stubs off the node they
+  were weighed at, with cold branches folded away), and **Decisions** — every decision with the belief
+  behind it, the world's answer underneath, and what else was on the table with its score. A transport
+  under all of it scrubs, plays, steps and bookmarks the run.
+- **Library** — every finished run, kept as an artifact: sortable by seed, model, steps, retreats,
+  surprises, mean belief and duration.
+- **Compare** — two saved runs under one cursor, overlaid on one grid when they read the same world.
+  Two models, same seed, is the comparison worth making.
+
+The whole thing hangs off one idea: a run is an event log, a cursor is a decision index, and every panel
+is a pure function of the two (`renderer/core/project.ts`). Playback is therefore free — dragging the
+scrubber back re-derives the map and the tree as they were, rather than replaying a recording — and
+comparison is the same function called twice.
+
+```
+renderer/
+  protocol.ts      the renderer's half of TM1, plus the `window.tm` channels the preload offers
+  core/            pure functions only: events in, belief out. No React, no DOM, fully tested
+    decisions.ts     the fold: raw events → one row per turn of the search loop
+    knowledge.ts     the fold: the world's own sentences → the map, cell by cell
+    tree.ts          the fold: the engine's node ids → the shape of the search
+    trust.ts         the fold: the evaluator's scores → the confidence curve
+    project.ts       (events, cursor) → all four at once
+  hooks/           the sidecar session, and the transport's state machine
+  shell/           the rail, the command bar, the config drawer, the transport, the confirmer
+  panels/          Map, Tree, Log, Library, Compare, WorldSurface
+  ui/              the primitives — buttons, chips, marks, the confidence bar, the sparkline
+```
+
+The window has no OS chrome above the app: **the top rail is the title bar.** It already carries what a
+title bar carries — the name, the state, the way in — so a second strip would spend screen a run never gets
+back. macOS keeps its traffic lights and the rail leaves them their corner (`titleBarStyle: "hiddenInset"`);
+everywhere else the frame is gone and the rail draws its own minimize/maximize/close over the same
+`tm.window-*` channels. The rail therefore takes the drag region, and everything clickable inside it opts
+out — plus a double-click on its empty space maximizes, the way every title bar does.
+
+The renderer has no filesystem: context isolation, no node integration. `window.tm` is the only way out,
+and the session library is the one thing it needs — `app/main/index.ts` owns `<userData>/runs/<id>/`,
+holding `run.json` (the artifact), `meta.json` (the library row) and `events.jsonl` (the engine's own run
+log, written by the sidecar as the run streams, so the CLIs can read it back).
+
+The config drawer also carries **what a run may spend** — steps, options per step, model calls, retreats —
+seeded with the engine's own defaults. Against a real endpoint the defaults are the thing that ends a run:
+a live model spends 20–45 seconds per decision, so depth six runs out long before the exit does.
+
+## What decides a run
+
+Two choices, and the setup sheet leads with them because the second one only matters after the first.
+
+**Built-in rules** (the default) fill the engine's proposer and evaluator seats from
+`ti_matrix.adapters.builtin` — no endpoint, no key, no network. A maze run finishes in well under a
+second and produces a full search: real probes against the real world, a map drawn from what the run
+actually saw, retreats out of dead ends, and a record of every decision. This is the default for a
+blunt reason: the app used to open pointing at `qwen2.5:7b` on a local Ollama, so on any machine
+without that exact model pulled every run ended on its second event with `proposer_error: 404` and
+every panel in the window drew an empty state — correctly, because there was nothing to draw. A first
+run has to be possible before any of this is worth looking at.
+
+**A language model** is any OpenAI-compatible endpoint, and it is what the product is actually about:
+the rules walk a maze they understand, a model reasons about a goal in words. It is also slower by
+four orders of magnitude (20–45s per decision against a small local model), which is why the budget
+travels with the choice — 80 steps against rules, the engine's own 6 against an endpoint.
+
+A settings file still holding the old `qwen2.5:7b` default is migrated to the rules on load, once.
+That exact pair is the value the app wrote on its own; any endpoint someone actually chose is left
+alone.
+
+## When the engine dies
+
+The socket reconnects on its own — eight attempts, backing off 400ms to 6s — and the status lamp says
+`reconnecting` while it is trying rather than claiming a crash. If the sidecar process itself exited,
+the command bar's Run button becomes **Reconnect**, which spawns a fresh sidecar under the same window:
+the run on screen, the library and the config all survive it. Only a boot that never got off the ground
+sends you back to the splash's full relaunch.
+
+## The worlds the window offers
+
+**The maze** — a hidden maze the run learns by walking it. The world that made the engine search.
+
+**Local files** — a read-only filesystem, rooted at one directory; a path that escapes it is refused
+rather than an error.
+
+**Chess** — a game against a simple seeded opponent. The world with a fan worth the name: a position
+offers about thirty-five legal moves where a maze corridor offers one, so the search has something real
+to choose between, and every score it gives is checkable against the position itself.
+
+**Real browser** — a real Chrome at a URL you name. Reads are free; clicking, typing and running script
+are asked before they happen.
+
+The engine also ships a **Context Ledger** world that this window deliberately does not offer. It reads
+one project's engineering protocol, so every label it needed was insider vocabulary, and a world picker
+is the product's front door. `ti_matrix.adapters.context_ledger` still ships and
+`python -m ti_matrix.adapters.ledger_cli` still drives it.
+
+## What a run remembers
+
+Two records, and `recall` answers over both while saying which is which.
+
+**This run.** Built from the observations passing through the engine's tool wrapper, so it needs no
+storage and no setting. It is how a seat asks for the part of what it has learned that it needs instead
+of re-reading everything — and because it is an action, what the run chose to look up is in the record
+like any other move.
+
+**Earlier runs.** Off by default is *not* the case any more: the setup sheet has a **Memory** toggle,
+on, and a run carries what earlier runs in the same world established. One file per world under the
+app's user-data directory, because what the maze taught has nothing to say about a filesystem. It is
+shown rather than silent because it makes two runs of one goal non-identical, and Compare exists to
+hold two runs against each other — the saved artifact records whether a run carried memory, so that
+view cannot show the difference and attribute it to the model.
+
 ## Endless scenarios
 
 The maze world takes a **seed**: blank means a brand-new procedural maze every run (recursive
@@ -44,14 +160,21 @@ PYTHONUTF8=1 ../.venv/Scripts/python.exe -m pytest tests   # its own suite, real
 
 # app, from app/
 npm install
-npm run dev:vite            # in one shell
-npm run dev:electron        # in another (TI_MATRIX_PYTHON overrides the venv python)
+npm run typecheck           # both tsconfigs, no emit
+npm run test                # the renderer's own checks: the folds, against hand-built runs
+npm run dev                 # one command: vite, then electron, torn down together
+npm run dev:vite            # or the two-shell dance: vite in one shell,
+npm run dev:electron        # electron in another (gated on :5173 actually serving)
+npm run start               # no vite: rebuild dist/ and run against it
 
 # packaging
 python -m pip install -e . -e server[dev]
 cd server && sh scripts/build-sidecar.sh    # bundle -> app/release/sidecar
 cd ../app && npm run dist                   # unsigned installers per platform
 ```
+
+`npm run test` needs no runner: `renderer/test.ts` imports the check files under `core/` and esbuild —
+which already ships inside Vite — bundles and runs them on node. A failure throws, which is the exit code.
 
 CI (`.github/workflows/ci.yml`): the engine's suite and the sidecar's suite on 3.10–3.13 × three
 OSes, both wheels, the sidecar bundle smoked per OS, and unsigned app artifacts. Codesigning,

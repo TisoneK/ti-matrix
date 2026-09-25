@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T142442Z-Wren-d529d81f",
+  "type": "note",
+  "session": "2026-09-23",
+  "agent": "Wren",
+  "created": "2026-09-23T14:24:42Z",
+  "issue": "boot-splash",
+  "body": "Extending the boot-splash claim with two adjacent asks from the user: persistent user settings and an\noptional in-app API key field. New paths beyond the original claim: app/renderer/core/settings.ts (new),\napp/renderer/App.tsx, app/renderer/shell/ConfigDrawer.tsx, app/renderer/hooks/useSidecar.ts (artifact\nstripping), server/appserver/main.py (api_key pass-through, one line), app/README.md.\n\nDesign: settings.json under Electron userData holds model {base_url, model, api_key_env}, world, world\nfield values, goal — hydrated on launch, saved debounced on change. The key VALUE is never persisted:\na password field holds it in renderer memory for the session only, passes to the sidecar per run, is\nstripped from saved artifacts, and the env-var name path stays supported (pasted key wins for the run).",
+  "paths": [],
+  "refs": ["20260923T133839Z-Wren-dd62b99c"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": ["Nadia"]
+}

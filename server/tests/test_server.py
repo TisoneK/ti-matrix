@@ -23,7 +23,7 @@ async def test_healthz_and_worlds_need_no_token(server):
             assert resp.status == 200 and body["ok"] is True and body["protocol"] == protocol.PROTOCOL
         async with session.get(f"{server.url}/worlds") as resp:
             names = {w["name"] for w in (await resp.json())["worlds"]}
-            assert names == {"maze", "files", "ledger", "browser"}
+            assert names == {"maze", "files", "chess", "browser"}
 
 
 async def test_a_socket_without_the_token_never_reaches_the_run(server, client_factory):
@@ -124,3 +124,64 @@ async def test_a_run_can_be_recorded_to_a_jsonl_log(server, client_factory, tmp_
     events = read(log)
     assert len(events) == len(client.events)
     assert "settled: the exit is at 1,6" in summarize(events)
+
+
+async def test_a_builtin_goal_runs_with_no_endpoint_at_all(server, client_factory):
+    """The first run on a fresh machine: no base_url, no key, nothing listening anywhere.
+
+    This is the case the app shipped broken. The window defaulted to a model name that most machines
+    do not have pulled, so a run ended on its second event with `proposer_error` and every panel drew
+    an empty state — correctly, because there was nothing to draw. `model: "builtin"` fills the seats
+    with rules instead, and the run below makes real probes against the real maze and settles.
+    """
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": "", "model": "builtin", "api_key_env": ""},
+                      budget={"max_depth": 40, "max_model_calls": 300, "max_backtracks": 20})
+    settled = await client.settle()
+
+    assert settled["reason"] is None, settled["reason"]
+    assert settled["answer"] and "1,6" in settled["answer"], settled["answer"]
+    kinds = [e["kind"] for e in client.events]
+    assert kinds[0] == "state" and kinds[-1] == "done"
+    # A real search: many probes against the world, not one lucky guess.
+    assert kinds.count("probe") >= 5, kinds
+    # And not a single request reached the fake endpoint — the rules never asked anyone anything.
+    assert server.endpoint.requests == 0
+
+
+async def test_builtin_needs_no_base_url_but_a_named_model_still_does(server, client_factory):
+    """The config check must stay strict for endpoints while letting the rules through."""
+    client = await client_factory()
+    # An empty config is still an error — "builtin" is a deliberate choice, not the fallback for a typo.
+    await client.send(type="goal", text="x", world="maze", config={"base_url": "", "model": ""})
+    err = await client.drain_until("error")
+    assert "builtin" in err["message"], err["message"]
+
+
+async def test_a_remembering_run_shows_the_model_the_recall_tool(server, client_factory, tmp_path):
+    """`recall` is added by wrapping the environment, so the seats must be built after the wrap.
+
+    They were not: `LLMMoveProposer` was constructed from `env.tools()` before `EngineTools` wrapped
+    it, so the engine would answer a `recall` probe and the model was never told the action existed —
+    the one tool that lets it ask what earlier runs established, invisible in the prompt.
+    """
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.learning import Statistics
+    from ti_matrix.tools import EngineTools
+
+    raw = MazeEnvironment()
+    assert "recall" not in raw.tools()
+    assert "recall" in EngineTools(raw, memory=Statistics()).tools()
+
+    # And end to end: a run that remembers leaves a record behind and says so.
+    stats = tmp_path / "maze.json"
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": "", "model": "builtin"},
+                      remember=str(stats),
+                      budget={"max_depth": 40, "max_model_calls": 300, "max_backtracks": 20})
+    settled = await client.settle()
+    assert settled["reason"] is None, settled["reason"]
+    assert settled["learned"] and "remembered" in settled["learned"], settled["learned"]
+    assert stats.exists(), "the run remembered nothing"

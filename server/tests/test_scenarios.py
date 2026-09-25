@@ -54,6 +54,16 @@ def test_a_generated_maze_is_well_formed_and_bounded():
         assert floors > len(rows) * len(rows[0]) * 0.15  # it is a maze, not a wall with a crack
 
 
+def test_a_board_too_small_to_hold_a_maze_is_lifted_to_one_that_is():
+    """A 3x3 has one floor cell, so entry and exit land on the same place and the 'S' is overwritten."""
+    for width, height in ((1, 1), (3, 3), (3, 9), (9, 3), (4, 4), (5, 5), (5, 7)):
+        maze = generate_maze(width, height, 7)
+        rows, entry, exit_, _ = _parse(maze)
+        assert entry is not None and exit_ is not None, f"{width}x{height} drew no entry or no exit"
+        assert entry != exit_, f"{width}x{height} put the entry and the exit on the same cell"
+        assert _solvable(maze), f"{width}x{height} is not solvable"
+
+
 def test_every_generated_maze_is_solvable():
     for seed in range(20):
         assert _solvable(generate_maze(11 + 2 * (seed % 4), 9 + 2 * (seed % 3), seed))

@@ -47,9 +47,17 @@ Python 3.10+, **no runtime dependencies** — the engine is standard library onl
 
 ## Run a goal
 
-The repo ships five adapters that need nothing but Python: a read-only local filesystem, a project's Context
-Ledger, a real browser, a hidden maze, and any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI, DeepSeek, Groq,
-OpenRouter, …).
+The repo ships six adapters that need nothing but Python: a read-only local filesystem, a project's Context
+Ledger, a real browser, a hidden maze, a game of chess, and any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI,
+DeepSeek, Groq, OpenRouter, …).
+
+**A run does not need a model.** `ti_matrix.adapters.builtin` fills the proposer's and the evaluator's seats with
+rules, so the engine searches a world with nothing configured and no network — a maze solves in about 85ms, and
+the desktop app defaults to it. What the rules are not is a model: they do not read a goal's words and cannot
+generalise past the world they know. See [The model is a seat, not an ingredient](#the-model-is-a-seat-not-an-ingredient).
+
+> **The CLIs below still require an endpoint.** The rule-based seats reached the app and the sidecar first; the
+> shell commands have not been wired to them yet, so `--model` names a real model or the command cannot run.
 
 ```bash
 # a local model, no API key, no other program installed
@@ -459,10 +467,13 @@ ti_matrix/            the engine — standard library only, no host application
 ├── learning/         what previous runs established, and the wrappers that spend it
 └── adapters/         host-free environments and hosts:
     ├── files.py             a read-only local filesystem
-    ├── maze.py              a hidden maze — the one world that makes the engine search
+    ├── maze.py              a hidden maze — the first world that makes the engine search
+    ├── chess/               a game of chess — the first world whose fan is wide enough to see,
+    │                        and whose every score is checkable against the position
     ├── context_ledger/      a project's Context Ledger — read as an environment, written back by a host
     ├── browser/             a real browser: WebSocket + DevTools Protocol, standard library only
     ├── openai_compat.py     any OpenAI-compatible endpoint
+    ├── builtin.py           the two seats filled by rules — a real search with no model in it
     ├── confirm.py           answering the engine when it asks to do something that changes the world
     ├── session.py           what a command carries in and leaves behind: --remember, --record, --ask
     ├── run_log.py           a run written down, and read back: python -m ti_matrix.adapters.run_log FILE
@@ -481,7 +492,7 @@ explains why each piece is shaped the way it is.
 ## Status
 
 **v0.1** — the engine, the search with backtracking, the simulator, five example adapters (a local filesystem, a
-project's Context Ledger, a real browser, a hidden maze, any OpenAI-compatible endpoint), the tool set, the learning
+project's Context Ledger, a real browser, a hidden maze, a game of chess, any OpenAI-compatible endpoint), the tool set, the learning
 layer, the confirmer, and four playgrounds to drive them from a page. Run end-to-end against real model providers,
 a local filesystem, a real `.context_ledger/` vault, real Chrome, and the `agent-browser` CLI — including live
 against a real site with a hosted model, where narrow goals settle in two model calls. 206 tests cover the state,

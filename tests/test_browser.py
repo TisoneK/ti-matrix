@@ -614,3 +614,74 @@ async def test_a_confirmer_can_grant_one_click_and_the_page_really_changes(page_
         assert confirmer.asked[0][0] == "click(selector=#go)"
     finally:
         env.close()
+
+
+def test_two_navigations_in_one_fan_never_name_each_other_s_page():
+    """The fan is probed concurrently against one page, and the lock used to cover only page creation.
+
+    So `_goto` navigated and read the title with nothing held: two concurrent gotos interleaved and BOTH
+    reported the second URL, writing a fact that named a page its action never visited. A false fact is
+    the one thing an engine built on checkable observations cannot absorb.
+    """
+    import asyncio
+
+    from ti_matrix.adapters.browser.environment import BrowserEnvironment
+    from ti_matrix.protocols import Action
+
+    class OnePage:
+        """One shared page, as slow as a real one — navigate then read, with a gap in between."""
+
+        def __init__(self) -> None:
+            self._url = "about:blank"
+
+        def goto(self, url, timeout_s=0):
+            self._url = url          # a real navigation is not instant, and the gap is the whole bug
+            time.sleep(0.02)
+            return url
+
+        def url(self):
+            return self._url
+
+        def title(self):
+            time.sleep(0.02)
+            return f"title of {self._url}"
+
+        def text(self, selector=None):
+            return f"text of {self._url}"
+
+    import time
+
+    env = BrowserEnvironment(None, headless=True)
+    env._page = OnePage()        # no Chrome: the race is in the environment, not in the browser
+
+    async def both():
+        return await asyncio.gather(
+            env.probe(Action("goto", {"url": "https://a.test"}, "")),
+            env.probe(Action("goto", {"url": "https://b.test"}, "")),
+        )
+
+    for observation in asyncio.run(both()):
+        asked = observation.move.args["url"]
+        assert asked in observation.text, (
+            f"{observation.move.label()} reported {observation.text!r} — a page it never visited")
+
+
+def test_a_page_read_names_the_page_it_came_from():
+    """One page serves the whole run, so "the current page" moves. A read that does not say which page
+    it read can be silently about another one; saying it makes the mismatch visible instead."""
+    import asyncio
+
+    from ti_matrix.adapters.browser.environment import BrowserEnvironment
+    from ti_matrix.protocols import Action
+
+    class Somewhere:
+        def url(self):
+            return "https://somewhere.test/page"
+
+        def text(self, selector=None):
+            return "the body of the page"
+
+    env = BrowserEnvironment(None, headless=True)
+    env._page = Somewhere()
+    out = asyncio.run(env.probe(Action("page_text", {}, "")))
+    assert out.ok and out.text.startswith("[https://somewhere.test/page]"), out.text

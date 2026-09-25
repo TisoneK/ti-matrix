@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T145847Z-Wren-eb33e108",
+  "type": "release",
+  "session": "2026-09-23",
+  "agent": "Wren",
+  "created": "2026-09-23T14:58:47Z",
+  "issue": "boot-splash",
+  "body": "Released: the boot-splash claim, extended twice (settings persistence, optional key field; then the\nvisual-language pass).\n\nProduct commit 3e9bf2c: splash window opens instantly and narrates the boot as a fog-of-war maze\n(spawn/handshake/health/renderer), two-window swap with no dark gap, failures rendered in-window with\nrestart; `npm run dev` one-command runner (port gate, dual-stack probe, vite-exit guard, joint\nteardown) + gated `dev:electron`; settings persisted under userData with the API key value never on\ndisk (masked session-only field, stripped from artifacts, sidecar pass-through); welcome overlay for\nthe empty first run; config drawer as overlay sheet; serif/mono typographic hierarchy, flag tones in\nrow gutters, pane weight by state, one shared hover cursor across ledger/tree/map, birth motion under\nprefers-reduced-motion.\n\nVerified: app typecheck clean; renderer suites 44 + 85 passed; sidecar suite 34 passed; vite build\nclean; real window launched in dev mode (VITE_DEV) with sidecar spawned and connected.",
+  "paths": [],
+  "refs": ["3e9bf2c", "20260923T133839Z-Wren-dd62b99c"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

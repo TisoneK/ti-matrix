@@ -110,7 +110,9 @@ class MazeEnvironment:
         return f"cell {self._label(cell)} — open: {ways}{where}"
 
     def _cell(self, text: Any) -> Optional[tuple[int, int]]:
-        parts = str(text).strip().replace(" ", "").split(",")
+        # The action specs write a cell as <x,y>, which reads as a placeholder but is taken literally
+        # often enough that the brackets are read as part of the form rather than as punctuation.
+        parts = str(text).strip().strip("<>()[]").replace(" ", "").split(",")
         if len(parts) != 2 or not all(p.lstrip("-").isdigit() for p in parts):
             return None
         x, y = (int(p) for p in parts)

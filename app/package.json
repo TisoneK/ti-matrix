@@ -2,14 +2,17 @@
   "name": "ti-matrix-app",
   "productName": "Ti Matrix",
   "version": "0.1.0",
-  "description": "The desktop app for the ti-matrix engine — worlds, search trees, and a confirmer with buttons.",
+  "description": "The desktop app for the ti-matrix engine — a run inspector: the map it learns, the search it ran, and the belief behind every decision.",
   "private": true,
   "main": "dist-electron/main/index.js",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "dev:vite": "vite",
-    "dev:electron": "cross-env VITE_DEV=1 electron .",
+    "dev:electron": "node scripts/dev-gate.mjs && cross-env VITE_DEV=1 electron .",
+    "start": "npm run build && electron .",
     "build": "tsc -p tsconfig.node.json && vite build",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc --noEmit",
+    "test": "esbuild renderer/test.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/test.cjs --log-level=error && node node_modules/.cache/test.cjs",
     "dist": "npm run build && electron-builder"
   },
   "devDependencies": {

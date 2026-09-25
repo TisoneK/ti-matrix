@@ -189,6 +189,23 @@ class Proposer(Protocol):
 
 
 @runtime_checkable
+class Counting(Protocol):
+    """A proposer that can say how many actions it was choosing *from*. Entirely optional.
+
+    The engine cannot work this out. It sees the handful of candidates a proposer returns and never the
+    space they were drawn from, so a run that weighed four of thirty-five legal moves and one that
+    weighed four of four are identical in the record — and they are not remotely the same decision.
+
+    Only the proposer knows, and for many worlds the question has no answer: a filesystem admits any
+    path, a browser any URL. So this is duck-typed and optional. A proposer that can count says so and
+    the number reaches the event; one that cannot stays silent, and the record says nothing rather than
+    inventing a denominator.
+    """
+
+    def considered(self, state: Any) -> Optional[int]: ...
+
+
+@runtime_checkable
 class Evaluator(Protocol):
     """Scores every outcome of a fan in one call: progress 0..1, and whether the goal is settled."""
 

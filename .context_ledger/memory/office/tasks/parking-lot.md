@@ -37,11 +37,46 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
 
 ## Findings
 
+- **The engine hands the UI its tree.** `StateEngine.run` stamps every event: `state` carries `node` and
+  `parent`, a `backtrack` names the node it returns to, everything else carries `at`. The renderer's tree
+  used to derive the shape from each state's `trail` instead — a faithful guess at something the engine
+  had already stated. Anything that needs parentage should read the ids first and treat trail-derivation
+  as the fallback for older logs. (2026-09-23)
+- **The maze's coordinates are the drawing's coordinates.** `cell 1,1` is the point (1,1) of the world's
+  own textual map, walls included, so openings land directly on the points between cells and the map needs
+  no rescaling. Worth knowing before anyone "normalises" the grid. (2026-09-23)
+- **A world may contradict itself.** The maze adapter describes a cell's openings from the map as written,
+  so a hand-written maze whose squares disagree produces observations that disagree. Knowledge needs a
+  stated precedence (a refusal beats an inference; an inference never beats a corridor) rather than
+  relying on the order events happen to arrive in. (2026-09-23)
+
+- **A real model costs ~35 seconds per decision.** Two runs against `deepseek-flash` took 3m29s/6
+  decisions and 6m37s/10 decisions — roughly 35s per step, because each step is a proposer call plus an
+  evaluator call and both are slow. Any UI decision about "live" runs has to assume a viewer waits minutes
+  between changes, not seconds: an idle-looking window during a real run is normal. The engine's default
+  budget (depth 6, 16 calls) is sized for a stub, not for this. (2026-09-23)
+- **The app's confidence numbers are the model's own, not a probability.** "mean belief 45%" is the mean of
+  the evaluator's `progress` scores for the moves a run committed to. It reads like a probability and is
+  not one; it is only ever comparable within a model, which is what makes the run-vs-run column in Compare
+  the honest place for it. (2026-09-23)
+
+## Open questions
+
 What we learned that isn't work yet — observations, measurements, root
 causes, "the current design does X because Y".
 
 | ID | Summary |
 |----|---------|
+
+- **A real model costs ~35 seconds per decision.** Two runs against `deepseek-flash` took 3m29s/6
+  decisions and 6m37s/10 decisions — roughly 35s per step, because each step is a proposer call plus an
+  evaluator call and both are slow. Any UI decision about "live" runs has to assume a viewer waits minutes
+  between changes, not seconds: an idle-looking window during a real run is normal. The engine's default
+  budget (depth 6, 16 calls) is sized for a stub, not for this. (2026-09-23)
+- **The app's confidence numbers are the model's own, not a probability.** "mean belief 45%" is the mean of
+  the evaluator's `progress` scores for the moves a run committed to. It reads like a probability and is
+  not one; it is only ever comparable within a model, which is what makes the run-vs-run column in Compare
+  the honest place for it. (2026-09-23)
 
 ## Open questions
 

@@ -60,46 +60,72 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
                   confirmer: WsConfirmer, stats_path: Optional[Path]):
     """The engine for one run: the model from config, the world from the registry, the learning record
     when a path for it exists — the wiring the CLIs do via `session.py`, stated plainly."""
-    from ti_matrix.adapters.openai_compat import OpenAICompatModel
+    from ti_matrix.adapters.builtin import is_builtin, reasoner_for
     from ti_matrix.learning import LearningProposer, Statistics
-    from ti_matrix.model import LLMEvaluator, LLMMoveProposer
     from ti_matrix.search import EngineBudget, StateEngine
     from ti_matrix.tools import EngineTools
 
-    base_url = str(config.get("base_url", "")).strip()
     model_name = str(config.get("model", "")).strip()
-    if not base_url or not model_name:
-        raise ValueError("the goal config needs base_url and model (any OpenAI-compatible endpoint)")
-    key_env = str(config.get("api_key_env", "")).strip()
-    model = OpenAICompatModel(base_url, model_name, api_key_env=key_env or None)
+    world_name = str(config.get("world", "")).strip() or getattr(env, "name", "")
 
+    # The environment first, and its memory, because wrapping changes the tool list — and the tool list
+    # is what the model is shown. Building the seats before this is what made `recall` invisible: the
+    # engine would answer the probe, and the model was never told the action existed.
     statistics = Statistics()
-    environment = env
-    if stats_path is not None:
+    remembering = stats_path is not None
+    if remembering:
         from ti_matrix.adapters import stats_file
         if stats_path.exists():
             statistics = stats_file.load(stats_path)
-        environment = EngineTools(env, memory=statistics)
+    # Always wrapped, whether or not anything is remembered across runs. The wrapper's other half is the
+    # within-run record, which needs no storage and no setting: it is built from the probes passing
+    # through it, and it is how a model asks for the part of what it has learned that it needs instead
+    # of being handed the whole list. `memory=` adds earlier runs on top when a host asked for them.
+    environment = EngineTools(env, memory=statistics if remembering else None)
+
+    # The two seats. `builtin` fills them with rules and touches no network, so a window with no
+    # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
+    # other model name is an OpenAI-compatible endpoint, exactly as before.
+    if is_builtin(model_name):
+        reasoner = reasoner_for(world_name, env.tools(), env)
+        seats: tuple[Any, Any] = (reasoner, reasoner)
+    else:
+        from ti_matrix.adapters.openai_compat import OpenAICompatModel
+        from ti_matrix.model import LLMEvaluator, LLMMoveProposer
+
+        base_url = str(config.get("base_url", "")).strip()
+        if not base_url or not model_name:
+            raise ValueError("the goal config needs base_url and model (any OpenAI-compatible "
+                             "endpoint) — or model 'builtin' to run with no model at all")
+        key_env = str(config.get("api_key_env", "")).strip()
+        # A key pasted into the window rides the run config directly — it wins over the env var, and
+        # never outlives the run: it is read here, given to the adapter, and nothing writes it down.
+        api_key = str(config.get("api_key", "")).strip() or None
+        model = OpenAICompatModel(base_url, model_name, api_key=api_key, api_key_env=key_env or None)
+        # `environment.tools()`, not `env.tools()` — with memory on this is the world's actions plus
+        # `recall`, which is the one tool that lets a model ask what earlier runs established here
+        # instead of re-deriving it. The rules above keep the raw world: they read every fact directly
+        # and would only propose `recall()` with no arguments.
+        seats = (LLMMoveProposer(model, environment.tools()), LLMEvaluator(model))
 
     budget_kwargs = {k: v for k, v in budget_in.items() if k in protocol.BUDGET_FIELDS}
-    proposer: Any = LLMMoveProposer(model, env.tools())
+    proposer: Any = seats[0]
     if stats_path is not None:
         proposer = LearningProposer(proposer, statistics)
-    engine = StateEngine(environment, proposer=proposer, evaluator=LLMEvaluator(model),
+    engine = StateEngine(environment, proposer=proposer, evaluator=seats[1],
                          confirmer=confirmer, budget=EngineBudget(**budget_kwargs))
     return engine, statistics
 
 
 def _maybe_recorder(world_name: str, config: dict[str, Any]) -> Any:
-    """The ledger's write-back, only when asked for. Writing the vault is host work, never an action."""
-    if world_name != "ledger" or not config.get("write_back"):
-        return None
-    from ti_matrix.adapters.context_ledger import LedgerRecorder
+    """No app world writes back any more — the Context Ledger world left the picker.
 
-    project = str(config.get("project", "")).strip()
-    if not project:
-        return None
-    return LedgerRecorder(project, model=str(config.get("model", "")))
+    Kept as the seam rather than deleted: `RunState.recorder` and the `settled` frame's `record` field
+    are the general shape for "a run left something behind in its world", and the next world that does
+    (a report written, a file moved) plugs in here. `ti_matrix.adapters.context_ledger.LedgerRecorder`
+    still exists and `ledger_cli` still drives it; it is only the desktop app that no longer offers it.
+    """
+    return None
 
 
 # ── the run's lifecycle on the socket ───────────────────────────────────────

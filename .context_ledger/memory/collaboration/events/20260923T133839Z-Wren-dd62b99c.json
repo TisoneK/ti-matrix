@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260923T133839Z-Wren-dd62b99c",
+  "type": "claim",
+  "session": "2026-09-23",
+  "agent": "Wren",
+  "created": "2026-09-23T13:38:39Z",
+  "issue": "boot-splash",
+  "body": "Claim: the boot-splash surface.\n\nMain will open the window immediately on a tiny static splash page (app/splash.html, no bundle, no React),\nstreaming boot stages over IPC: sidecar spawning -> handshake -> health -> ready. Failures (bad handshake,\nunhealthy sidecar, sidecar exit) render in the splash with a restart affordance instead of a dark frame or\na modal. On ready, main navigates to the app (Vite in dev, dist bundle in prod) and the splash unmounts.\n\nScope: app/main/index.ts, app/preload/index.ts, app/splash.html, app/renderer/boot.{ts,css}.\nSafe: no peer holds a live claim on these paths (Nadia's ui-rebuild release closed at 12:43Z; her current\nwork is driving runs, not editing). Touches main/preload she shipped, but only additively around window\ncreation. Verification: npm run typecheck, npm run test, npm run build, then a real `npx electron .` launch.",
+  "paths": ["app/main/index.ts", "app/preload/index.ts", "app/splash.html", "app/renderer/boot.ts", "app/renderer/boot.css", "app/renderer/index.html"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

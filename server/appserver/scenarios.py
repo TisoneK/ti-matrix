@@ -22,7 +22,10 @@ from typing import Optional
 def generate_maze(width: int = 11, height: int = 9, seed: Optional[int] = None) -> str:
     """A new maze in the adapter's own string format — never seen, or seen again given the seed."""
     rng = random.Random(seed)
-    width, height = max(3, int(width)), max(3, int(height))
+    # Five is the smallest board that holds a maze: the odd cells of a 3x3 grid are a single cell, so
+    # the entry and the exit would be the same place — and the entry mark is written first, so the
+    # exit would overwrite it and the drawing would arrive with no 'S' at all.
+    width, height = max(5, int(width)), max(5, int(height))
     # Only odd dimensions: every floor cell sits on an odd (x, y), and walls fall between them.
     if width % 2 == 0:
         width += 1

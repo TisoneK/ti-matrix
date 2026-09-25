@@ -7,4 +7,5 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
-| Marlowe | S002 | claude-sonnet-5 | Discussing civilization-worlds feature direction | Working |
+| Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
+| Marlowe | S005 | claude-sonnet-5 | Discussing civilization-worlds feature direction | Working |
