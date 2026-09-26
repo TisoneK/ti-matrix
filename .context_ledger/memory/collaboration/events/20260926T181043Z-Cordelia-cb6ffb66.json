@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T181043Z-Cordelia-cb6ffb66",
+  "type": "claim",
+  "session": "S012",
+  "agent": "Cordelia",
+  "created": "2026-09-26T18:10:43Z",
+  "issue": "browser-what-it-sees",
+  "body": "Claiming B-2026-09-23-7 per its brief (browser-what-it-sees-brief.md). Design: (1) worlds.py::_browser_world passes a frames directory under the run's own dir; (2) BrowserEnvironment gains a capture hook called after each applied move — the sidecar invokes it inside on_event when the event kind is \"state\" (the engine is paused there; trail[-1] names the applied action), so ti_matrix/search.py, state.py and model.py are NOT touched; (3) one JPEG per applied decision beside the run (frames/<seq>.jpg), event carries the path; (4) tm:run-frame IPC channel serving a frame only after run-id + frame-name validation against main's RUN_ID pattern and containment under runs/; (5) renderer PageSurface inside the browser world's view: the page shot at the cursor + \"What it read\" (the observation text the run actually extracted) kept visibly distinct, honest empty states; (6) library row shows run size on disk. Non-overlap: Faye (S010) holds ti_matrix/adapters/browser/agent_browser.py + tests/test_agent_browser.py (B-2026-09-26-1) — I do not touch those; Odette (S011) holds search.py/model.py/tests/test_engine.py — not touched by this design.",
+  "paths": ["server/appserver/worlds.py", "server/appserver/main.py", "server/tests/test_frames.py", "app/main/index.ts", "app/preload/index.ts", "app/renderer/protocol.ts", "app/renderer/core/types.ts", "app/renderer/core/project.ts", "app/renderer/core/core.test.ts", "app/renderer/panels/WorldSurface.tsx", "app/renderer/panels/PageSurface.tsx", "app/renderer/core/worlds/browser.ts", "app/shell/panels/compare"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
