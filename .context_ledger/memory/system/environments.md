@@ -56,12 +56,12 @@ block (and its "last verified" date) every time you run on it again.
   after structural changes).
 
 ---
-## Lameck — the user's Windows desktop (last verified 2026-09-23)
+## Lameck — the user's Windows desktop (last verified 2026-09-26)
 - **Identify by:** Windows hostname `Lameck`; project checkout at `C:/Users/Lameck/Tisone/ti-matrix`
 - **OS:** Windows with Git Bash (POSIX sh available); PowerShell for `.cmd`/`.ps1` launchers
 - **Runtimes:** Python 3.11.0 (project venv at `.venv/`)
 - **Package manager:** pip (editable install of this repo in the venv)
-- **Verified commands:** `PYTHONUTF8=1 .venv/Scripts/python.exe -m pytest tests` — the project's test suite, green (197 passed, 2 skipped) when run from the repo root under UTF-8 mode
+- **Verified commands:** `PYTHONUTF8=1 .venv/Scripts/python.exe -m pytest tests` — the project's test suite, green (197 passed, 2 skipped) when run from the repo root under UTF-8 mode · `sh .context_ledger/core/bin/ledger-sync verify` / `status` (core 2.0.4, up to date) · `sh .context_ledger/core/bin/ledger-mem prune` · `PYTHONUTF8=1 sh .context_ledger/core/bin/ledger-gates run exit` — engine 322 passed / 2 skipped in 45s + production build green, on the 2026-09-26 pulled tip (2026-09-26)
 - **Quirks:** timezone EAT (UTC+3); a bare `python -m pytest` dies with `UnicodeEncodeError: 'charmap' codec` (cp1252) on any fixture containing non-ASCII text — always set `PYTHONUTF8=1`; sibling package clone lives at `C:/Users/Lameck/Tisone/context-ledger` — `sh ../context-ledger/core/bin/ledger-sync <cmd>` works from this repo for package-mode commands (bootstrap, harvest)
 -->
 

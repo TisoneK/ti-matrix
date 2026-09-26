@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
-| Odette | S011 | unknown | Pulled `main` to origin's tip (`48bb68e`→`53fbe14`) per the supervisor — sync only, no product work. Awaiting next instruction | Working |
