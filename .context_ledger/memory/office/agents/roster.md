@@ -8,3 +8,4 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
+| Ines | S007 | deepseek-flash | Logging a protocol-tooling blind spot the stale Wren row exposed — durable, not just in the office-scoped session log | Working |
