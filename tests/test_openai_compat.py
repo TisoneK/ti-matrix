@@ -15,7 +15,7 @@ import urllib.request
 
 import pytest
 
-from ti_matrix.adapters.openai_compat import OpenAICompatModel, describe_balance
+from ti_matrix.adapters.openai_compat import OpenAICompatModel, describe_balance, _DEFAULT_REASONING_ALLOWANCE as DEFAULT_REASONING_ALLOWANCE
 
 
 class FakeResponse:
@@ -95,10 +95,16 @@ async def test_the_answer_is_capped_at_max_chars(endpoint):
 
 @pytest.mark.asyncio
 async def test_max_tokens_leaves_room_for_a_reasoning_model_to_think(endpoint):
-    """`max_tokens` bounds the thinking and the answer together, so the answer's room is additive."""
+    """`max_tokens` bounds the thinking and the answer together, so the answer's room is additive.
+
+    Asserted against the constant, not a number: how much room the thinking needs moves with what there
+    is to think about — it was raised on 2026-09-26 after a fan burned the whole allowance on reasoning
+    and wrote nothing — and a test pinning the value turns every future adjustment into a failure of
+    arithmetic rather than of intent.
+    """
     model = OpenAICompatModel("https://api.example.test/v1", "m")
     await model.complete("x")  # default max_chars=4000 -> 2000 for the answer
-    assert endpoint.payload["max_tokens"] == 2000 + 8192
+    assert endpoint.payload["max_tokens"] == 2000 + DEFAULT_REASONING_ALLOWANCE
 
     refuses = OpenAICompatModel("https://api.example.test/v1", "m", reasoning_allowance=0)
     await refuses.complete("x")

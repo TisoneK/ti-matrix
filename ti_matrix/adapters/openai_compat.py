@@ -27,7 +27,17 @@ _DEEPSEEK_HOST_SUFFIX = "deepseek.com"
 # 2026-09-22: 4 of 6 proposer calls at fan size 4, and the run stopped `no_moves` with `settled: false`). The
 # allowance is additive, so the answer still gets the room `max_chars` asks for. Hosts whose model caps output
 # below this (an older OpenAI model, say) can pass `reasoning_allowance=0`.
-_DEFAULT_REASONING_ALLOWANCE = 8192
+_DEFAULT_REASONING_ALLOWANCE = 16384
+# 8192 was enough until the fan got harder. On 2026-09-26 a files run spent ALL 10192 output tokens (2000 for the
+# answer plus the whole allowance) reasoning over one fan and never wrote its JSON: `finish_reason="length"` with
+# empty content, and because an empty evaluation is an error the run ended at step one — `evaluator_error`, 13k
+# tokens, no facts. What made that fan hard is the point of the run: a name search returning 27 paths with their
+# kinds, and several candidates to weigh against each other, is a judgement, and a judgement costs thinking. So the
+# allowance tracks how much there is to think about rather than being a fixed property of a model; the price of
+# this line is that one call may now spend ~18k output tokens instead of ~10k, still bounded by the call budget.
+#
+# Still open, and why this is a mitigation and not the fix: an empty evaluator answer costs the whole run. It should
+# cost a retry — one more call with a shorter view — before the honest stop.
 
 
 class OpenAICompatModel:
