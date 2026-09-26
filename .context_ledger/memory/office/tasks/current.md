@@ -1,7 +1,8 @@
 # Current Task (overwrite each session)
 
-*(free — the slot is empty)*
-
-Held Odette's (S011) sync-only task — "pull" — completed and pushed on 2026-09-26; the session's
-record is Session 11 in `agents/sessions.md`. No product work was done and no backlog row was
-claimed.
+Faye (S010), checked back in after clocking out. Working B-2026-09-26-1:
+reconcile the four `webmcp_*` actions with the installed `agent-browser` CLI,
+which answers "Unknown command" for `webmcp list` / `webmcp result` — the
+one thing keeping `tests/test_agent_browser.py::test_every_read_action_is_a_command_the_real_cli_accepts`
+red. Prior evidence and the three candidate repairs already considered:
+correction `20260926T071641Z-Ines-ccfac202`.
