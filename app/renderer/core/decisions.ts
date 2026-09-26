@@ -95,6 +95,8 @@ interface Iteration {
   chosenFp: string | null;
   reason: string | undefined;
   answer: string | null;
+  partialAnswer: string | null;
+  answerBasis: string | null;
   settled: boolean;
   predictedResult: string;
 }
@@ -144,7 +146,9 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
         cell: null,
         confidence: kind === "done" ? 1 : 0,
         priorProgress: current.progress,
-        evidence: kind === "needs-action" ? text(predicted?.["result"]) : text(head["partial_answer"]),
+        evidence: kind === "needs-action" ? text(predicted?.["result"]) : "",
+        partialAnswer: text(head["partial_answer"]) || null,
+        answerBasis: text(head["answer_basis"]) || null,
         headline: headlineFor(kind, text(head["needs"]) || null, reason, 0),
         flags: [kind === "done" ? "confirmed" : "forced"],
         options: [],
@@ -173,6 +177,8 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
       chosenFp: null,
       reason: undefined,
       answer: null,
+      partialAnswer: null,
+      answerBasis: null,
       settled: false,
       predictedResult: "",
     };
@@ -223,8 +229,14 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
         break;
       }
       if (e.kind === "stopped") {
+        // A stop lands at the end of an iteration far more often than in front of one: the engine folds
+        // the last move, then reports why it is not taking another. The synthesizer's answer rides on
+        // this event, so it has to be captured here — reading only the no-fan path above is what left
+        // every real stopped run's last word on the floor.
         it.kind = "stopped";
         it.reason = text(e["reason"], "stopped");
+        it.partialAnswer = text(e["partial_answer"]) || null;
+        it.answerBasis = text(e["answer_basis"]) || null;
         i += 1;
         break;
       }
@@ -286,11 +298,41 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
       tMs: events[Math.max(it.from, i - 1)].t_ms,
       reason: it.reason,
       answer: it.answer,
+      partialAnswer: it.partialAnswer,
+      answerBasis: it.answerBasis,
       settled: it.settled,
     });
   }
 
   return decisions;
+}
+
+export interface FinalAnswer {
+  text: string;
+  /** A settled `done` answer is verified against the world; a stopped run's is the best a synthesizer
+   * could make of the facts actually established — real, but never checked against the world itself. */
+  verified: boolean;
+  /** The engine's own note on where an unverified answer came from. Null for a settled one. */
+  basis: string | null;
+}
+
+/**
+ * The run's own last word, when it said one.
+ *
+ * A settled run's `answer` (kind `"done"`) is the one the engine itself verified. A run that stopped
+ * without settling carries `partial_answer` instead — a synthesizer's best reading of the facts,
+ * labelled unverified rather than hidden, the way the engine itself reports it. `null` when neither
+ * exists: the run is still going, stopped with nothing to answer from, or hit a world with no
+ * synthesizer wired in front of it (`builtin`).
+ */
+export function finalAnswerOf(decisions: Decision[]): FinalAnswer | null {
+  const last = decisions[decisions.length - 1];
+  if (!last) return null;
+  if (last.kind === "done" && last.answer) return { text: last.answer, verified: true, basis: null };
+  if (last.kind === "stopped" && last.partialAnswer) {
+    return { text: last.partialAnswer, verified: false, basis: last.answerBasis ?? null };
+  }
+  return null;
 }
 
 /**

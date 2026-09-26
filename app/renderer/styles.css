@@ -395,6 +395,17 @@ svg { display: block; }
 .card li.ok { color: var(--green); }
 .card li.fail { color: var(--red); }
 
+/* The run's own last word — settled or the best a stopped one could make of its facts. It was computed
+   all along (`Decision.answer` / `partial_answer`) and never actually shown anywhere on screen; a prose
+   world's cards are evidence, not an answer, and a person reading them still had to do the synthesis
+   themselves. Distinct from a plain `.card`: this is the one thing on the panel someone came here for.
+   Green only for a settled, world-verified answer; an unverified synthesis reads as belief (amber), the
+   same color the map's own confidence bars use — never the color that means the world agreed. */
+.answer-card.verified { border-color: var(--green); background: var(--green-dim); }
+.answer-card.verified h4 { color: var(--green); }
+.answer-card.unverified { border-color: var(--amber); background: var(--amber-dim); }
+.answer-card.unverified h4 { color: var(--amber); }
+
 /* ── the tree ────────────────────────────────────────────────────────────── */
 
 .treewrap { position: absolute; inset: 0; overflow: auto; padding: var(--s3); }

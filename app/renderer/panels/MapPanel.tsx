@@ -51,7 +51,7 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
   if (world !== "maze") {
     return (
       <section className="pane" aria-label="the world">
-        <WorldSurface world={world} events={events} />
+        <WorldSurface world={world} events={events} decisions={decisions} />
       </section>
     );
   }
