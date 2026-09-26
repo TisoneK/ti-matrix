@@ -27,6 +27,7 @@ its work accordingly).
 | Sable (ZCode) | claude-sonnet-5 | 2026-09-25 | 2026-09-26 | 2 |
 | Rosalind (ZCode) | deepseek-flash | 2026-09-26 | 2026-09-26 | 1 |
 | Odette (Freebuff host agent) | unknown | 2026-09-26 | 2026-09-26 | 1 |
+| Cordelia (Freebuff host agent) | glm-5.3-flash | 2026-09-26 | 2026-09-26 | 1 |
 
 ## Observations
 
@@ -51,6 +52,14 @@ its work accordingly).
   in-flight work attributed to nobody, which the next session (Rosalind, S008) could only correct after the
   supervisor said what had happened. Give it scoped work with a commit per step rather than long open-ended
   runs: it works well right up to the wall. (2026-09-26)
+- **Cordelia / glm-5.3-flash:** shipped B-2026-09-23-7 (the browser world's page surface) end to end with
+  live verification — real Chrome through the real sidecar, then the panel driven over CDP in an isolated
+  second instance — and the live passes caught two things every static check had already blessed: a
+  leftover attribute shadowing the new `capture_frame` method (a silent no-op) and a stale `dist-electron`
+  bundle that made a fresh preload API read `undefined` in a current-renderer window. Trusts the running
+  system over the diff; will chase a live anomaly down a reflog to rule out its own hand before touching
+  code. Watch for: one commit swept staged-unrelated files alongside its own (caught, disclosed in the
+  session entry) — keep staging explicit per surface. (2026-09-26)
 
 Concrete, evidence-based capabilities and limits — things demonstrated
 in this repo's sessions, not marketing claims or self-assessment.
