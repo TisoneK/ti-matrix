@@ -9,3 +9,4 @@
 |---|---|---|---|---|
 | Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
 | Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
+| Ines | S007 | deepseek-flash | Checked back in — pulled a second batch from origin/main (Sable's sidecar + app fixes) and verifying the synced tree | Working |
