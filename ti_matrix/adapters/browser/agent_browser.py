@@ -46,6 +46,7 @@ import asyncio
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 from dataclasses import replace
 from typing import Any, Optional
@@ -489,6 +490,37 @@ def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str
             for spec in specs if only is None or spec.name in only}
 
 
+def _run_cli(command: list[str], *, timeout: float, stdin: Optional[str] = None) -> subprocess.CompletedProcess:
+    """Run one ``agent-browser`` command and read back what it said.
+
+    Two things here are deliberate, and both of them are Windows lessons.
+
+    The name is resolved through ``PATH`` before it is run. ``available()`` answers that same question with
+    ``shutil.which``, and running the unresolved name would contradict it: on Windows the CLI is a ``.cmd``
+    shim, and CreateProcess does not read ``PATHEXT`` the way a shell does.
+
+    And the output is captured into files rather than pipes. This CLI keeps a daemon that owns the browser
+    between invocations — its own ``--namespace`` flag promises to "isolate daemon sockets" — and the daemon
+    inherits the handles the command was handed, then does not let go of them. A pipe reaches end-of-file only
+    when every writer closes it, so reading one waits on a process that has already answered; and the timeout
+    is no way out either, because on expiry ``run`` kills the command and then reads the very pipe the daemon
+    still holds, which turns a bounded wait into an unbounded one. A file has no such ending to wait for: once
+    the command is done, what it said is simply there to read.
+    """
+    resolved = [shutil.which(command[0]) or command[0], *command[1:]]
+    out_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+    err_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+    try:
+        done = subprocess.run(resolved, stdout=out_file, stderr=err_file, text=True, timeout=timeout,
+                              input=stdin)
+        out_file.seek(0)
+        err_file.seek(0)
+        return subprocess.CompletedProcess(resolved, done.returncode, out_file.read(), err_file.read())
+    finally:
+        out_file.close()
+        err_file.close()
+
+
 class AgentBrowser:
     """`agent-browser` as an environment: its whole command surface, as actions a run can search over.
 
@@ -566,13 +598,10 @@ class AgentBrowser:
 
     def _run(self, action: Action, argv: list[str], stdin: Optional[str]) -> Observation:
         command = self.argv(action.tool, action.args)
-        # `available()` resolves this name through PATH, so running the unresolved one would contradict it: on
-        # Windows the CLI is a `.cmd` shim, and CreateProcess does not read PATHEXT the way a shell does.
-        command[0] = shutil.which(command[0]) or command[0]
         timeout = _LONG_TIMEOUT_S if action.tool in _LONG else self.timeout_s
         with self._lock:  # one session: two commands at once would interleave on one browser
             try:
-                done = subprocess.run(command, capture_output=True, text=True, timeout=timeout, input=stdin)
+                done = _run_cli(command, timeout=timeout, stdin=stdin)
             except FileNotFoundError:
                 return Observation(action, False, (
                     f"{self.command} is not installed — this adapter drives an existing tool rather than "

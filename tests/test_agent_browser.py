@@ -14,7 +14,7 @@ import pytest
 
 from ti_matrix import Action, CompositeEnvironment, EngineBudget, Evaluation, Goal, StateEngine
 from ti_matrix.adapters.browser import BrowserEnvironment
-from ti_matrix.adapters.browser.agent_browser import READS, AgentBrowser
+from ti_matrix.adapters.browser.agent_browser import READS, AgentBrowser, _run_cli
 from ti_matrix.adapters.confirm import Granted
 
 HAS_CLI = shutil.which("agent-browser") is not None
@@ -454,7 +454,6 @@ def test_every_read_action_is_a_command_the_real_cli_accepts(tmp_path):
     import functools
     import http.server
     import socketserver
-    import subprocess
     import threading
 
     directory = tmp_path / "site"
@@ -474,18 +473,21 @@ def test_every_read_action_is_a_command_the_real_cli_accepts(tmp_path):
     env = AgentBrowser(session=f"ti-matrix-sweep-{os.getpid()}")
     replaced = {"url": url, "tmp": str(tmp_path)}
     try:
-        subprocess.run(env.argv("open", {"url": url}), capture_output=True, text=True, timeout=120)
+        _run_cli(env.argv("open", {"url": url}), timeout=120)
+        version = (_run_cli(["agent-browser", "--version"], timeout=60).stdout or "").strip() or "the installed CLI"
         rejected = []
         for name in sorted(READS):
             args = {k: (v.format(**replaced) if isinstance(v, str) else v)
                     for k, v in _READ_ARGS.get(name, {}).items()}
-            done = subprocess.run(env.argv(name, args), capture_output=True, text=True, timeout=180)
+            done = _run_cli(env.argv(name, args), timeout=180)
             said = (done.stdout or "") + (done.stderr or "")
             hit = next((marker for marker in _SYNTAX_MARKERS if marker in said), None)
             if hit:
                 rejected.append(f"{name}: {' '.join(env.argv(name, args)[3:])} -> {hit}")
-        assert not rejected, "the CLI did not recognise these:\n" + "\n".join(rejected)
+        assert not rejected, (
+            f"{version} did not recognise these, so the table declares actions this CLI does not have:\n"
+            + "\n".join(rejected))
     finally:
         closing = AgentBrowser(session=f"ti-matrix-sweep-{os.getpid()}", perform={"close"})
-        subprocess.run(closing.argv("close", {}), capture_output=True, text=True, timeout=120)
+        _run_cli(closing.argv("close", {}), timeout=120)
         server.shutdown()
