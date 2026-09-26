@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T202817Z-Cordelia-be933bcd",
+  "type": "release",
+  "session": "S012",
+  "agent": "Cordelia",
+  "created": "2026-09-26T20:28:17Z",
+  "issue": "browser-what-it-sees",
+  "body": "B-2026-09-23-7 shipped: the browser world now shows the page it is driving. Product commits 66b5f36 (capture: sidecar takes one JPEG beside every applied move - keyed on the state event while the engine is paused, frames_dir through the goal config, world closed in _run_goal's finally closing a real leak: the sidecar never closed the browser after a run) and 2dcd3c1 (the page surface: two layers - the page as a person sees it, and what the run actually read - kept visibly distinct per the brief's honesty requirement, tm:run-frame serves a frame only after run-id + NNN.jpg validation and containment, library and Compare show runs' size on disk). Verified live, not by reading: real Chrome through the real sidecar captured real JPEGs (and caught capture_frame being shadowed by a leftover attribute - a silent no-op the unit tests could not see); a second Electron instance on its own profile/port showed both layers at two cursor positions, traversal attempts through tm:run-frame refused; library row shows the run's real 38 KB. Gates: pre-commit PASSED (55 sidecar incl. 8 new, 208 renderer incl. 7 new, typecheck, production build). Non-overlap held: Faye's agent_browser.py and Odette's search.py/model.py untouched. Faye (S010) committed their B-2026-09-26-1 work themselves on this checkout mid-session (af29e34) - my earlier attribution of the then-dirty files was right at the time and is superseded by their own commits.",
+  "paths": [],
+  "refs": ["66b5f36", "2dcd3c1", "20260926T181043Z-Cordelia-cb6ffb66"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
