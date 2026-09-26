@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T11:36:16Z_
+_Regenerated: 2026-09-26T12:30:41Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-26)
@@ -15,8 +15,8 @@ _Regenerated: 2026-09-26T11:36:16Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record,…
-- **Faye** (S010) — Working — Continuing the supervisor's own conversation with S006 (Sable), whose session ran out of …
+- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the recor…
+- **Faye** (S010) — Working — Working the three open backlog rows one at a time, on the supervisor's order: B-2026-09-2…
 
 ## Current task
 (idle — no task recorded)
@@ -31,7 +31,7 @@ _Regenerated: 2026-09-26T11:36:16Z_
 | B-2026-09-26-1 | **Reconcile the four `webmcp_*` actions with a CLI that has them — this one thing keeps the browser sweep test red.** The installed `agent-browser` 0.35.1 answers "Unknown command" for `webmcp list` / `webmcp result`; WebMCP *is* documented on agent-browser.dev and npm's latest is 0.38.1, so the table (`43ca964`, written from the docs) is probably right and this machine's binary is old. To do: establish which CLI version first ships WebMCP, then either pin/document that minimum or gate the four actions on the CLI's version (the adapter already asks `available()` for presence), and re-run `tests/test_agent_browser.py::test_every_read_action_is_a_command_the_real_cli_accepts`. Until then, a run that picks one spends budget on a command that cannot work. Evidence, and the three candidate repairs with the reason each was left: correction `20260926T071641Z-Ines-ccfac202`. |
 | B-2026-09-26-5 | **Settlement is not weighed — a run ends on the first fan that claims `done`, so a competing candidate is never generated, and `done` is accepted on an answer that is merely non-empty.** Raised by the supervisor after the files world answered a "locate the repository" goal with a runtime folder that shares the goal's folder name instead of the checkout under `Dev/`. Two mechanisms, both in the engine, neither about path matching: (1) `StateEngine._steps` emits `done` and returns the moment `best_done` is true (`ti_matrix/search.py:363`), and `best_done` bypasses `NothingImproves` — so `backtrack` is only ever *reached* through failure, and the search has no success path that weighs a second route; the alternative the goal wanted was never proposed, probed, or mentioned in the event record. (2) `LLMEvaluator.evaluate`'s guards (`ti_matrix/model.py:124-129`) zero a failed or predicted outcome and drop a `done` whose answer is empty — **nothing checks grounding**, contradicting `DESIGN.md` ("`done` requires an answer grounded in facts") and the guard's own comment; proved by running the engine with an answer that appears in no observation: it settles, and the renderer marks it `verified: true` (`app/renderer/core/decisions.ts:331`). Supervisor's direction, and the reason it is not fixed yet: the fix is in how the engine generates and weighs alternative states before settling, **not** a `.git` check bolted onto path matching. To do: add a challenge round — a fan that claims `done` forces one more propose/probe/evaluate cycle with the claimed action pruned, and the claim settles only if nothing better or competing survives it. Constraints found while reading: the challenge costs two calls (follow the `answer_reserve`/`BudgetExhausted` precedent, and mark a claim *unchallenged* when it cannot be afforded rather than skipping it silently); after a claim is applied `state.progress` is 1.0, so a lower-scoring challenge fan would trip `NothingImproves` → `backtrack` and a settled run would walk on — the challenge round must be recognised by the loop, not squeezed through the no-improvement path; prefer reusing the existing event kinds, since a new kind or stop reason means `app/renderer/core/` and the visual checks. **One decision needed from the supervisor:** when a challenge produces a second claim, does the run prefer the better-scoring claim, keep searching until one claim survives unopposed, or stop as `settled: false` and report both? Full diagnosis, the real run's event trail, and the reproduced engine output: `reviews/2026-09-26-review-2.md`. |
 
-_4 medium, 0 low priority row(s) — see tasks/backlog.md_
+_3 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 4 entries, last added 2026-09-26
