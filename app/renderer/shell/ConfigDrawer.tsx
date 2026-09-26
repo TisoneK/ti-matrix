@@ -111,9 +111,10 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
         </button>
       </div>
 
-      <div className="drawer-grid">
-        {rules ? null : (
-          <>
+      {rules ? null : (
+        <section className="drawer-section">
+          <h3 className="drawer-section-title">Endpoint &amp; model</h3>
+          <div className="drawer-grid">
             <Field label={modelLabels["base_url"] ?? "Endpoint"} hint="any OpenAI-compatible base URL">
               {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}
                              onChange={(e) => setModel("base_url", e.target.value)} />}
@@ -140,10 +141,6 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
                 </div>
               )}
             </Field>
-          </>
-        )}
-        {rules ? null : (
-          <>
             <Field label="API key"
                    hint={apiKey.trim()
                      ? "held in memory for this session only — never saved to disk"
@@ -159,33 +156,40 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
               {(f) => <input {...f} type="text" value={model.api_key_env} spellCheck={false} placeholder="OPENAI_API_KEY"
                              onChange={(e) => setModel("api_key_env", e.target.value)} />}
             </Field>
-          </>
-        )}
+          </div>
+        </section>
+      )}
 
-        {fields.map((f) => (
-          f.kind === "checkbox" ? (
-            <div className="field check" key={f.name}>
-              <input id={`f-${f.name}`} type="checkbox" checked={Boolean(values[f.name])}
-                     onChange={(e) => set(f.name, e.target.checked)} />
-              <label className="field-label" htmlFor={`f-${f.name}`}>{f.label}</label>
-            </div>
-          ) : (
-            <Field key={f.name} label={f.label}
-                   hint={f.name === "seed" ? "the same seed rebuilds the same world — that is what makes two runs comparable" : undefined}>
-              {(props) => <input {...props} type="text" value={String(values[f.name] ?? "")} spellCheck={false}
-                                  placeholder={f.placeholder ?? String(f.default ?? "")}
-                                  onChange={(e) => set(f.name, e.target.value)} />}
-            </Field>
-          )
-        ))}
+      {fields.length > 0 ? (
+        <section className="drawer-section">
+          <h3 className="drawer-section-title">{current?.title ?? "World"}</h3>
+          <div className="drawer-grid">
+            {fields.map((f) => (
+              f.kind === "checkbox" ? (
+                <div className="field check" key={f.name}>
+                  <input id={`f-${f.name}`} type="checkbox" checked={Boolean(values[f.name])}
+                         onChange={(e) => set(f.name, e.target.checked)} />
+                  <label className="field-label" htmlFor={`f-${f.name}`}>{f.label}</label>
+                </div>
+              ) : (
+                <Field key={f.name} label={f.label}
+                       hint={f.name === "seed" ? "the same seed rebuilds the same world — that is what makes two runs comparable" : undefined}>
+                  {(props) => <input {...props} type="text" value={String(values[f.name] ?? "")} spellCheck={false}
+                                      placeholder={f.placeholder ?? String(f.default ?? "")}
+                                      onChange={(e) => set(f.name, e.target.value)} />}
+                </Field>
+              )
+            ))}
+            {fields.some((f) => f.name === "root" || f.name === "project") ? (
+              <Fieldset label="Browse" hint="fills the directory field above">
+                <Button onClick={onPick} size="sm">Choose a directory…</Button>
+              </Fieldset>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
-        {BUDGET.fields.map((f) => (
-          <Field key={f.name} label={f.label} hint={f.hint}>
-            {(props) => <input {...props} type="number" min={1} max={999} value={budget[f.name]}
-                                onChange={(e) => setBudget(f.name, Math.max(1, Math.min(999, Number(e.target.value) || 1)))} />}
-          </Field>
-        ))}
-
+      <section className="drawer-section">
         {/* The engine's own memory. Off by default for the app's whole life until now, which meant a
             model re-derived a world's affordances from scratch on every run — `benchmarks/bench.py`
             has the warm pass settling the same goals in 1 round and 3 probes against 2 and 6. Shown
@@ -201,12 +205,22 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
           </label>
         </div>
 
-        {fields.some((f) => f.name === "root" || f.name === "project") ? (
-          <Fieldset label="Browse" hint="fills the directory field above">
-            <Button onClick={onPick} size="sm">Choose a directory…</Button>
-          </Fieldset>
-        ) : null}
-      </div>
+        {/* Collapsed by default — steps/branching/ceiling/retreats are tuning knobs a run rarely needs
+            touched, and showing all four open beside "which world" and "which model" was exactly the
+            kind of undifferentiated field-dump that makes a settings screen feel like a config file
+            rather than a decision someone is making. */}
+        <details className="drawer-advanced">
+          <summary>Search budget <span className="pane-sub">— how deep, how wide, how long</span></summary>
+          <div className="drawer-grid">
+            {BUDGET.fields.map((f) => (
+              <Field key={f.name} label={f.label} hint={f.hint}>
+                {(props) => <input {...props} type="number" min={1} max={999} value={budget[f.name]}
+                                    onChange={(e) => setBudget(f.name, Math.max(1, Math.min(999, Number(e.target.value) || 1)))} />}
+              </Field>
+            ))}
+          </div>
+        </details>
+      </section>
 
       <div className="drawer-foot">
         <span className="pane-sub">{current?.note ?? ""}</span>

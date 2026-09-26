@@ -580,6 +580,29 @@ svg { display: block; }
 .drawer-bar .spacer { flex: 1; }
 .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s4); }
 @media (max-width: 700px) { .drawer-grid { grid-template-columns: 1fr; } }
+
+/* A settings screen with every field at the same weight reads as a config file, not a decision someone
+   is making. Grouped sections — a divider, a title in the same voice a pane's own heading speaks in —
+   are the difference between "which world, which model, how much budget" and one long list of inputs. */
+.drawer-section { padding-top: var(--s3); border-top: 1px solid var(--line); margin-top: var(--s3); }
+.drawer-section:first-of-type { padding-top: 0; border-top: none; margin-top: 0; }
+.drawer-section-title {
+  font: italic 600 12.5px/1.2 var(--display); letter-spacing: 0.01em; color: var(--fg-2);
+  margin: 0 0 var(--s3);
+}
+.drawer-section-title::before { content: "§ "; color: var(--fg-4); font-style: normal; }
+
+.drawer-advanced { margin-top: var(--s3); }
+.drawer-advanced summary {
+  display: flex; align-items: baseline; gap: var(--s2);
+  font: 500 11px/1 var(--ui); letter-spacing: 0.04em; color: var(--fg-3);
+  cursor: pointer; list-style: none; padding: 2px 0;
+}
+.drawer-advanced summary::-webkit-details-marker { display: none; }
+.drawer-advanced summary::before { content: "▸"; color: var(--fg-4); transition: transform 120ms ease; }
+.drawer-advanced[open] summary::before { transform: rotate(90deg); }
+.drawer-advanced summary:hover { color: var(--fg-2); }
+.drawer-advanced .drawer-grid { margin-top: var(--s3); }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > .field-label { font: 500 10px/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-4); }
 .field input[type="text"], .field input[type="number"], .field input[type="password"], .field select {

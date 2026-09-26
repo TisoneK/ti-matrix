@@ -358,7 +358,7 @@ export function App() {
       {view === "run" ? (
         <main className="stage">
           {projection.decisions.length === 0 && status !== "running" && !welcomeSeen ? (
-            <Welcome onConfigure={() => setConfigOpen(true)} onDismiss={() => setWelcomeSeen(true)} />
+            <Welcome onConfigure={() => { setWelcomeSeen(true); setConfigOpen(true); }} onDismiss={() => setWelcomeSeen(true)} />
           ) : (
             <>
               <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}
