@@ -12,6 +12,7 @@
 
 import { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Decision } from "../core/types";
+import { leadFlag } from "../core/flags";
 import { Playback, SPEEDS, Speed } from "../hooks/usePlayback";
 import { IconButton } from "../ui/controls";
 
@@ -27,6 +28,14 @@ export function Transport({ playback, decisions, durationMs, label, live }: {
   const at = decisions[playback.cursor];
   const followingLive = playback.pin === null;
   const marks = decisions.filter((d) => d.index !== playback.cursor && d.flags.some((f) => f !== "confirmed"));
+
+  // A cursor pinned to the last decision and a cursor following a finished run are the same place, and
+  // the bar used to say two different things about it: "rewound to 35" beside a "jump to end" button that
+  // went where the cursor already was. If the run is over, being at its last step *is* the end — the pin
+  // only matters while there are still events to follow, because a pin has to survive the next one.
+  const atEnd = count > 0 && playback.cursor >= count - 1;
+  const settledAtEnd = atEnd && !live;
+  const offerFollow = !followingLive && !settledAtEnd;
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (e.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
@@ -64,7 +73,7 @@ export function Transport({ playback, decisions, durationMs, label, live }: {
         </select>
       </div>
 
-      <div className={`scrubwrap ${followingLive ? "" : "scrubbed"}`}>
+      <div className={`scrubwrap ${followingLive || settledAtEnd ? "" : "scrubbed"}`}>
         <input
           className="scrub"
           type="range"
@@ -82,7 +91,7 @@ export function Transport({ playback, decisions, durationMs, label, live }: {
             <button
               key={d.index}
               type="button"
-              className={`scrub-mark ${d.flags[0]}`}
+              className={`scrub-mark ${leadFlag(d.flags)}`}
               style={{ left: `${(d.index / (count - 1)) * 100}%` }}
               title={`step ${d.index + 1}: ${d.headline}`}
               tabIndex={-1}
@@ -104,14 +113,16 @@ export function Transport({ playback, decisions, durationMs, label, live }: {
       </div>
 
       <div className="transport-time">
-        {!followingLive ? (
+        {offerFollow ? (
           <button type="button" className="pick" onClick={playback.follow}
                   title={live ? "stop scrubbing and follow the run again" : "back to the end of the run"}>
             {live ? "jump to live" : "jump to end"}
           </button>
         ) : null}
-        <span className={followingLive && live ? "live-tag" : "live-tag"}>
-          {followingLive ? (live ? "following the run" : "at the end") : `rewound to ${playback.cursor + 1}`}
+        <span className="live-tag">
+          {followingLive ? (live ? "following the run" : "at the end")
+            : settledAtEnd ? "at the end"
+              : `rewound to ${playback.cursor + 1}`}
         </span>
         <span className="nowrap" title={label}>{label}</span>
         <span>step {count === 0 ? 0 : playback.cursor + 1}/{count}</span>

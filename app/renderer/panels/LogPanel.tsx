@@ -13,7 +13,7 @@
 import { useMemo, useState } from "react";
 import { Decision, Flag } from "../core/types";
 import { pct, splitTruncation } from "../core/format";
-import { FLAG_ORDER, flagSpec } from "../core/flags";
+import { FLAG_ORDER, flagSpec, leadFlag } from "../core/flags";
 import { TrustCurve, flagCounts } from "../core/trust";
 import { Confidence, Empty, Flags, FlagMark, PaneBody, PaneHead, Sparkline } from "../ui/atoms";
 import { Chip } from "../ui/controls";
@@ -70,12 +70,12 @@ export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookma
 
       <PaneBody scroll className="rows">
         {decisions.length === 0 ? (
-          <Empty title="No decisions yet">
+          <Empty eyebrow="the ledger" title="No decisions yet">
             Each turn of the search appears here as it happens: the options it had, the score it gave them,
             and the world's answer to the one it took.
           </Empty>
         ) : rows.length === 0 ? (
-          <Empty title={`Nothing marked “${only ? flagSpec(only).label : ""}”`}>
+          <Empty eyebrow="filtered" title={`Nothing marked “${only ? flagSpec(only).label : ""}”`}>
             Clear the filter to see the whole run.
           </Empty>
         ) : (
@@ -115,7 +115,7 @@ function Row({ decision, current, future, booked, onSeek, onBookmark, onHover, p
   // scored like the winner; the only thing that makes them different is that one move gets applied.
   const passedOver = decision.options.filter((o) => !o.chosen);
   // The strongest flag becomes the row's tone: the gutter tells the run's story before any word is read.
-  const tone = decision.flags.find((f) => f !== "confirmed") ?? (decision.flags[0] as Decision["flags"][number] | undefined);
+  const tone = leadFlag(decision.flags);
   return (
     <div
       className={`row ${future ? "cold" : ""} ${tone ? `tone-${tone}` : ""} ${peek ? "peek" : ""}`}

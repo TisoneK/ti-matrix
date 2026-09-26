@@ -63,4 +63,18 @@ export const FLAGS: Record<Flag, FlagSpec> = {
 /** A stable order for legends and filter chips: the good news first, the interesting news next. */
 export const FLAG_ORDER: Flag[] = ["confirmed", "surprise", "guess", "backtrack", "forced"];
 
+/**
+ * The one flag that leads a decision — what a single mark or a row's tone stands for when there is only
+ * room for one.
+ *
+ * `confirmed` is the fallback, never a contender: it is the flag almost every good decision carries, so
+ * anything that reads `flags[0]` gets `confirmed` on nearly every row and draws a hunch, a refusal and an
+ * ordinary step in the same colour. The ledger's own rows already skipped past it to pick their tone; the
+ * scrubber's marks did not, which is why a run full of low-confidence steps drew as a row of identical
+ * green ticks. One rule, in one place, so the two cannot disagree again.
+ */
+export function leadFlag(flags: Flag[]): Flag | undefined {
+  return flags.find((f) => f !== "confirmed") ?? flags[0];
+}
+
 export const flagSpec = (flag: Flag): FlagSpec => FLAGS[flag];

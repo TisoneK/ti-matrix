@@ -9,6 +9,7 @@ import { finalAnswerOf, foldDecisions } from "./decisions";
 import { boundsOf, cellKey, readKnowledge, statsOf } from "./knowledge";
 import { layoutTree, pathTo, readTree, siblingContext } from "./tree";
 import { readTrust, flagCounts } from "./trust";
+import { leadFlag } from "./flags";
 import { artifactOf, newRunId, summarise } from "./library";
 import { formatTokens, outcomeLabel, outcomeTone, splitTruncation } from "./format";
 
@@ -128,6 +129,15 @@ eq("flags of the decision that hit the wall", decisions[1].flags, ["confirmed", 
 eq("a step that worked and helped is merely confirmed", decisions[2].flags, ["confirmed"]);
 eq("a settle is confirmed", decisions[4].flags, ["confirmed"]);
 eq("the run's flag tally", flagCounts(decisions), { confirmed: 5, surprise: 1, guess: 0, backtrack: 0, forced: 0 });
+
+/* Which flag stands for the whole decision when there is only room for one mark. Reading `flags[0]` looks
+ * right and is wrong on nearly every row, because `confirmed` leads the list and nearly every row has it —
+ * the scrubber drew a refused, valued step as an ordinary green tick. The row's own gutter had the rule
+ * right; this is it, in one place, so the two cannot drift apart again. */
+eq("the interesting flag leads, not the one that is always there", leadFlag(["confirmed", "surprise"]), "surprise");
+eq("a plain confirmed step still leads with confirmed", leadFlag(["confirmed"]), "confirmed");
+eq("a retreat leads over its confirmation", leadFlag(["backtrack", "confirmed"]), "backtrack");
+eq("no flags is no mark", leadFlag([]), undefined);
 
 // The fold is prefix-total: the same decisions, minus the ones that had not happened yet.
 const early = foldDecisions(run.slice(0, decisions[1].to + 1));
