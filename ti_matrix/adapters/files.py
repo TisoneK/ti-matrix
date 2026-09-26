@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from collections import deque
 from pathlib import Path
 from typing import Optional
 
@@ -121,11 +122,18 @@ class FilesEnvironment:
         # One walk, not two, and bounded on both axes. The count this reports is the number of entries
         # actually looked at — which, when the bound bit, is *not* the size of the tree, and the line says
         # so rather than leaving a run to read a truncated answer as a whole one.
+        #
+        # Breadth-first, not depth-first: a stack-based walk fully explores whichever sibling sorts last
+        # (LIFO pops the most recently pushed) before ever touching the others, so one large, irrelevant
+        # subtree — a real one measured: macOS's own ~/Library — can spend the entire entry budget before
+        # the walk ever reaches a shallow, directly relevant match sitting right beside it. A goal asking
+        # to locate something wants the near candidates weighed first, not whichever the alphabet visits
+        # deepest soonest; a queue does that for free, level by level.
         seen = 0
         stopped = False
-        stack: list[tuple[Path, int]] = [(root, 0)]
-        while stack and not stopped:
-            here, depth = stack.pop()
+        queue: deque[tuple[Path, int]] = deque([(root, 0)])
+        while queue and not stopped:
+            here, depth = queue.popleft()
             try:
                 entries = sorted(here.iterdir(), key=lambda e: e.name.lower())
             except OSError:
@@ -147,19 +155,23 @@ class FilesEnvironment:
                         if named:
                             hits.append(entry)
                         if depth < _WALK_MAX_DEPTH:
-                            stack.append((entry, depth + 1))
+                            queue.append((entry, depth + 1))
                     elif entry.is_file() and named:
                         hits.append(entry)
                 except OSError:
                     continue  # vanished, or unreadable: it cannot be reported either way
+        # The stop is reported whether or not anything was found — a truncated search that happened to
+        # find something is still a truncated search, and a reader who cannot tell the two apart reads a
+        # partial answer as an exhaustive one. Measured: this is exactly the difference between "found 2"
+        # and "found 2, but the walk gave up before it could look everywhere" for the same goal.
+        limit_note = f", stopped at the {_WALK_MAX_ENTRIES}-path limit — more may exist unseen" if stopped else ""
         if not hits:
-            told = f"no file or directory under {_display(root)} has {contains!r} in its name ({seen} paths searched"
-            return True, (f"{told}, stopped at the {_WALK_MAX_ENTRIES}-path limit)" if stopped else f"{told})")
+            return True, f"no file or directory under {_display(root)} has {contains!r} in its name ({seen} paths searched{limit_note})"
         dirs = sum(1 for p in hits if p.is_dir())
         kinds = f"{dirs} director{'y' if dirs == 1 else 'ies'}, {len(hits) - dirs} file(s)"
         # A hit that is a directory carries a trailing separator, the same convention `list_dir` and the
         # tree already use — so which of these is a folder is readable without a second probe, and a goal
         # that asks for one can be told apart from a goal that asks for a file.
         names = " · ".join(_display(p) + ("/" if p.is_dir() else "") for p in hits[:40])
-        return True, (f"{len(hits)} path(s) under {_display(root)} with {contains!r} in the name ({kinds}): "
+        return True, (f"{len(hits)} path(s) under {_display(root)} with {contains!r} in the name ({kinds}{limit_note}): "
                       f"{names}")

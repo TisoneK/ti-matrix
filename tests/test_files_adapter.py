@@ -120,6 +120,36 @@ async def test_a_name_search_does_not_walk_past_its_depth(env, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_bounded_search_reaches_a_shallow_sibling_before_a_deep_irrelevant_one(env, monkeypatch):
+    """The walk is breadth-first, not depth-first, and this is why it has to be.
+
+    A stack-based (depth-first) walk fully explores whichever sibling sorts last before ever touching the
+    others — so one large, irrelevant subtree can spend the entire entry budget before the walk ever
+    reaches a shallow, directly relevant match sitting right beside it. Live-reproduced against a real
+    home directory: a search for a project folder never reached it, because an unrelated sibling
+    (alphabetically later, so a depth-first walk dove into it first) had thousands of files. Reproduced
+    small here: `zzz_big` sorts after `aaa_holder`, so the old stack popped it first and exhausted the
+    budget inside it; `target_match`, one level under `aaa_holder`, was never reached at all.
+    """
+    env_, d = env
+    wanted = d / "aaa_holder" / "target_match"
+    wanted.mkdir(parents=True)
+    big = d / "zzz_big"
+    big.mkdir()
+    for i in range(20):
+        (big / f"f{i}.txt").write_text("x")
+
+    # Room to fully list the root, `aaa_holder` and `sub` (the fixture's own subdirectory) — comfortably
+    # short of `zzz_big`'s 20 files, so the cap bites there and nowhere it would cost the real match.
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_ENTRIES", 8)
+    found = await env_.probe(Action("find_files", {"path": str(d), "contains": "target_match"}))
+    # Not just the search term (the "nothing matched" message echoes that back too) — the actual hit.
+    assert found.ok and str(wanted) in found.text, found.text
+    # A truncated search that happened to find something is still truncated — the report must say so.
+    assert "stopped at the 8-path limit" in found.text, found.text
+
+
+@pytest.mark.asyncio
 async def test_a_slow_probe_does_not_freeze_the_callers_event_loop(env, monkeypatch):
     """The reason this matters is not tidiness: the host awaits a probe on the loop it serves the run's
     own control channel from, so a probe that blocks it stops a run being reported on — or stopped."""
