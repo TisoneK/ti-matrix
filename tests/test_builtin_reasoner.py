@@ -416,3 +416,24 @@ def test_recall_is_honest_when_it_knows_nothing():
     env = EngineTools(MazeEnvironment())
     out = asyncio.run(env.probe(Action("recall", {"text": "the exit"}, "")))
     assert out.ok and "nothing established" in out.text, out.text
+
+
+def test_one_search_hands_the_seat_several_candidates(tmp_path):
+    """One search, more than one candidate — and on Windows paths, which this seat could not read at all.
+
+    `_ABS_PATH` only knew forward slashes, so on this platform every hit of a search was invisible: the run
+    could never weigh more than the name it happened to notice. A matched *directory* was dropped even where
+    paths were read, because only files were collected. This is the fan a goal like "locate the X repo"
+    needs: one search comes back with a folder and a file, and both are proposed.
+    """
+    root = tmp_path / "home"
+    root.mkdir()
+    state = AgentState(GoalType("locate the acme repo"), facts=(
+        f"list_dir(path={root}) -> ok: Contents of {root} — 2 entries: 📁 Dev · 📄 notes-acme.md",
+        f"find_files(path={root}, contains=acme) -> ok: 2 path(s) under {root} with 'acme' in the name "
+        f"(1 directory, 1 file(s)): {root / 'Dev' / 'acme'}/ · {root / 'notes-acme.md'}",
+    ))
+    moves = asyncio.run(FilesReasoner({}, _Rooted(str(root))).propose(state, 6, set()))
+    labels = [m.label() for m in moves]
+    assert any(m.tool == "list_dir" and "acme" in str(m.args.get("path", "")) for m in moves), labels
+    assert any(m.tool == "read_file" for m in moves), labels

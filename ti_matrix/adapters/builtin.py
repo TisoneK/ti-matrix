@@ -214,7 +214,11 @@ class MazeReasoner:
 # absolute paths joined by the same separator. Both are read back here rather than re-derived.
 _DIR_ENTRY = re.compile(r"📁 ([^·\n(]+)")
 _FILE_ENTRY = re.compile(r"📄 ([^·\n(]+?) \(")
-_ABS_PATH = re.compile(r"(/[^\s·]+)")
+# An absolute path in a search answer, on either platform: `C:\Users\me\repo` or `/home/me/repo`, up to the
+# ` · ` the world joins hits with. The old pattern only knew forward slashes, so on Windows every hit of a
+# search was invisible to this seat — which is half of why a search could return candidates and the run
+# still never weigh more than one of them.
+_ABS_PATH = re.compile(r"(?:[A-Za-z]:\\[^\s·]+|/[^\s·]+)")
 _LISTED = re.compile(r"Contents of ([^\s—]+)")
 # Words too common to tell one file from another; a goal is mostly these.
 _STOPWORDS = frozenset("""a an and are as at be by do does find for from get give how i in is it its
@@ -275,7 +279,19 @@ class FilesReasoner:
             for name in _FILE_ENTRY.findall(fact):
                 files.add(f"{base.rstrip('/')}/{name.strip()}")
             if "with '" in fact:  # a find_files answer: absolute paths, already whole
-                files.update(p for p in _ABS_PATH.findall(fact) if not is_noise(p))
+                # A hit ending in a separator is a directory, which is what the world writes for one. They
+                # used to be dropped on the floor along with every Windows path; now a matched *folder* is a
+                # candidate like any other — the seat proposes opening it — and a matched file is proposed
+                # for reading. That is the fan: several candidates from one search, to be probed and weighed
+                # against each other instead of the first name that happened to look right.
+                for hit in _ABS_PATH.findall(fact):
+                    hit = hit.strip()
+                    if not hit or is_noise(hit):
+                        continue
+                    if hit.endswith("/") or hit.endswith("\\"):
+                        dirs.add(hit.rstrip("/\\"))
+                    else:
+                        files.add(hit)
         return dirs, files, listed
 
     async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:

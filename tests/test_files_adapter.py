@@ -69,6 +69,10 @@ async def test_a_name_search_can_return_a_directory(env):
     assert found.ok
     assert str(wanted) in found.text, found.text
     assert "path(s)" in found.text, found.text
+    # Which kind each hit is has to be readable from the observation: a goal that asks for a folder and one
+    # that asks for a file cannot be told apart if the answer looks the same for both.
+    assert f"{wanted}/" in found.text, found.text
+    assert "1 directory, 0 file(s)" in found.text, found.text
 
     # And the empty answer says what it always said, in the words that are still true.
     none = await env_.probe(Action("find_files", {"path": str(d), "contains": "nothing-like-this"}))

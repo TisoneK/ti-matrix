@@ -71,7 +71,7 @@ const LISTING = /^Contents of (.*?) — (\d+) entries?: (.*)$/;
 const LISTED_ITEM = /^(📄|📁)\s+(.*?)(?:\s+\((\d+) B\))?$/;
 const MORE = /… \(\+(\d+) more\)$/;
 const STAT = /^(.*?) — (dir|file), (\d+) bytes, modified (\d{4}-\d{2}-\d{2} \d{2}:\d{2})$/;
-const FOUND = /^(\d+) (?:file|path)\(s\) under (.*?) with (.*?) in the name: (.*)$/;
+const FOUND = /^(\d+) (?:file|path)\(s\) under (.*?) with (.*?) in the name[^:]*: (.*)$/;
 const FOUND_NONE = /^no (?:file|path)(?: or directory)? under (.*?) has (.*?) in its name \((\d+) paths searched[^)]*\)$/;
 const REFUSED = /^refused: (.*?) is not a path inside (.*)$/;
 const NOT_A_DIR = /^not a directory: (.*)$/;
@@ -207,7 +207,13 @@ export function treeOf(k: FilesKnowledge): Node | null {
     const node = ensure(stat.path, stat.kind === "dir", { bytes: stat.bytes });
     node.stated = stat;
   }
-  for (const find of k.finds) for (const path of find.paths) ensure(path, false);
+  // A hit ending in a separator is a directory — `find_files` marks them that way, so a folder can be told
+  // from a file without a second probe. (Before, every hit was drawn as a file: the panel said "directories"
+  // over a list of documents and the folder the goal meant was never in it.)
+  for (const find of k.finds) for (const raw of find.paths) {
+    const dir = /[\\/]$/.test(raw);
+    ensure(dir ? raw.replace(/[\\/]+$/, "") : raw, dir);
+  }
 
   // Files whose parent was never listed need their own placeholder directories to hang from.
   for (const node of [...nodes.values()]) {

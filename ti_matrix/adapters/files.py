@@ -153,5 +153,11 @@ class FilesEnvironment:
         if not hits:
             told = f"no file or directory under {_display(root)} has {contains!r} in its name ({seen} paths searched"
             return True, (f"{told}, stopped at the {_WALK_MAX_ENTRIES}-path limit)" if stopped else f"{told})")
-        names = " · ".join(_display(p) for p in hits[:40])
-        return True, f"{len(hits)} path(s) under {_display(root)} with {contains!r} in the name: {names}"
+        dirs = sum(1 for p in hits if p.is_dir())
+        kinds = f"{dirs} director{'y' if dirs == 1 else 'ies'}, {len(hits) - dirs} file(s)"
+        # A hit that is a directory carries a trailing separator, the same convention `list_dir` and the
+        # tree already use — so which of these is a folder is readable without a second probe, and a goal
+        # that asks for one can be told apart from a goal that asks for a file.
+        names = " · ".join(_display(p) + ("/" if p.is_dir() else "") for p in hits[:40])
+        return True, (f"{len(hits)} path(s) under {_display(root)} with {contains!r} in the name ({kinds}): "
+                      f"{names}")
