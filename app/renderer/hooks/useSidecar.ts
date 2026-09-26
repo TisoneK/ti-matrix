@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Frame, Sidecar, Status, TmApi, WorldInfo } from "../protocol";
+import { Frame, Sidecar, Status, TmApi, Usage, WorldInfo } from "../protocol";
 import { EngineEventFrame, RunArtifact } from "../core/types";
 import { createLibrary, LibraryBackend, newRunId, summarise } from "../core/library";
 
@@ -29,6 +29,7 @@ export interface Settled {
   summary: string | null;
   record: string | null;
   learned: string | null;
+  usage?: Usage | null;
   error?: string;
 }
 

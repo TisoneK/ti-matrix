@@ -40,7 +40,8 @@ class FakeEndpoint:
         else:
             content = json.dumps({"moves": moves})
         return web.json_response({"choices": [{"message": {"role": "assistant", "content": content},
-                                               "finish_reason": "stop"}]})
+                                               "finish_reason": "stop"}],
+                                  "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}})
 
 
 def maze_rounds():

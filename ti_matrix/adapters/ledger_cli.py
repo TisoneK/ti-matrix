@@ -12,13 +12,14 @@ durable facts into the parking lot's Findings, where the next session's reading 
     --dry-run     print exactly what would be appended, then leave the vault untouched
 
 A hosted model needs its key; pass it by NAME, never by value:  --api-key-env OPENAI_API_KEY
+    --model builtin   the world's own rule-based reasoner — no endpoint, no key, no network at all
 """
 import argparse
 import asyncio
 import json
 import sys
 
-from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMSimulator, StateEngine
+from ti_matrix import EngineBudget, Goal, StateEngine
 from ti_matrix.adapters.context_ledger import LedgerEnvironment, LedgerRecorder
 from ti_matrix.adapters.openai_compat import OpenAICompatModel
 from ti_matrix.adapters.session import Session
@@ -30,15 +31,22 @@ async def _main(a) -> int:
         print(f"no Context Ledger at {env.vault} — bootstrap one first, or point --vault at a project "
               f"that has `.context_ledger/`", file=sys.stderr)
         return 2
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None, timeout_s=a.timeout)
-    session = Session(remember=a.remember, record=a.record, ask=a.ask)
+    # No `ask=` here: this environment's write actions are declared so the engine can reason about them,
+    # and `LedgerRecorder` performs them after the run rather than the engine asking mid-run. `_args` never
+    # defines `--ask` for that reason (see its own comment below) — passing `a.ask` crashed every
+    # invocation with `AttributeError: 'Namespace' object has no attribute 'ask'` before this fix.
+    session = Session(remember=a.remember, record=a.record)
     env = session.environment(env)
+    seats = session.seats("ledger", env, a.model,
+                          lambda: OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
+                                                    timeout_s=a.timeout),
+                          want_simulator=True)  # the vault's write actions are declared: judge, don't perform
     engine = StateEngine(
         env,
-        proposer=session.proposer(port, env.tools()),
-        evaluator=LLMEvaluator(port),
-        synthesizer=session.synthesizer(port),
-        simulator=LLMSimulator(port),  # the vault's write actions are declared: judge them, do not perform
+        proposer=seats.proposer,
+        evaluator=seats.evaluator,
+        synthesizer=seats.synthesizer,
+        simulator=seats.simulator,
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
     recorder = LedgerRecorder(env.vault, agent=a.agent, model=a.model)
@@ -48,9 +56,9 @@ async def _main(a) -> int:
             session.observe(ev)
             print(json.dumps(ev.to_dict(), ensure_ascii=False) if a.json else f"[{ev.kind}] {ev.data}")
     finally:
-        note = session.save()
-        if note:
-            print(note, file=sys.stderr)
+        for note in (session.save(), await session.usage_note(seats.model, balance=a.balance)):
+            if note:
+                print(note, file=sys.stderr)
     if not a.no_record:
         write = recorder.record(dry_run=a.dry_run)
         print(write.to_text() if not a.json else json.dumps(
@@ -64,9 +72,11 @@ def _args(argv=None):
     ap.add_argument("goal")
     ap.add_argument("--vault", default=".", help="the project holding .context_ledger/ (or that directory)")
     ap.add_argument("--base-url", default="http://localhost:11434/v1", help="any OpenAI-compatible endpoint")
-    ap.add_argument("--model", default="qwen2.5:7b")
+    ap.add_argument("--model", default="qwen2.5:7b", help="'builtin' runs the rule-based reasoner instead")
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY", help="the NAME of the env var holding the key")
     ap.add_argument("--agent", default="Ti Matrix", help="the name this run is recorded under")
+    ap.add_argument("--balance", action="store_true",
+                    help="after the run, print what the account has left (DeepSeek endpoints only)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--timeout", type=float, default=120.0,
                     help="seconds to wait on one model call; raise it for a big local model")

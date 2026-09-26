@@ -14,13 +14,14 @@ out — which is a real decision, so it is a flag you have to type rather than a
     --record FILE      write the run down, then read it: python -m ti_matrix.adapters.run_log FILE
     --ask click,type   ask me before these actions — per action, with the model's reason, at the moment
     --profile DIR      keep a browser profile between runs, so a signed-in site stays signed in
+    --model builtin    the world's own rule-based reasoner — no endpoint, no key, no network at all
 """
 import argparse
 import asyncio
 import json
 import sys
 
-from ti_matrix import EngineBudget, Goal, LLMEvaluator, LLMSimulator, StateEngine
+from ti_matrix import EngineBudget, Goal, StateEngine
 from ti_matrix.adapters.browser import BrowserEnvironment, find_browser
 from ti_matrix.adapters.openai_compat import OpenAICompatModel
 from ti_matrix.adapters.session import Session
@@ -42,16 +43,19 @@ async def _main(a) -> int:
     reads = sum(1 for spec in env.tools().values() if spec.read_only)
     print(f"# {reads} of {len(env.tools())} actions may be performed unasked; "
           f"the rest are refused unless --perform names them", file=sys.stderr)
-    port = OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None, timeout_s=a.timeout)
     session = Session(remember=a.remember, record=a.record, ask=a.ask)
     env = session.environment(env)
+    seats = session.seats("browser", env, a.model,
+                          lambda: OpenAICompatModel(a.base_url, a.model, api_key_env=a.api_key_env or None,
+                                                    timeout_s=a.timeout),
+                          want_simulator=True)  # so a refused click is judged instead of only reported
     engine = StateEngine(
         env,
-        proposer=session.proposer(port, env.tools()),
-        evaluator=LLMEvaluator(port),
-        simulator=LLMSimulator(port),  # so a refused click is judged instead of only reported
+        proposer=seats.proposer,
+        evaluator=seats.evaluator,
+        simulator=seats.simulator,
         confirmer=session.confirmer(env.tools()),
-        synthesizer=session.synthesizer(port),
+        synthesizer=seats.synthesizer,
         budget=EngineBudget(max_model_calls=a.budget_calls),
     )
     # The state a run renders says nothing about where the browser is, so a model with no fact yet will
@@ -65,9 +69,9 @@ async def _main(a) -> int:
             print(json.dumps(event.to_dict(), ensure_ascii=False) if a.json
                   else f"[{event.kind}] {event.data}")
     finally:
-        note = session.save()
-        if note:
-            print(note, file=sys.stderr)
+        for note in (session.save(), await session.usage_note(seats.model, balance=a.balance)):
+            if note:
+                print(note, file=sys.stderr)
         env.close()  # the browser this started stops with the run
     return 0
 
@@ -86,8 +90,10 @@ def _args(argv=None):
     ap.add_argument("--profile", default=None,
                     help="a browser profile to keep between runs (logins survive; you delete it)")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
-    ap.add_argument("--model", default="qwen2.5:7b")
+    ap.add_argument("--model", default="qwen2.5:7b", help="'builtin' runs the rule-based reasoner instead")
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY")
+    ap.add_argument("--balance", action="store_true",
+                    help="after the run, print what the account has left (DeepSeek endpoints only)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--timeout", type=float, default=120.0,
                     help="seconds to wait on one model call; raise it for a big local model")

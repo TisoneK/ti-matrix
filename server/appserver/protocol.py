@@ -24,7 +24,9 @@ Server → client:
     {"type": "event",             ...EngineEvent.to_dict()}
     {"type": "confirm-request",   "id": str, "action": {"tool", "args", "label"}, "reason": str}
     {"type": "settled",           "answer": str | null, "reason": str | null, "events": int,
-                                  "summary": str | null, "record": str | null}
+                                  "summary": str | null, "record": str | null,
+                                  "usage": {"calls": int, "prompt_tokens": int, "completion_tokens": int,
+                                            "total_tokens": int} | null}
     {"type": "error",             "message": str}
     {"type": "worlds",            "worlds": [{...}]}          (answer to GET /worlds, also pushed here)
 """

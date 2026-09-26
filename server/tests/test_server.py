@@ -47,6 +47,20 @@ async def test_a_goal_runs_to_its_settled_frame(server, client_factory):
     assert "settled: the exit is at 1,6" in settled["summary"]
     kinds = [e["kind"] for e in client.events]
     assert kinds[0] == "state" and "probe" in kinds and kinds[-1] == "done"
+    # Every fake round hands back a `usage` object; a hosted run's settled frame sums them all up.
+    assert settled["usage"]["calls"] == server.endpoint.requests
+    assert settled["usage"]["total_tokens"] == server.endpoint.requests * 10
+
+
+async def test_a_builtin_run_settles_with_no_usage_to_report(server, client_factory):
+    """The rule-based seats never call the fake endpoint, so there is nothing honest to show — the
+    frame omits `usage` rather than a set of zeroes that would read as "this run cost nothing"."""
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": "", "model": "builtin", "api_key_env": ""},
+                      budget={"max_depth": 40, "max_model_calls": 300, "max_backtracks": 20})
+    settled = await client.settle()
+    assert settled["usage"] is None
 
 
 async def test_a_second_goal_while_running_is_an_error_frame_not_a_crash(server, client_factory):

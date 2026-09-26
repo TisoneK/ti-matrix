@@ -31,7 +31,7 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { LogPanel } from "./panels/LogPanel";
 import { MapPanel } from "./panels/MapPanel";
 import { TreePanel } from "./panels/TreePanel";
-import { formatElapsed, outcomeLabel, outcomeTone, pct } from "./core/format";
+import { formatElapsed, formatTokens, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
 
 export function App() {
@@ -298,6 +298,9 @@ export function App() {
           { label: "facts", value: shown.at?.facts.length ?? 0 },
           { label: "belief", value: shown.trust.points.length === 0 ? "—" : pct(shown.trust.mean) },
           { label: "elapsed", value: formatElapsed(lastMs) },
+          // Only a hosted run has anything to report — `builtin` spends no tokens, and it shows up
+          // once the run has settled, the same moment the other readouts stop moving.
+          ...(session.settled?.usage ? [{ label: "tokens", value: formatTokens(session.settled.usage.total_tokens) }] : []),
         ]}
       />
 
