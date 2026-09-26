@@ -5,7 +5,7 @@
  * answer it must produce — including the answers at earlier cursors, because that is what the scrubber is.
  */
 import { EngineEventFrame } from "../protocol";
-import { foldDecisions } from "./decisions";
+import { finalAnswerOf, foldDecisions } from "./decisions";
 import { boundsOf, cellKey, readKnowledge, statsOf } from "./knowledge";
 import { layoutTree, pathTo, readTree, siblingContext } from "./tree";
 import { readTrust, flagCounts } from "./trust";
@@ -314,6 +314,50 @@ eq("an unknown reason survives", outcomeLabel(false, "meteor"), "meteor");
 eq("it answered, it gave up, it broke",
    [outcomeTone(true, null), outcomeTone(false, "budget"), outcomeTone(false, "error: boom")],
    ["ok", "warn", "bad"]);
+
+/* ── the run's own last word — computed all along, never actually shown ───
+ * `Decision.answer` (a settled `done`) and the `partial_answer` a stopped run carries were both there
+ * from the start; no panel ever rendered either. Two ways to stop, and the synthesized answer has to
+ * survive both: at the end of an iteration (the engine folded a last move and then reported why it is
+ * not taking another — by far the common case) and in front of one (the budget check ran before the
+ * proposer and there was never a fan). */
+
+eq("a settled run's answer is verified", finalAnswerOf(decisions), { text: "the exit is at 3,3", verified: true, basis: null });
+
+const stoppedWithSynthesis = foldDecisions(stamped([
+  ev("state", { depth: 0, goal: "g", facts: 0, failed: 0, progress: 0, node: "n0", parent: null }),
+  ev("candidates", { moves: [move("a", "list_dir(path=.)")] }),
+  probeEv("a", "list_dir(path=.)", true, "12 files"),
+  evalEv("a", "list_dir(path=.)", 0.5),
+  ev("selected", { fp: "a", move: "list_dir(path=.)", progress: 0.5 }),
+  ev("state", { depth: 1, facts: 1, failed: 0, progress: 0.5, node: "n1", parent: "n0" }),
+  ev("stopped", { reason: "no_progress", settled: false, facts: ["12 files"], trail: [], model_calls: 2,
+                  partial_answer: "there are 12 files", answer_basis: "synthesised from 1 fact(s)" }),
+]));
+eq("a stopped run's synthesized answer is unverified",
+   finalAnswerOf(stoppedWithSynthesis), { text: "there are 12 files", verified: false, basis: "synthesised from 1 fact(s)" });
+
+/* The same answer, on the other path in: budget ran out before the proposer was ever asked. It used to
+ * be the only path that kept the synthesis, and it kept it in `evidence` — which everywhere else on a
+ * decision means the world's own words, not the run's reading of them. */
+const stoppedBeforeProposing = foldDecisions(stamped([
+  ev("state", { depth: 0, goal: "g", facts: 2, failed: 0, progress: 0.4, node: "n0", parent: null }),
+  ev("stopped", { reason: "budget", settled: false, facts: ["12 files"], trail: [], model_calls: 8,
+                  partial_answer: "there are 12 files", answer_basis: "synthesised from 2 fact(s)" }),
+]));
+eq("a run that stopped before proposing keeps its synthesis too",
+   finalAnswerOf(stoppedBeforeProposing), { text: "there are 12 files", verified: false, basis: "synthesised from 2 fact(s)" });
+eq("...and its evidence is still the world's words, not the synthesizer's",
+   stoppedBeforeProposing[0].evidence, "");
+
+const stoppedWithNothing = foldDecisions(stamped([
+  ev("state", { depth: 0, goal: "g", facts: 0, failed: 0, progress: 0, node: "n0", parent: null }),
+  ev("stopped", { reason: "no_moves", settled: false, facts: [], trail: [], model_calls: 0 }),
+]));
+eq("a stopped run with nothing to synthesize from has no final answer",
+   finalAnswerOf(stoppedWithNothing), null);
+
+eq("no decisions at all is no final answer", finalAnswerOf([]), null);
 
 /* ── a token total, read back the way a person reads one ─────────────────── */
 

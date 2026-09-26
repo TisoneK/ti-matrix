@@ -85,7 +85,19 @@ export interface Decision {
   tMs: number;
   /** Terminal decisions only: the reason the run gave for stopping. */
   reason?: string;
+  /** The settled answer, when the run reached the goal and the world confirmed it. */
   answer?: string | null;
+  /**
+   * A run that stopped without settling still has a last word, when a synthesizer was wired in: its own
+   * best reading of the facts it actually established.
+   *
+   * Kept apart from `evidence` on purpose. `evidence` is always the world's own words — what the probe
+   * returned, verbatim — and a synthesizer's sentence is not that: it is the run's belief about those
+   * words. Two different claims, so two different fields.
+   */
+  partialAnswer?: string | null;
+  /** What that synthesis rested on, in the engine's words — e.g. "synthesised from 3 fact(s)…". */
+  answerBasis?: string | null;
   settled?: boolean;
 }
 

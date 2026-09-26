@@ -12,7 +12,8 @@
  */
 
 import { useMemo } from "react";
-import { EngineEventFrame } from "../core/types";
+import { Decision, EngineEventFrame } from "../core/types";
+import { finalAnswerOf } from "../core/decisions";
 import { readFiles, treeOf, Node, FilesKnowledge } from "../core/worlds/files";
 import { readBrowser, BrowserKnowledge } from "../core/worlds/browser";
 import { Empty, PaneBody, PaneHead } from "../ui/atoms";
@@ -31,13 +32,27 @@ export interface Card {
   empty?: string;
 }
 
-export function WorldSurface({ world, events }: { world: string; events: EngineEventFrame[] }) {
+export function WorldSurface({ world, events, decisions }: { world: string; events: EngineEventFrame[]; decisions: Decision[] }) {
   const cards = useMemo(() => cardsFor(world, events), [world, events]);
+  const finalAnswer = useMemo(() => finalAnswerOf(decisions), [decisions]);
 
   return (
     <>
       <PaneHead title="World" sub={`${world} — read as it is observed, never in advance`} />
       <PaneBody scroll pad>
+        {finalAnswer ? (
+          <section className={`card answer-card ${finalAnswer.verified ? "verified" : "unverified"}`} style={{ marginBottom: 12 }}>
+            <h4>{finalAnswer.verified ? "Answer" : "Best answer from what it read"}</h4>
+            {finalAnswer.verified ? null : (
+              <p className="dim" style={{ fontSize: 10.5, marginBottom: 6 }}>
+                {finalAnswer.basis
+                  ? `${finalAnswer.basis} — not checked against the world, because the run stopped before settling`
+                  : "not verified against the world — the run stopped before settling"}
+              </p>
+            )}
+            <p style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--fg)" }}>{finalAnswer.text}</p>
+          </section>
+        ) : null}
         {cards.length === 0 ? (
           <Empty title="Nothing read yet">
             This world answers in prose. Each reading the run takes becomes a card here — a directory, a

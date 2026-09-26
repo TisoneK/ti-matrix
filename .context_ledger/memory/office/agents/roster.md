@@ -8,3 +8,4 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
+| Rosalind | S008 | deepseek-flash | UI design pass — the app reads like it was built by a backend developer, not a designer | Working |
