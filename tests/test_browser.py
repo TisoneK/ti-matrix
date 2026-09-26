@@ -311,7 +311,8 @@ class ReadsThePage:
     async def propose(self, state, n, avoid):
         self.asked += 1
         tool, args = self.moves[min(self.asked - 1, len(self.moves) - 1)]
-        return [Action(tool, args, "because")]
+        action = Action(tool, args, "because")
+        return [] if action.fingerprint() in avoid else [action]
 
 
 class KnowsTheAnswer:

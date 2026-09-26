@@ -94,6 +94,67 @@ async def test_one_step_done_returns_a_grounded_answer():
     assert [e.kind for e in ev][-1] == "done" and ev[-1].data["answer"] == "3 files"
 
 
+# ─── The challenge round: a `done` claim is not taken on its own say-so ──────
+
+
+@pytest.mark.asyncio
+async def test_a_done_claim_survives_a_challenge_that_finds_nothing_better():
+    """B-2026-09-26-5: one more fan is proposed with the claimed action pruned, and only when nothing
+    there beats it does the claim settle. Here the challenge asks and gets nothing back."""
+    a = mv(path="/a")
+    prop = ScriptedProposer([a])  # the challenge round's ask finds the script exhausted
+    ev = await collect(engine(prop, FakeExecutor({}),
+                              ScriptedEvaluator({a.label(): Evaluation(1.0, True, "3 files", "found")})))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "3 files"
+    assert ev[-1].data["challenged"] is True
+    assert prop.seen_avoid[-1] == {a.fingerprint()}  # the challenge explicitly excluded the claim
+
+
+@pytest.mark.asyncio
+async def test_a_competing_claim_that_scores_higher_wins_the_challenge():
+    """The supervisor's policy: when a challenge produces a second `done` claim, the better-scoring
+    one settles — the exact shape of a run that named a folder sharing the goal's name over the real one."""
+    shallow, real = mv(path="/a"), mv(path="/b")
+    prop = ScriptedProposer([shallow], [real])
+    evalr = ScriptedEvaluator({
+        shallow.label(): Evaluation(0.9, True, "a folder sharing the goal's name", "matches by name"),
+        real.label(): Evaluation(1.0, True, "the actual checkout", "verified"),
+    })
+    ev = await collect(engine(prop, FakeExecutor({}), evalr))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "the actual checkout"
+    assert ev[-1].data["challenged"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_better_but_unsettled_challenger_keeps_the_search_going():
+    """A challenger that outscores the claim without itself being done invalidates the claim: the run
+    takes the better state and keeps searching, rather than settle on what it just outscored."""
+    shallow, better, real = mv(path="/a"), mv(path="/b"), mv(path="/c")
+    prop = ScriptedProposer([shallow], [better], [real])
+    evalr = ScriptedEvaluator({
+        shallow.label(): Evaluation(0.9, True, "a folder sharing the goal's name", "matches by name"),
+        better.label(): Evaluation(0.95, False, "", "closer, but not settled yet"),
+        real.label(): Evaluation(1.0, True, "the actual checkout", "verified"),
+    })
+    ev = await collect(engine(prop, FakeExecutor({}), evalr))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "the actual checkout"
+    selected_moves = [e.data["move"] for e in ev if e.kind == "selected"]
+    assert better.label() in selected_moves  # the better state was actually taken, not discarded
+    assert shallow.label() not in selected_moves  # the shallow claim was never applied
+
+
+@pytest.mark.asyncio
+async def test_an_unaffordable_challenge_is_marked_not_a_silent_pass():
+    """The challenge costs two calls; when the budget cannot afford them the claim goes unchallenged,
+    and the record says so rather than looking identical to a challenge that ran and found nothing."""
+    a = mv(path="/a")
+    ev = await collect(engine(ScriptedProposer([a]), FakeExecutor({}),
+                              ScriptedEvaluator({a.label(): Evaluation(1.0, True, "ans")}),
+                              max_model_calls=3))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "ans"
+    assert ev[-1].data["challenged"] is False
+
+
 @pytest.mark.asyncio
 async def test_no_progress_backtracks_and_never_repeats_a_failed_move():
     a, b, c = mv(path="/a"), mv(path="/b"), mv(path="/c")

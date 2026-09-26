@@ -133,6 +133,19 @@ class NothingImproves:
 DEFAULT_TERMINAL_CONDITIONS: tuple[TerminalCondition, ...] = (BudgetExhausted(), NoRunnableActions(), NothingImproves())
 
 
+@dataclass
+class _ChallengeResult:
+    """What one challenge round produced: its own event trail, what it cost, and — when it ran and
+    found something to probe — its own ranked real outcomes, ready to compare against the claim."""
+
+    events: list[EngineEvent]
+    calls_spent: int
+    challenged: bool  # False only when the budget could not afford it — the claim went unchallenged
+    ranked: list[tuple[Observation, Any]]
+    outcomes: list[Observation]
+    observed_at: dict[str, float]
+
+
 class StateEngine:
     """A state-driven agent run. Construct with an environment and the two seats that decide.
 
@@ -352,6 +365,7 @@ class StateEngine:
                 continue
 
             best_obs, best_eval = ranked_real[0]
+            apply_observed_at = observed_at
             history.append(state)
             for o in outcomes:
                 if o is not best_obs:
@@ -361,7 +375,42 @@ class StateEngine:
                     # the same action would fail again at the next state, and the point of fingerprinting is
                     # that it is not proposed twice.
                     state = state.with_failed(o.move.fingerprint())
-            state = state.apply(best_obs, best_eval, observed_at.get(best_obs.move.fingerprint()))
+
+            challenged = False
+            if best_eval.done:
+                # A `done` claim is not taken on its own say-so: one more fan is proposed with the
+                # claimed action pruned, and the claim settles only if nothing better or competing
+                # survives it. Real probes, whichever way this goes, are learned as facts.
+                result = await self._challenge(state, avoid | {best_obs.move.fingerprint()}, calls)
+                for cev in result.events:
+                    yield cev
+                calls += result.calls_spent
+                challenged = result.challenged
+                if result.ranked:
+                    chal_obs, chal_eval = result.ranked[0]
+                    for o in result.outcomes:
+                        state = state.learn(o, result.observed_at.get(o.move.fingerprint()))
+                        if not o.ok:
+                            state = state.with_failed(o.move.fingerprint())
+                    if chal_eval.progress > best_eval.progress:
+                        if not chal_eval.done:
+                            # A better, unsettled state survives the challenge: take it and keep
+                            # searching rather than settle on the claim it just out-scored.
+                            state = state.apply(
+                                chal_obs, chal_eval, result.observed_at.get(chal_obs.move.fingerprint())
+                            )
+                            yield EngineEvent(
+                                "selected",
+                                {"fp": chal_obs.move.fingerprint(), "move": chal_obs.move.label(),
+                                 "progress": chal_eval.progress},
+                            )
+                            yield EngineEvent("state", {"depth": state.depth, **state.to_dict()})
+                            continue
+                        # A competing `done` claim scored higher — settle on it instead (the
+                        # supervisor's policy: the better-scoring claim wins a challenge).
+                        best_obs, best_eval, apply_observed_at = chal_obs, chal_eval, result.observed_at
+
+            state = state.apply(best_obs, best_eval, apply_observed_at.get(best_obs.move.fingerprint()))
             yield EngineEvent(
                 "selected",
                 {"fp": best_obs.move.fingerprint(), "move": best_obs.move.label(), "progress": best_eval.progress},
@@ -369,7 +418,9 @@ class StateEngine:
             yield EngineEvent("state", {"depth": state.depth, **state.to_dict()})
             if best_eval.done:
                 yield EngineEvent(
-                    "done", {"answer": best_eval.answer, "trail": list(state.trail), "model_calls": calls}
+                    "done",
+                    {"answer": best_eval.answer, "trail": list(state.trail), "model_calls": calls,
+                     "challenged": challenged},
                 )
                 return
 
@@ -396,6 +447,67 @@ class StateEngine:
             history_len=history_len,
             answer_reserve=1 if self.synthesizer is not None else 0,
         )
+
+    async def _challenge(self, state: AgentState, avoid: set[str], calls: int) -> _ChallengeResult:
+        """One propose/probe/evaluate cycle run purely to see whether anything competes with a `done`
+        claim — never a move the run commits to on its own. Costs two calls (propose, then evaluate,
+        the same shape ``BudgetExhausted``'s ``answer_reserve`` already reserves calls for); when the
+        budget cannot afford both, the claim is marked unchallenged rather than silently accepted as
+        though something was asked and found nothing. Only read-only actions are considered — a
+        challenge is exploratory verification, never a write to confirm or a prediction to trust.
+        """
+        b = self.budget
+        if calls + 2 > b.max_model_calls:
+            return _ChallengeResult([], 0, False, [], [], {})
+
+        events: list[EngineEvent] = []
+        try:
+            actions = await self.proposer.propose(state, b.max_branches, avoid)
+        except Exception:  # noqa: BLE001 — a challenge that cannot even ask does not sink the run
+            return _ChallengeResult(events, 1, True, [], [], {})
+
+        considered = getattr(self.proposer, "considered", None)
+        available = None
+        if callable(considered):
+            try:
+                available = considered(state)
+            except Exception:  # noqa: BLE001 — bookkeeping must never end a run
+                available = None
+        events.append(EngineEvent(
+            "candidates",
+            {"moves": [{"fp": m.fingerprint(), "label": m.label(), "tool": m.tool, "why": m.why} for m in actions],
+             **({"available": int(available)} if isinstance(available, int) and available >= 0 else {})},
+        ))
+
+        runnable = [m for m in actions if self.environment.is_read_only(m)]
+        if not runnable:
+            return _ChallengeResult(events, 1, True, [], [], {})
+
+        probe_t0 = time.monotonic()
+        timed = await asyncio.gather(*(self._probe(m, None) for m in runnable))
+        outcomes = [o for o, _ in timed]
+        observed_at = {o.move.fingerprint(): probe_t0 + ms / 1000.0 for o, ms in timed}
+        for o, ms in timed:
+            events.append(EngineEvent(
+                "probe",
+                {"fp": o.move.fingerprint(), "move": o.move.label(), "ok": o.ok, "chars": len(o.text),
+                 "ms": ms, "excerpt": " ".join(o.text.split())[:320], "predicted": o.predicted},
+            ))
+
+        try:
+            evals = await self.evaluator.evaluate(state, outcomes)
+        except Exception:  # noqa: BLE001 — an evaluator that breaks here leaves the claim unbeaten
+            return _ChallengeResult(events, 2, True, [], outcomes, observed_at)
+        for o, e in zip(outcomes, evals):
+            events.append(EngineEvent(
+                "evaluation",
+                {"fp": o.move.fingerprint(), "move": o.move.label(), "progress": e.progress, "done": e.done,
+                 "reason": e.reason},
+            ))
+        ranked = sorted(
+            (p for p in zip(outcomes, evals) if p[0].ok), key=lambda p: (p[1].done, p[1].progress), reverse=True
+        )
+        return _ChallengeResult(events, 2, True, ranked, outcomes, observed_at)
 
     async def _probe(self, action: Action, predicted: Optional[Observation]) -> tuple[Observation, int]:
         """One probe, timed. A predicted outcome never touches the environment."""
