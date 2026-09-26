@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T08:44:36Z_
+_Regenerated: 2026-09-26T08:48:30Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-26)
@@ -15,7 +15,7 @@ _Regenerated: 2026-09-26T08:44:36Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Rosalind** (S008) — Working — Back in: clocking S006 out and correcting the record after the supervisor reported the ab…
+- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the recor…
 
 ## Current task
 (idle — no task recorded)
@@ -28,7 +28,7 @@ _Regenerated: 2026-09-26T08:44:36Z_
 | B-2026-09-23-12 | **Selection over the state space — the within-run half is done; the structural half is not.** `76a0590` gave every run a `recall` action answering from its own observations, built inside `EngineTools` from probes already passing through it, so `Environment.probe` kept its signature and no world implements anything. What is still true: a proposer is handed one flat `AgentState` with no node id, no parent and no structure, and the tree is stamped onto *events*, so a seat still cannot select **nodes** — only facts, and only lexically. If the search's shape is ever wanted at proposal time ("what did I learn down the branch I abandoned?"), that needs the history passed to the proposer or a `Retriever` port, and it is a protocol change that should land before B-2026-09-23-11 opens worlds to users. Brief: `.context_ledger/memory/office/plans/recall-what-is-relevant-brief.md`. |
 | B-2026-09-26-1 | **Reconcile the four `webmcp_*` actions with a CLI that has them — this one thing keeps the browser sweep test red.** The installed `agent-browser` 0.35.1 answers "Unknown command" for `webmcp list` / `webmcp result`; WebMCP *is* documented on agent-browser.dev and npm's latest is 0.38.1, so the table (`43ca964`, written from the docs) is probably right and this machine's binary is old. To do: establish which CLI version first ships WebMCP, then either pin/document that minimum or gate the four actions on the CLI's version (the adapter already asks `available()` for presence), and re-run `tests/test_agent_browser.py::test_every_read_action_is_a_command_the_real_cli_accepts`. Until then, a run that picks one spends budget on a command that cannot work. Evidence, and the three candidate repairs with the reason each was left: correction `20260926T071641Z-Ines-ccfac202`. |
 
-_4 medium, 0 low priority row(s) — see tasks/backlog.md_
+_5 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
 - flaws/log.md (protocol/.context_ledger friction): 2 entries, last added 2026-09-26

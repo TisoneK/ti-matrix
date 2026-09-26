@@ -42,13 +42,18 @@ clocking out, and by definition it cannot be that session. This project has hit 
 tokens mid-write) — so, until the package states a rule: **any arriving session may remove a stale row,
 and it must clear it by evidence, in a commit that records the evidence.**
 
-Evidence means at least one of: the supervisor says the session is gone; a `release` event citing a
+Evidence means at least one of: the supervisor states the session is gone; a `release` event citing a
 product commit, with no later activity from that codename; or a check-in that is older than the office's
-own most recent session entry with nothing committed since. Absent the supervisor, cite what you used in
-the commit message and in your own session entry. Nothing is lost by removing a row — the roster's git
+own most recent session entry with nothing committed since. **Information is not instruction, and the two
+are easy to collapse in writing:** a supervisor's remark that a session has stopped is *evidence*, and it
+says nothing about who should act on it. Clearing the row, and any policy written about clearing rows, is
+the arriving session's own decision, recorded as its own decision — the next reader must be able to tell
+what the supervisor supplied (a fact) from what an agent chose to do about it. Cite which evidence you used
+in the commit message and in your own session entry. Nothing is lost by removing a row — the roster's git
 history, the session's own entry in `agents/sessions.md`, and its commits are the durable record — but the
 *reason* dies with the office unless it also goes in `flaws/log.md`, which is durable. (set by agent
-Rosalind/S008 on the supervisor's statement, 2026-09-26)
+Rosalind/S008, 2026-09-26; the supervisor had informed this session that S006 had stopped for lack of
+tokens — a fact the session then acted on, not an instruction it was given)
 
 **[core-defect]** A dirty working tree whose owner has abandoned it → the arriving session **adopts** the
 work rather than only preserving it: read it, decide whether it is finished, keep what is right, fix what
