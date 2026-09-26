@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
-| Faye | S010 | claude-sonnet-5 | Working the three open backlog rows one at a time, on the supervisor's order: B-2026-09-26-3 (loose file-match false positive), then B-2026-09-26-4 (stopped run's answer lost from the durable record), then B-2026-09-26-5 (settlement not weighed — needs the supervisor's decision) | Working |
