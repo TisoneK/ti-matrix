@@ -170,7 +170,13 @@ export function App() {
     : status === "reconnecting" ? "the engine dropped — reconnecting…"
       : status === "connecting" ? "starting the engine…"
         : running ? "a run is already in flight"
-          : goal.trim() ? "" : "type a goal to run";
+          : !goal.trim() ? "type a goal to run"
+            // Builtin needs no endpoint at all; anything else does, and the sidecar rejects a run with
+            // neither — but only after zero events, which used to look identical to never having clicked
+            // Run (see the lamp fix above). Catching it here means the common slip (picking "a language
+            // model" and never typing one in) never reaches the sidecar to be silent about at all.
+            : !isBuiltin(model.model) && !model.model.trim() ? "type a model name (or switch to Built-in rules)"
+              : "";
   // Trying again only helps when there is something to try: inside the app, with the socket down.
   const retryable = (status === "crashed" || status === "reconnecting") && !session.headless;
 
@@ -259,8 +265,15 @@ export function App() {
     if (running) return { detail: "running" };
     if (status !== "ready") return {};
     const done = session.settled;
-    if (events.length === 0 || !done) return {};
-    if (done.error) return { detail: "failed", tone: "bad" };
+    if (!done) return {};
+    // A config the sidecar rejects outright (an empty model name, say) never reaches a single event —
+    // engine.run() never starts — so the events.length gate below must not swallow it: that gate exists
+    // to hide a PREVIOUS run's stale lamp before the next run's first event arrives, not to hide a
+    // rejection that has no events to wait for in the first place. Showing only "failed" for it (the
+    // previous behavior) was indistinguishable from the idle, never-run state — the actual reason is
+    // the one thing worth a person's time here.
+    if (done.error) return { detail: done.error, tone: "bad" };
+    if (events.length === 0) return {};
     const settledOk = done.answer !== null && done.reason === null;
     return { detail: outcomeLabel(settledOk, done.reason), tone: outcomeTone(settledOk, done.reason) };
   }, [running, status, events.length, session.settled]);
