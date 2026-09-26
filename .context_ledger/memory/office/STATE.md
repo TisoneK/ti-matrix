@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T08:49:14Z_
+_Regenerated: 2026-09-26T08:59:42Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-26)
@@ -15,8 +15,7 @@ _Regenerated: 2026-09-26T08:49:14Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the recor…
-- **Ines** (S007) — Working — The setup sheet's two closed doors — the ✕ scrolls out of reach once the model list a…
+- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record,…
 
 ## Current task
 (idle — no task recorded)
@@ -37,5 +36,5 @@ _5 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 20 event(s) on file; most recent: `20260926T084526Z-Ines-d5451987.json`
+- 21 event(s) on file; most recent: `20260926T085855Z-Ines-04728b2c.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
