@@ -50,7 +50,7 @@ export function ComparePanel({ left, right, onPick, onExit }: {
       <section className="pane" aria-label="compare">
         <PaneHead title="Compare" sub="two runs, side by side" />
         <PaneBody pad>
-          <Empty title={!left && !right ? "Pick two runs" : "Pick one more run"}>
+          <Empty eyebrow="side by side" title={!left && !right ? "Pick two runs" : "Pick one more run"}>
             Choose two saved runs — the same seed against two models is the comparison worth making — and
             this view puts their maps, trees and decisions under one cursor.
           </Empty>

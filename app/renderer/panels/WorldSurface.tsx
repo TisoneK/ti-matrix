@@ -35,26 +35,30 @@ export interface Card {
 export function WorldSurface({ world, events, decisions }: { world: string; events: EngineEventFrame[]; decisions: Decision[] }) {
   const cards = useMemo(() => cardsFor(world, events), [world, events]);
   const finalAnswer = useMemo(() => finalAnswerOf(decisions), [decisions]);
+  // A card with no rows is still worth drawing once the run has read something — "nothing was refused" is
+  // news. Before it has, three cards saying nothing are three empty boxes, which is what a first glance at
+  // this pane used to be: an answerless grid of nothings instead of one sentence saying so.
+  const readSomething = cards.some((c) => c.rows.length > 0);
 
   return (
     <>
       <PaneHead title="World" sub={`${world} — read as it is observed, never in advance`} />
       <PaneBody scroll pad>
         {finalAnswer ? (
-          <section className={`card answer-card ${finalAnswer.verified ? "verified" : "unverified"}`} style={{ marginBottom: 12 }}>
+          <section className={`card answer-card ${finalAnswer.verified ? "verified" : "unverified"}`}>
             <h4>{finalAnswer.verified ? "Answer" : "Best answer from what it read"}</h4>
+            <p className="answer-body">{finalAnswer.text}</p>
             {finalAnswer.verified ? null : (
-              <p className="dim" style={{ fontSize: 10.5, marginBottom: 6 }}>
+              <p className="answer-basis">
                 {finalAnswer.basis
                   ? `${finalAnswer.basis} — not checked against the world, because the run stopped before settling`
                   : "not verified against the world — the run stopped before settling"}
               </p>
             )}
-            <p style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--fg)" }}>{finalAnswer.text}</p>
           </section>
         ) : null}
-        {cards.length === 0 ? (
-          <Empty title="Nothing read yet">
+        {!readSomething && !finalAnswer ? (
+          <Empty eyebrow="the world" title="Nothing read yet">
             This world answers in prose. Each reading the run takes becomes a card here — a directory, a
             vault report, a page — as soon as it is taken.
           </Empty>

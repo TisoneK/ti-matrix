@@ -37,11 +37,23 @@ export function PaneBody({ children, className = "", scroll = false, pad = false
   return <div className={`pane-body ${scroll ? "scroll" : ""} ${pad ? "pad" : ""} ${className}`}>{children}</div>;
 }
 
-export function Empty({ title, children }: { title: string; children?: ReactNode }) {
+/**
+ * A pane with nothing in it yet.
+ *
+ * It used to be three grey whispers — a 13px line and a paragraph, centred in six hundred pixels of nothing,
+ * three panes at once — and that is what the window looked like the moment it opened: not "waiting", but
+ * broken. An empty pane is an object with a shape, so it gets a plate: a dashed hairline, a small label in
+ * the same voice as a pane title, and one sentence under it. The frame is the whole difference between a
+ * void and a place something is going to appear.
+ */
+export function Empty({ title, eyebrow, children }: { title: string; eyebrow?: string; children?: ReactNode }) {
   return (
     <div className="empty">
-      <p className="big">{title}</p>
-      {children ? <p className="small">{children}</p> : null}
+      <div className="empty-plate">
+        {eyebrow ? <p className="empty-eyebrow">{eyebrow}</p> : null}
+        <p className="big">{title}</p>
+        {children ? <p className="small">{children}</p> : null}
+      </div>
     </div>
   );
 }

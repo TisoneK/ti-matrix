@@ -58,6 +58,13 @@
 
   --rail: 46px;
   --transport: 60px;
+
+  /* One scale, above body, so hierarchy is not carried by colour alone.
+     Nothing in the run view used to exceed 13.5px: a pane's own name, the line a decision leads with and the
+     small print under it were all within a pixel of each other, and a dense, deliberate palette still read
+     as a console because the eye had nowhere to land. Three steps, and no more than three. */
+  --t-title: 15.5px;   /* a pane's name — the structural label */
+  --t-lead: 12.5px;    /* the line a decision or a card leads with */
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -236,7 +243,11 @@ svg { display: block; }
 .goalwrap textarea:focus { border-color: var(--ice-line); outline: none; box-shadow: 0 0 0 3px var(--ice-dim); }
 
 .goalmeta { display: flex; align-items: center; gap: var(--s2); padding-left: var(--s2); min-width: 0; }
-.goalmeta .hintline { max-width: 34ch; }
+/* The reason Run is unavailable: a sentence at reading size, in the colour that means "you cannot go yet". */
+.goal-blocked { font-size: 11.5px; line-height: 1.4; color: var(--amber); max-width: 40ch; }
+/* The world's note, when there is nothing to warn about. Quieter than the reason, and never the loudest
+   thing in the bar. */
+.goal-note { font: 400 11px/1.4 var(--mono); color: var(--fg-4); max-width: 42ch; }
 .kbd {
   font: 500 10px/1 var(--mono); color: var(--fg-3);
   border: 1px solid var(--line-2); border-bottom-width: 2px;
@@ -289,19 +300,21 @@ svg { display: block; }
 .pane:has(.empty) { background: transparent; }
 .pane:has(.empty) .pane-head { border-bottom-style: dashed; }
 .pane:has(.empty) .pane-title { color: var(--fg-3); }
-.pane:has(.empty) .pane-body { opacity: 0.55; }
+/* The empty plate now says "nothing here yet" on its own, dashed edge and all, so the body is left legible
+   instead of faded to 0.55 — which read as a rendering fault rather than as a quiet pane. */
+.pane:has(.empty) .pane-body { opacity: 0.88; }
 .pane:has(.row[aria-current="true"]) { box-shadow: inset 0 0 0 1px rgba(88, 182, 255, 0.18); }
 
 .pane-head {
   display: flex; align-items: center; gap: var(--s2);
-  padding: 7px var(--s3);
+  padding: 9px var(--s3);
   border-bottom: 1px solid var(--line);
   background: var(--plate-2);
-  min-height: 34px;
+  min-height: 40px;
   flex-wrap: wrap;
 }
 .pane-title {
-  font: italic 600 13.5px/1.2 var(--display);
+  font: italic 600 var(--t-title)/1.2 var(--display);
   letter-spacing: 0.02em; color: var(--fg);
 }
 .pane-title::before { content: "§ "; color: var(--fg-4); font-style: normal; }
@@ -312,12 +325,30 @@ svg { display: block; }
 .pane-body.scroll { overflow: auto; }
 .pane-body.pad { padding: var(--s3); }
 
+/* A pane waiting for a run is an object, not a void. Centred text in an empty surface has no edges, so the
+   eye reads the surface as broken rather than as ready; a dashed plate gives it an edge to read. */
 .empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--s2); height: 100%; padding: var(--s5); text-align: center; color: var(--fg-3);
+  display: grid; place-items: center;
+  padding: var(--s4); color: var(--fg-3);
 }
-.empty .big { font-size: 13px; color: var(--fg-2); }
-.empty .small { font-size: 11.5px; max-width: 42ch; line-height: 1.6; }
+/* Fill the pane only when the plate is all there is. A pane that also holds controls — Compare's two
+   "choose a run" buttons — was getting a 100%-tall plate and pushing them out of the clipped body, so the
+   one way to act on an empty view was the one thing off screen. */
+.empty:only-child { height: 100%; }
+.empty-plate {
+  display: grid; gap: var(--s2); justify-items: center;
+  max-width: 46ch; padding: var(--s5) var(--s5);
+  text-align: center;
+  border: 1px dashed var(--line-2); border-radius: var(--r-3);
+  background: radial-gradient(120% 130% at 50% 0%, rgba(88, 182, 255, 0.045), transparent 72%);
+}
+.empty-eyebrow {
+  font: 500 9.5px/1 var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--fg-4);
+}
+/* The pane's own voice — the same serif its title speaks in — so an empty pane is visibly the same
+   instrument as a filled one rather than a different, plainer screen. */
+.empty .big { font: italic 600 16.5px/1.3 var(--display); color: var(--fg-2); }
+.empty .small { font-size: 11.5px; max-width: 44ch; line-height: 1.65; }
 
 /* ── readouts: small labelled numbers, the instrument's dials ───────────── */
 
@@ -385,7 +416,7 @@ svg { display: block; }
   border: 1px solid var(--line); border-radius: var(--r-2); background: var(--plate-2);
   padding: var(--s3);
 }
-.card h4 { font: 600 10px/1 var(--ui); letter-spacing: 0.13em; text-transform: uppercase; color: var(--fg-2); }
+.card h4 { font: 600 10.5px/1 var(--ui); letter-spacing: 0.13em; text-transform: uppercase; color: var(--fg-2); }
 .card ul { margin: 0; padding: 0; list-style: none; }
 .card li { display: flex; gap: var(--s2); justify-content: space-between; align-items: baseline;
            font: 400 11.5px/1.6 var(--mono); color: var(--fg-3);
@@ -398,9 +429,19 @@ svg { display: block; }
 /* The run's own last word — settled or the best a stopped one could make of its facts. It was computed
    all along (`Decision.answer` / `partial_answer`) and never actually shown anywhere on screen; a prose
    world's cards are evidence, not an answer, and a person reading them still had to do the synthesis
-   themselves. Distinct from a plain `.card`: this is the one thing on the panel someone came here for.
+   themselves. Distinct from a plain `.card`: this is the one thing on the panel someone came here for, so
+   it is set a step larger than the cards under it, and it sits at the top where an answer belongs.
    Green only for a settled, world-verified answer; an unverified synthesis reads as belief (amber), the
    same color the map's own confidence bars use — never the color that means the world agreed. */
+.answer-card { padding: var(--s3) var(--s4); margin-bottom: var(--s3); }
+.answer-card h4 { font-size: 11px; }
+.answer-card .answer-body {
+  margin-top: var(--s2);
+  font: 400 13.5px/1.65 var(--ui);
+  color: var(--fg);
+  white-space: pre-wrap;
+}
+.answer-card .answer-basis { margin-top: var(--s2); font-size: 10.5px; color: var(--fg-4); line-height: 1.5; }
 .answer-card.verified { border-color: var(--green); background: var(--green-dim); }
 .answer-card.verified h4 { color: var(--green); }
 .answer-card.unverified { border-color: var(--amber); background: var(--amber-dim); }
@@ -481,8 +522,8 @@ svg { display: block; }
 
 .row-step { font: 500 11px/1.3 var(--mono); color: var(--fg-4); text-align: right; }
 .row-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.row-head { font-size: 12px; color: var(--fg); }
-.row-head .move { font-family: var(--mono); font-size: 11.5px; }
+.row-head { font-size: var(--t-lead); color: var(--fg); }
+.row-head .move { font-family: var(--mono); font-size: 12px; }
 .row-evidence {
   font: 400 11px/1.4 var(--mono); color: var(--fg-3);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -513,14 +554,44 @@ svg { display: block; }
 .legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--fg-3); cursor: help; }
 .legend-item .n { color: var(--fg-4); font-family: var(--mono); }
 
-/* ── the shared inspector: what the cursor is pointing at ───────────────── */
-
-.inspector { border-top: 1px solid var(--line); background: var(--plate-2); padding: var(--s2) var(--s3); max-height: 176px; overflow: auto; }
-.inspector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--s3); }
-.inspector h4 { font: 600 9.5px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-4); margin-bottom: 5px; }
+/* ── the shared inspector: what the cursor is pointing at ────────────────
+   Three zones under one hairline, not three columns of a spreadsheet. It used to be a raw dump — five
+   9.5px caps labels wrapping raggedly under a two-line instruction, with the one sentence a person
+   actually wants ("the last thing it saw") squeezed into the narrowest third and clipped. The zones are
+   divided so the strip reads as three instruments sharing a panel; the coverage numbers sit on an even
+   grid so they stop wrapping into a second, misaligned row; and the reading gets the room. */
+.inspector {
+  border-top: 1px solid var(--line); background: var(--plate-2);
+  padding: var(--s3); max-height: 176px; overflow: auto;
+}
+.inspector-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s3) var(--s4);
+}
+/* The map's strip has three zones and they are not equal: the cell you are pointing at and the run's last
+   reading carry the room, and coverage — already summarised as a percentage in the pane head — gives it up. */
+.inspector-grid.map-zones {
+  grid-template-columns: minmax(170px, 0.75fr) minmax(210px, 0.9fr) minmax(260px, 1.35fr);
+}
+.inspector-zone { min-width: 0; }
+.inspector-zone + .inspector-zone { border-left: 1px solid var(--line); padding-left: var(--s4); }
+.inspector h4 { font: 600 9.5px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-4); margin-bottom: 6px; }
 .inspector p { font-size: 11.5px; color: var(--fg-2); line-height: 1.55; }
 .inspector ul { margin: 0; padding-left: 15px; }
 .inspector li { font: 400 11px/1.5 var(--mono); color: var(--fg-3); }
+.inspector-none { color: var(--fg-4) !important; }
+/* The world's own last sentence, in the world's own words — three lines of it, full text on hover. */
+.inspector-quote {
+  font-size: 11px !important;
+  color: var(--fg-3) !important;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Coverage reads as one instrument's dials in a row, not as five spreadsheet cells: the numbers wrap
+   together and the strip keeps its height whatever the window does. */
+.inspector .readouts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); }
+.inspector .readout { gap: 3px; }
+.inspector .readout dt { font-size: 9px; letter-spacing: 0.07em; }
+.inspector .readout dd { font-size: 12.5px; }
 
 .options-table { width: 100%; border-collapse: collapse; font: 400 11px/1.4 var(--mono); }
 .options-table td { padding: 2px 6px 2px 0; color: var(--fg-3); vertical-align: top; }
@@ -775,11 +846,14 @@ svg { display: block; }
 .lib-table th button { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .lib-table th button:hover { color: var(--fg-2); }
 .lib-table th .arrow { color: var(--ice); }
-.lib-table td { padding: 7px var(--s3); border-bottom: 1px solid rgba(255, 255, 255, 0.035); font-size: 12px; color: var(--fg-2); }
+.lib-table td { padding: 9px var(--s3); border-bottom: 1px solid rgba(255, 255, 255, 0.035); font-size: 12px; color: var(--fg-2); }
 .lib-table tr:hover td { background: rgba(255, 255, 255, 0.026); }
 .lib-table tr[aria-selected="true"] td { background: var(--ice-dim); }
 .lib-table .name { color: var(--fg); font-weight: 500; }
 .lib-table .num { font: 500 11.5px/1 var(--mono); text-align: right; }
+/* Where a run's identity ends and its numbers begin. Nine columns at one weight read as one wide grid; the
+   hairline makes it two groups — what this run was, and how it went — which is how the table is read. */
+.lib-table .sep { border-left: 1px solid var(--line); }
 .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
 .badge {

@@ -69,11 +69,22 @@ export function CommandBar({ worlds, world, onWorld, goal, onGoal, onRun, onStop
       </label>
 
       <div className="goalmeta">
-        <span className="pane-sub nowrap hintline" title={hint}>{hint}</span>
+        {/* One slot, two jobs, and only one of them is ever urgent.
+            When the button cannot be pressed, this is the sentence that says why — and it is a sentence,
+            in amber, at reading size, because the old home for it was a `title` attribute and Chromium
+            does not fire hover on a disabled control: the reason was on screen nowhere. When there is
+            nothing to warn about, the slot carries the world's own note; it is no longer clipped to a
+            fragment mid-word, because the world picker and the setup sheet both say it in full and a
+            truncated half-sentence parked next to Run reads as a rendering fault. */}
+        {blocked ? (
+          <span className="goal-blocked" role="status">{blocked}</span>
+        ) : hint ? (
+          <span className="goal-note nowrap" title={hint}>{hint}</span>
+        ) : null}
         {running
           ? <Button variant="danger" onClick={onStop}>Stop</Button>
           : retryable
-            // A disabled Run button next to "the sidecar is not running" is a dead end: the one thing
+            // A disabled Run button next to "the engine is not running" is a dead end: the one thing
             // that could fix it is not on screen. When the engine is what is wrong, the button becomes
             // the fix rather than staying a greyed-out reminder of it.
             ? <Button variant="primary" onClick={onRetry} title="start the engine again and reconnect">Reconnect</Button>

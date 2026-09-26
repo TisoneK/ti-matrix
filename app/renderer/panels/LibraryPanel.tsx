@@ -61,7 +61,9 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
   return (
     <section className="pane" aria-label="the session library">
       <PaneHead title="Library" sub={persisted ? `${metas.length} run${metas.length === 1 ? "" : "s"} saved` : "not saved to disk — no shell around this window"}>
-        {selected.length === 2 ? (
+        {/* The instruction for comparing is about a run list, so it belongs to one: with nothing saved it
+            was telling people to select two of nothing. */}
+        {metas.length === 0 ? null : selected.length === 2 ? (
           <Button variant="primary" size="sm" onClick={() => onCompare(selected as [string, string])}>
             Compare these two
           </Button>
@@ -75,7 +77,7 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
 
       <div className="library">
         {metas.length === 0 ? (
-          <Empty title={loading ? "Reading the library…" : "No runs saved yet"}>
+          <Empty eyebrow="saved runs" title={loading ? "Reading the library…" : "No runs saved yet"}>
             Finish a run and it lands here: the events verbatim, the world it was driven against, the model
             that proposed for it, and how it ended. Nothing is kept until a run is over.
           </Empty>
@@ -86,7 +88,8 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
                 <th style={{ width: 28 }}><span className="sr">pick</span></th>
                 <th>run</th>
                 {COLUMNS.map((c) => (
-                  <th key={c.key} style={c.numeric ? { textAlign: "right" } : undefined}>
+                  <th key={c.key} style={c.numeric ? { textAlign: "right" } : undefined}
+                      className={c.key === "decisions" ? "sep" : undefined}>
                     <button type="button" onClick={() => toggleSort(c.key)}
                             title={`sort by ${c.label}`}>
                       {c.label}{sort.key === c.key ? <span className="arrow"> {sort.dir === 1 ? "↑" : "↓"}</span> : null}
@@ -115,7 +118,7 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
                   <td>{m.world}</td>
                   <td className="mono">{m.seed ?? "—"}</td>
                   <td className="mono nowrap">{modelLabel(m.model)}</td>
-                  <td className="num">{m.decisions}</td>
+                  <td className="num sep">{m.decisions}</td>
                   <td className="num">{m.backtracks}</td>
                   <td className="num" style={{ color: m.surprises > 0 ? "var(--red)" : undefined }}>{m.surprises}</td>
                   <td className="num">{Math.round(m.meanConfidence * 100)}%</td>

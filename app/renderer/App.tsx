@@ -338,7 +338,11 @@ export function App() {
           goal={goal} onGoal={setGoal}
           onRun={start} onStop={session.stop} running={running}
           blocked={blocked}
-          hint={blocked || (running ? "streaming — the panels follow the newest step" : current?.note ?? "")}
+          // Only the transient things: why the button is unavailable, or what a live run is doing. The
+          // world's own note used to sit here too, clipped to a mid-word fragment; it is a description of
+          // the world rather than of this moment, and the world picker's tooltip and the setup sheet both
+          // carry it whole.
+          hint={running ? "streaming — the panels follow the newest step" : ""}
           configOpen={configOpen}
           onRetry={session.retry} retryable={retryable}
         />

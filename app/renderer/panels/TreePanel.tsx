@@ -54,18 +54,15 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   // How many candidates this run probed and did not take. A search that weighed sixty options and a
   // walk that weighed none read identically before this — both were "N states".
   const weighed = decisions.reduce((n, d) => n + d.options.filter((o) => !o.chosen).length, 0);
-  // And how many there were to weigh, where the proposer could count. Summed only over the decisions
-  // that reported it, so the ratio is never quietly made up of two different populations.
-  const counted = decisions.filter((d) => d.available !== undefined);
-  const offered = counted.reduce((n, d) => n + (d.available ?? 0), 0);
-  const looked = counted.reduce((n, d) => n + d.options.length, 0);
 
   return (
     <>
+      {/* The aggregate "it looked at 38 of 38 it could have" used to be here and forced the head to wrap its
+          button onto a second, ragged line. It is the sum of a number every row already carries ("weighed 4
+          of 35"), so the head keeps the two facts that exist nowhere else. */}
       <PaneHead title="Search tree"
                 sub={`${tree.states} state${tree.states === 1 ? "" : "s"} · ${tree.backtracks} retreat${tree.backtracks === 1 ? "" : "s"}`
-                  + (weighed > 0 ? ` · ${weighed} weighed and passed over` : "")
-                  + (offered > 0 ? ` · it looked at ${looked} of ${offered} it could have` : "")
+                  + (weighed > 0 ? ` · ${weighed} passed over` : "")
                   + (hidden > 0 ? ` · ${hidden} folded` : "")}>
         <Chip label="fold cold branches" pressed={foldDead} onClick={() => setFoldDead((v) => !v)}
               title="fold a branch the run has already given up" />
@@ -73,7 +70,7 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
 
       <PaneBody>
         {tree.states === 0 ? (
-          <Empty title="No states yet">
+          <Empty eyebrow="the search" title="No states yet">
             Every state the run stands on becomes a node here, with the branch it gave up drawn cold.
           </Empty>
         ) : (

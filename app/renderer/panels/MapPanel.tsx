@@ -72,7 +72,7 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
 
       <PaneBody>
         {bounds === null ? (
-          <Empty title="Nothing seen yet">
+          <Empty eyebrow="the world" title="Nothing seen yet">
             The map fills in as the run looks around. Start a run, or drag the scrubber forward.
           </Empty>
         ) : (
@@ -94,23 +94,27 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
       </div>
 
       <div className="inspector">
-        <div className="inspector-grid">
-          <div>
+        <div className="inspector-grid map-zones">
+          <div className="inspector-zone">
             <CellInspector cell={focus.cell} knowledge={knowledge} />
           </div>
-          <div>
+          <div className="inspector-zone">
             <h4>Coverage</h4>
+            {/* Three, not five. "Cells seen" is the pane head's own percentage and "step" is in the
+                transport a few pixels below, so keeping them here cost a second, ragged row of numbers to
+                say nothing new — and a strip of five small figures under a map is the exact texture this
+                panel is trying not to have. What is left is what only this strip says. */}
             <Readouts items={[
-              { label: "cells seen", value: stats.known },
               { label: "walked", value: stats.entered },
               { label: "revisited", value: stats.revisits, tone: stats.revisits > 0 ? "neg" : undefined },
               { label: "left behind", value: stats.abandoned },
-              { label: "step", value: `#${liveStep}` },
             ]} />
           </div>
-          <div>
+          <div className="inspector-zone">
             <h4>Last thing it saw</h4>
-            <p className="mono">{decisions.length === 0 ? "—" : lastEvidence(decisions)}</p>
+            {decisions.length === 0
+              ? <p className="mono inspector-none">—</p>
+              : <p className="mono inspector-quote" title={lastEvidence(decisions)}>{lastEvidence(decisions)}</p>}
           </div>
         </div>
       </div>
@@ -251,7 +255,7 @@ function CellInspector({ cell, knowledge }: { cell: string | null; knowledge: Ma
     return (
       <>
         <h4>Cell</h4>
-        <p>Hover a square to read what the run knows about it. Click to keep it here.</p>
+        <p className="inspector-none">Hover a square to read it; click to keep it here.</p>
       </>
     );
   }
