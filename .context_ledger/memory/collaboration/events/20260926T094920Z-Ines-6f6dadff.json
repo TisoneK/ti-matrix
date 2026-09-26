@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T094920Z-Ines-6f6dadff",
+  "type": "release",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T09:49:20Z",
+  "issue": "sidecar-outlives-app",
+  "body": "Releasing the claim on the dev run's teardown. Product commit ca04ced.\n\nThe report — \"After closing the app sub processes keeps running and you can't start the app again\" — is one\nevent, not two, and it is not the sidecar.\n\nFound live: a vite server running with no `dev.mjs` anywhere and its launching shell already gone, holding\n`--strictPort` 5173. That is the whole failure. `dev.mjs` starts vite and electron and takes both down when\nit stops — its own header promises \"no orphan server squatting on 5173\" — but only while it is alive to run\nthe handler. Kill the supervisor itself (a closed console, an ended session, `taskkill /F`) and both\nchildren are orphaned, because neither Node nor Windows ties a child's lifetime to its parent. Vite then\nkeeps the port, so the next `npm run dev` refuses to start; Electron keeps the single-instance lock, so a\nrelaunch exits without drawing a window. Both read to a person as \"the app is broken\".\n\nShipped: `scripts/supervised.mjs`, which runs one command and reaps its whole tree when the pid it was\nstarted for disappears — no cooperation needed from that supervisor, which is the point, since the failure\nit covers is the supervisor not being there. It waits for its own `taskkill` rather than firing and\nforgetting it, because exiting on the next tick leaves the killer as the only survivor: the same bug one\nlevel down, and exactly what `before-quit` does today. `dev.mjs` runs both children through it.\n\nVerified by killing things rather than reading them:\n- Supervisor hard-killed with no `/T`: vite, electron, the sidecar and both wrappers gone within 4s, 5173\n  free. That is precisely what leaked before the change.\n- Window closed gracefully: same result — nothing left, port free.\n- Start, close, start again: the reported journey, working.\n\nExplicitly NOT changed, and this is the deliberate part: `index.ts`'s teardown. The sidecar does not leak\non this machine by any path I could construct — closing the built app is clean, hard-killing its main\nprocess is clean (Electron on Windows keeps its children in a job object that dies with it), and killing\nthe sidecar's own parent takes the child with it. Rewriting the quit path on a hypothesis would be the\nmistake this session made once already today and caught by measuring first. Recorded instead: the sidecar\nappears as two python processes with identical command lines, unexplained and not chased.\n\nFiles touched: app/scripts/dev.mjs, app/scripts/supervised.mjs. Safe to touch both now.",
+  "paths": ["app/scripts/dev.mjs", "app/scripts/supervised.mjs"],
+  "refs": ["20260926T092742Z-Ines-ef9026c7", "ca04ced"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
