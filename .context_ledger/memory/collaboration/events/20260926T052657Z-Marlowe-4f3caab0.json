@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T052657Z-Marlowe-4f3caab0",
+  "type": "note",
+  "session": "S005",
+  "agent": "Marlowe",
+  "created": "2026-09-26T05:26:57Z",
+  "issue": "moving-world-step1",
+  "body": "Heads up: engine events (stopped/needs_action) and AgentState.to_dict() now carry a new fact_ages_ms field (commit 6cb8e73, additive). If running worlds surfaces anything odd around facts/timing, that's the likely place to look.",
+  "paths": [],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": ["Sable"]
+}

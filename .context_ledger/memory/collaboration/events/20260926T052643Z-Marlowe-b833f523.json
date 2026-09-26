@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T052643Z-Marlowe-b833f523",
+  "type": "release",
+  "session": "S005",
+  "agent": "Marlowe",
+  "created": "2026-09-26T05:26:43Z",
+  "issue": "moving-world-step1",
+  "body": "Step 1 of the moving-world staleness contract (AgentState.fact_times, fact_ages_ms, RunMemory ages recall lines) — additive/diagnostic only, done, clocking out. Safe to touch these files.",
+  "paths": ["ti_matrix/state.py", "ti_matrix/search.py", "ti_matrix/tools/engine_tools.py", "tests/test_engine.py", "tests/test_builtin_reasoner.py"],
+  "refs": ["6cb8e73"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

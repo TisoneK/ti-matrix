@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-25T13:57:17Z_
+_Regenerated: 2026-09-26T05:27:16Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-25)
@@ -16,10 +16,10 @@ _Regenerated: 2026-09-25T13:57:17Z_
 
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
-- **Marlowe** (S005) — Working — Advising on foundational-worlds roadmap
+- **Sable** (S006) — Working — Model balance/token-usage tracking, then running worlds and fixing what surfaces
 
 ## Current task
-- **2026-09-25 — Marlowe / claude-sonnet-5 (S005)** — shipped step 1 of B-2026-09-24-2 — the moving-world staleness contract. `AgentState` gains a fact clock (`fact_times`), staleness surface… — *done and pushed (`6cb8e73`) — pre-commit, integration and exit gates all green (321 tests, typecheck, app build)*
+- **2026-09-25 — Sable / claude-sonnet-5 (S006)** — implement model balance / token-usage tracking (staged), then run the shipped worlds end to end and fix what surfaces. — *starting — codebase exploration*
 
 ## Backlog — High priority (the top of the queue)
 | B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
@@ -37,5 +37,5 @@ _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 6 event(s) on file; most recent: `20260923T145847Z-Wren-eb33e108.json`
+- 8 event(s) on file; most recent: `20260926T052657Z-Marlowe-4f3caab0.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
