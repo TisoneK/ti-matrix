@@ -215,6 +215,70 @@ svg { display: block; }
   50% { opacity: 0.35; }
 }
 
+/* ── the narrator: the one line that makes waiting legible ───────────────── */
+
+/*
+ * A run's longest stretches are its model calls, and they emit no data — only time. The narrator turns
+ * the position in the loop into a sentence and ticks the seconds of silence beside it, so the waiting
+ * reads as "the model is thinking" instead of "the app stopped". The pulse is ice — live — and it
+ * breathes only while the current stretch is inside a call.
+ */
+
+.narrator {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 20px 9px;
+  min-height: 24px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+
+.narrator .pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ice);
+  box-shadow: 0 0 0 3px var(--ice-dim);
+  flex: none;
+}
+
+.narrator.thinking .pulse { animation: breathe 1.8s ease-in-out infinite; }
+
+.narrator-text { color: var(--fg-2); }
+
+.narrator-quiet {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 17px;
+}
+
+/* ── motion: arrivals register ───────────────────────────────────────────── */
+
+/*
+ * Events arrive in bursts; without motion, a burst and a drip look the same. One entrance for each
+ * thing the world or the engine produced — the world's cards, tree nodes, ledger rows — and a breathing
+ * ring on the node the run is standing on while the model thinks. The global reduced-motion block
+ * flattens all of it for anyone who asked for stillness.
+ */
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+.card { animation: card-in 300ms ease both; }
+
+@keyframes node-wait {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.3; }
+}
+.live-run .node-selected { animation: node-wait 1.6s ease-in-out infinite; }
+
 /* ── the command bar: the only always-visible place a run is started ────── */
 
 .command {

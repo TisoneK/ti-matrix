@@ -21,6 +21,7 @@ import { useWindowChrome } from "./hooks/useWindowChrome";
 import { ModelConfig } from "./shell/ConfigDrawer";
 import { ConfigDrawer } from "./shell/ConfigDrawer";
 import { CommandBar } from "./shell/CommandBar";
+import { Narrator } from "./shell/Narrator";
 import { ConfirmDialog } from "./shell/ConfirmDialog";
 import { TopRail } from "./shell/TopRail";
 import { View, toRunning, toView, toggleConfig, shortcutsLive } from "./core/nav";
@@ -398,6 +399,11 @@ export function App() {
         />
       ) : null}
 
+      {/* The one line that makes waiting legible: where the run is in its loop, and how long the
+          current stretch has been quiet. Only while a run streams — a finished run's silence is not
+          waiting, and an idle window has nothing to narrate. */}
+      {view !== "compare" && running ? <Narrator events={events} live /> : null}
+
       {/* `view !== "compare"` is belt and braces: onConfig/onView above keep the two in step, and this
           makes the invariant local to where the sheet is actually drawn. */}
       {configOpen && view !== "compare" ? (
@@ -438,7 +444,7 @@ export function App() {
           <div className="pane right">
             <section className="pane" aria-label="search tree">
               <TreePanel tree={shown.tree} decisions={shown.decisions} cursor={playback.cursor} onSeek={playback.at}
-                         onHover={setHover} peek={hover} />
+                         onHover={setHover} peek={hover} live={running} />
             </section>
             <section className="pane" aria-label="decisions">
               <LogPanel decisions={shown.decisions} trust={shown.trust} cursor={playback.cursor}

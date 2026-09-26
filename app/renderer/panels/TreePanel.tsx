@@ -29,7 +29,7 @@ const ROW = 62;
 const NODE_W = 108;
 const NODE_H = 28;
 
-export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
+export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live }: {
   tree: SearchTree;
   decisions: Decision[];
   cursor: number;
@@ -37,6 +37,8 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   /** The shared cursor: nodes answer it, and hovering a node moves it. */
   onHover?: (index: number | null) => void;
   peek?: number | null;
+  /** While the run streams, the node it stands on breathes — the tree is waiting with you. */
+  live?: boolean;
 }) {
   const [foldDead, setFoldDead] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -81,7 +83,7 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
           </Empty>
         ) : (
           <div className="treewrap">
-            <svg width={width} height={height} viewBox={`-${COL / 2} -${ROW / 2} ${width + COL / 2} ${height + ROW / 2}`}
+            <svg className={live ? "live-run" : ""} width={width} height={height} viewBox={`-${COL / 2} -${ROW / 2} ${width + COL / 2} ${height + ROW / 2}`}
                  role="img" aria-label={`the search: ${tree.states} states, ${tree.backtracks} retreats`}>
               {view.edges.map((edge) => (
                 <path
