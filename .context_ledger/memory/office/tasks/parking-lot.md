@@ -50,6 +50,24 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
   stated precedence (a refusal beats an inference; an inference never beats a corridor) rather than
   relying on the order events happen to arrive in. (2026-09-23)
 
+- **A fact is cut to 320 characters as it enters the state.** `_FACT_CHARS` in `ti_matrix/state.py`
+  truncates every observation on the way in, so a listing of a big directory enters the state as a fragment
+  of itself. In the run that settled on the wrong folder, home's listing was 3,878 characters, and the name
+  the run settled on survived only because a `stat_path` had echoed the resolved path back in a short
+  observation of its own. A run that lists a large directory and decides several steps later is reasoning
+  over its first 320 characters — and the model is never told the fact was cut, unlike the reader of an
+  observation, who gets the world's own "… (truncated)" tail. (2026-09-26)
+- **`find_files` cannot match a directory.** `_find_files` filters its walk to `p.is_file()`, so a name
+  search can never return a folder: a goal naming a directory ("locate the X repo", "where is the config
+  folder") cannot be satisfied by search at all, only by opening directories one at a time and reading their
+  listings. Verified by running it — `find_files(path=<fixture>, contains='acme')` over a tree holding
+  `Dev/acme/.git` answers "no file under … has 'acme' in its name (3 paths searched)". Whether the honest
+  repair is a directory-inclusive search or a separate action is an open design question, and it interacts
+  with B-2026-09-26-2 (the same function's unbounded double walk). (2026-09-26)
+- **`stat_path` reports a directory as `0 bytes`.** An artefact of the platform — `stat().st_size` for a
+  directory is not a content size — but the observation is read by a model, and "dir, 0 bytes" reads as
+  "empty". It is the line the real run used as its confirmation of the wrong answer. (2026-09-26)
+
 - **A real model costs ~35 seconds per decision.** Two runs against `deepseek-flash` took 3m29s/6
   decisions and 6m37s/10 decisions — roughly 35s per step, because each step is a proposer call plus an
   evaluator call and both are slow. Any UI decision about "live" runs has to assume a viewer waits minutes
@@ -97,6 +115,7 @@ out of the queue, not into the void.
 
 | ID | Summary |
 |----|---------|
+| P-2026-09-26-2 | **Give the three worst small-viewport overflows a breakpoint.** Raised as "the UI looked like a mess" and correctly diagnosed by the supervisor as a small window, not a design fault — the layout already breaks at 1180/820/720/700px. Three gaps remain below roughly 700px, all read out of `app/renderer/styles.css`: `.rail` is a single non-wrapping flex row carrying six metrics, the run controls and the window buttons, so it overflows rather than wrapping; the inspector row's three columns (`.inspector`, ~line 574) have minimums summing to about 640px with no breakpoint of their own; and the stage's pane minimums (`420px + 360px`, `.stage`) only collapse at 1180px. Advisory, no owner: it is a layout change and needs its own render at 360/768/1280 to verify, which the session that found it did not run — an unverified CSS change is exactly what this repo's verification rule forbids. |
 
 ## Someday
 

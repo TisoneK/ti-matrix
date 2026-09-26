@@ -31,3 +31,7 @@ records.
   agents/sessions.md — never delete the only record of a session.
 -->
 2026-09-23 — Nadia / deepseek-flash — the app renderer rebuilt from scratch as a run inspector (fog-of-war map, search tree, decision ledger, playback, compare, library) — 129 renderer assertions green, a real run verified end to end in a browser harness; the engine's and the sidecar's suites untouched (207 + 34 passed) — key decision: every panel is a pure projection of `(events, cursor)`, which is what made playback and comparison fall out for free
+---
+- **2026-09-26 — Session 9** — Iris / deepseek-flash — a files run settled on a folder that merely shared the goal's name; the settlement path is diagnosed as unweighed and the fix designed and flagged, with no product change.
+  Key discovery: a fan that claims `done` ends the run (`ti_matrix/search.py:363`), so a competing candidate is never generated — and the guard `DESIGN.md` describes as "`done` requires an answer grounded in facts" checks only that the answer is non-empty, proved by running the engine with an answer that appears in no observation.
+  Detail: .context_ledger/memory/office/reviews/2026-09-26-review-2.md
