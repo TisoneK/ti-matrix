@@ -81,10 +81,12 @@ def _maze_world(config: dict[str, Any]) -> MazeEnvironment:
 
 
 def _files_world(config: dict[str, Any]) -> RootedFiles:
-    root = str(config.get("root", "")).strip()
-    if not root:
-        raise ValueError("the files world needs a root directory")
-    return RootedFiles(root)
+    # An empty root means the home directory, not an error. The field ships defaulted to `~/`, but a config
+    # that names nothing still has to land somewhere, and home is where a form left alone points — the same
+    # reading `examples/files_ui.py` takes (`config.get("root") or "~"`). It matters because saved settings
+    # win over defaults: an app that stored "" before this default existed would otherwise stay stuck on the
+    # error for good. `RootedFiles` expands the `~` itself.
+    return RootedFiles(str(config.get("root", "")).strip() or "~")
 
 
 def _chess_world(config: dict[str, Any]) -> Any:
@@ -124,7 +126,7 @@ WORLDS: dict[str, World] = {
               _maze_world),
         World("files", "Local files",
               "Every action reads. Paths resolve under the root; one that escapes it is refused.",
-              ({"name": "root", "label": "Read files under", "default": "", "placeholder": "C:\\path\\or\\/home/you/code"},),
+              ({"name": "root", "label": "Read files under", "default": "~/"},),
               _files_world),
         World("chess", "Chess",
               "A game against a simple opponent. Every position offers about thirty-five legal moves, "
@@ -142,9 +144,26 @@ WORLDS: dict[str, World] = {
 }
 
 
+def _resolved(fields: tuple[dict[str, Any], ...]) -> list[dict[str, Any]]:
+    """A field's home-relative default, expanded to the directory it means on this machine.
+
+    The registry states the intent (`~/` — whatever this machine's home is); the form is sent the answer.
+    A literal `~` in the box asks a person to expand it in their head, and on Windows into the other path
+    separator, to work out which directory a run would actually read. The server knows it, so it says it —
+    and resolved per call rather than at import, so it follows the environment it is really running in.
+    """
+    out = []
+    for f in fields:
+        default = f.get("default")
+        if isinstance(default, str) and default.startswith("~"):
+            f = {**f, "default": str(Path(default).expanduser())}
+        out.append(f)
+    return out
+
+
 def describe() -> list[dict[str, Any]]:
     """The registry as the app's world selector wants it: name, title, note, fields."""
-    return [{"name": w.name, "title": w.title, "note": w.note, "fields": list(w.fields)}
+    return [{"name": w.name, "title": w.title, "note": w.note, "fields": _resolved(w.fields)}
             for w in WORLDS.values()]
 
 

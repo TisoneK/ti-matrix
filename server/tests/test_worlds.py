@@ -6,6 +6,8 @@ name or a config a world cannot use.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from appserver.worlds import RootedFiles, build, describe
@@ -42,11 +44,38 @@ async def test_the_files_world_is_read_only_and_confined_to_its_root(tmp_path):
     assert (await env.probe(Action("read_file", {"path": str(tmp_path / "inside.txt")}))).ok
 
 
+def test_a_files_world_that_names_no_root_reads_from_home(monkeypatch, tmp_path):
+    """An unnamed root is the home directory, not an error — a blank field still has to run.
+
+    This matters because saved settings win over a field's default: an app that stored a blank root before
+    the field shipped with a home default would otherwise never be able to run the files world at all."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # what expanduser reads on Windows...
+    monkeypatch.setenv("HOME", str(tmp_path))         # ...and what it reads everywhere else
+    home = Path(tmp_path).resolve()
+    assert build("files", {}).root == home
+    assert build("files", {"root": ""}).root == home
+    assert build("files", {"root": "   "}).root == home
+
+
+def test_the_form_is_sent_a_home_directory_it_can_actually_read(monkeypatch, tmp_path):
+    """The registry states `~/`; the app is sent the directory that means, resolved when asked for.
+
+    A literal `~` in the box is a path the person has to expand themselves, and on Windows into the other
+    separator. Resolved per call, not at import, so it follows the environment the server is really in."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    fields = {f["name"]: f for f in {w["name"]: w for w in describe()}["files"]["fields"]}
+    assert fields["root"]["default"] == str(Path(tmp_path).resolve())
+    assert Path(fields["root"]["default"]).is_absolute()
+    # ...and the world it describes agrees with the path it just showed
+    assert str(build("files", {}).root) == fields["root"]["default"]
+
+
 def test_a_bad_config_is_a_valueerror_with_a_message_a_form_can_show():
     with pytest.raises(ValueError, match="no world named"):
         build("narnia", {})
-    with pytest.raises(ValueError, match="root"):
-        build("files", {})
+    with pytest.raises(ValueError, match="invalid literal"):
+        build("maze", {"seed": "not-a-number"})
     # The Context Ledger world was removed from the picker; asking for it by name is now a plain
     # unknown-world error, which is the behaviour a stale saved config will actually hit.
     with pytest.raises(ValueError, match="no world named"):

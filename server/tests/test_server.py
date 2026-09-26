@@ -81,10 +81,8 @@ async def test_an_unknown_world_and_a_bad_config_are_error_frames(server, client
     err = await client.drain_until("error")
     assert "no world named" in err["message"]
 
-    await client.send(type="goal", text="x", world="files", config={})
-    err = await client.drain_until("error")
-    assert "root" in err["message"]
-
+    # A files world with no root is no longer a bad config — it reads from home — so the bad config this
+    # test needs is one that still is: an endpoint that was never named.
     await client.send(type="goal", text="x", world="maze",
                       config={"base_url": "", "model": ""})
     err = await client.drain_until("error")
@@ -97,8 +95,9 @@ async def test_an_unknown_frame_type_is_reported(server, client_factory):
     err = await client.drain_until("error")
     assert "teleport" in err["message"]
     # and the server is still alive
-    await client.send(type="goal", text="x", world="files", config={})
-    assert "root" in (await client.drain_until("error"))["message"]
+    await client.send(type="goal", text="x", world="maze",
+                      config={"base_url": "", "model": ""})
+    assert "base_url and model" in (await client.drain_until("error"))["message"]
 
 
 async def test_a_stop_before_a_goal_and_malformed_frames_are_survivable(server, client_factory):
