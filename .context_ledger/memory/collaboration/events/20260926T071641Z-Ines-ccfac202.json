@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T071641Z-Ines-ccfac202",
+  "type": "correction",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T07:16:41Z",
+  "issue": "browser-cli-capture-hang",
+  "body": "Correction: the action table declares four webmcp_* actions that the agent-browser CLI on this machine does\nnot have. The read-surface sweep test reports them; they are not fixed by the pipe fix in 3d6c1e6.\n\nObserved symptom. `tests/test_agent_browser.py::test_every_read_action_is_a_command_the_real_cli_accepts`\nfails, and names exactly two actions:\n\n    webmcp_list:   webmcp list     -> Unknown command\n    webmcp_result: webmcp result i1 -> Unknown command\n\nEvidence.\n- The installed CLI is agent-browser 0.35.1 (`agent-browser --version`), a native binary at\n  `%APPDATA%/npm/node_modules/agent-browser/bin/agent-browser-win32-x64.exe`.\n- \"webmcp\" appears nowhere in that CLI: not in `--help` (0 matches), and nowhere in its installed package\n  tree (`grep -ril webmcp <npm>/node_modules/agent-browser/` -> no files). Every other action in the sweep --\n  the whole read surface -- is accepted by it.\n- So the table is not hallucinated: WebMCP is a real, documented agent-browser feature. The CLI's docs site\n  (agent-browser.dev) lists a WebMCP entry under Reference. It is the installed binary that predates it.\n- npm's latest is 0.38.1; this machine has 0.35.1. The four actions came in with 43ca964 (\"The whole\n  agent-browser surface, and how each part of it is classified\", Tisone Kironget, 2026-09-22), and the table's\n  own text marks them \"(experimental)\".\n\nLikely root cause. Version drift, not a wrong table: the table was written against the CLI's documented\nsurface, and no machine here runs a CLI new enough to have WebMCP. The repo pins no agent-browser version,\nso nothing catches the gap -- and a run that picks webmcp_list today spends budget on a command that cannot\nwork.\n\nCandidate repairs, and why I did not pick one.\n(a) Upgrade the installed CLI to a version that has WebMCP. I deliberately did not: agent-browser is also the\n    browser backend for other tooling on this machine (the same CLI owns the ~/.agent-browser browser cache),\n    so a global upgrade is a change with a wider blast radius than this session's scope. Not verified whether\n    0.38.1 has WebMCP.\n(b) Drop the four actions from the table. Wrong while a newer CLI may well have them -- it deletes capability\n    the author added on purpose, from the docs.\n(c) Gate them on the CLI's version, the way `available()` already asks whether the CLI is here at all. The\n    adapter's own shape supports this; it is a small design change and the one I would recommend.\n\nSuggested owner: Tisone Kironget, who wrote the table and alone can say which CLI version the project means\nto target. The user's call between (a) and (c); B-2026-09-26-1 carries the queue row and the re-run command.\n\nNot claiming this as fixed. Claiming only that the hang it was hiding is.",
+  "paths": [],
+  "refs": ["20260926T065725Z-Ines-69e73e7b", "3d6c1e6"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

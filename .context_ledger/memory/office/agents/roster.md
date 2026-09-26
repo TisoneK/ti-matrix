@@ -9,4 +9,3 @@
 |---|---|---|---|---|
 | Wren | S002 | unknown | Boot splash, dev runner, settings + key hygiene, visual-language pass — released | Working |
 | Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
-| Ines | S007 | deepseek-flash | Pulling origin/main into local main — reconciled two unpushed browser-adapter commits and a diverged ledger history — then orienting on the current frontier | Working |

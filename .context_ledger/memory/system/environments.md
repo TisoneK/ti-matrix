@@ -47,3 +47,31 @@ block (and its "last verified" date) every time you run on it again.
 - **Verified commands:** `PYTHONUTF8=1 .venv/Scripts/python.exe -m pytest tests` — the project's test suite, green (197 passed, 2 skipped) when run from the repo root under UTF-8 mode
 - **Quirks:** timezone EAT (UTC+3); a bare `python -m pytest` dies with `UnicodeEncodeError: 'charmap' codec` (cp1252) on any fixture containing non-ASCII text — always set `PYTHONUTF8=1`; sibling package clone lives at `C:/Users/Lameck/Tisone/context-ledger` — `sh ../context-ledger/core/bin/ledger-sync <cmd>` works from this repo for package-mode commands (bootstrap, harvest)
 -->
+
+---
+## The user's desktop — Windows 11, user `tison` (last verified 2026-09-26)
+- **Identify by:** Windows hostname `DESKTOP-2VPR9IB`, Windows 10.0.26200 x64, project checkout at
+  `C:/Users/tison/Dev/ti-matrix` — a *different* machine from Lameck's despite both being the user's Windows
+  desktop
+- **OS:** Windows with Git Bash (POSIX `sh`, `timeout`, `curl` all present); PowerShell 7 for `.cmd`/`.ps1`
+- **Runtimes:** Python 3.14.2 in the repo's `.venv/` (a **uv** venv — `uv = 0.9.26` in `pyvenv.cfg`); Python
+  3.14.2 also on `PATH` at `C:\Python314`; Node v24.13.0, npm 11.12.1
+- **The venv has no `pip`** — a uv-created venv omits it, so `.venv/Scripts/python.exe -m pip` fails with
+  "No module named pip". Install with uv instead: `uv pip install --python .venv/Scripts/python.exe ...`
+  (uv 0.9.26 is on `PATH` here). `ensurepip` *is* importable if pip is ever genuinely wanted.
+- **Verified commands:** `uv pip install --python .venv/Scripts/python.exe -e ".[dev]" -e "server[dev]"`
+  (the CI dependency set — the venv arrived with pytest and `ti_matrix` only, so `aiohttp` and the
+  `ti-matrix-server` package had to be installed before `server/tests` could even import) ·
+  `sh .context_ledger/core/bin/ledger-gates run pre-commit` → PASSED (server 38 passed, app typecheck, 162
+  renderer assertions) · `.venv/Scripts/python.exe -m pytest tests -q` → 294 passed, 1 failed in 76s · `-m
+  pytest server/tests -q` → 38 passed in 1.4s · `npm --prefix app run build` → green
+- **`agent-browser` IS installed here** (global, 0.35.1) — so `tests/test_agent_browser.py`'s real-CLI tests
+  *run* instead of skipping themselves, which is the opposite of Lameck's machine and is why two Windows-only
+  defects surfaced on this box. It drives real headless Chrome from `~/.agent-browser/browsers/`.
+- **Quirks:** the project's own `.venv/bin/python` path in `gates.conf` is tried first and always misses here
+  (`sh: .venv/bin/python: No such file or directory`), then the `.venv/Scripts/python.exe` fallback runs — the
+  first line of that gate is noise on Windows, not a failure. A network timeout on a first `uv pip install`
+  needs `UV_HTTP_TIMEOUT=300`. `agent-browser` leaves a daemon plus headless Chrome alive after every session
+  (its `agent-browser-win32-x64.exe` owns the browser between invocations); stray Chrome accumulates in
+  `%LOCALAPPDATA%\Temp\agent-browser-chrome-*` unless a session is closed with `agent-browser close --all`.
+  The sibling package clone is at `C:/Users/tison/Dev/context-ledger`.

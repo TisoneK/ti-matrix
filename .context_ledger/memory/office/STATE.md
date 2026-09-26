@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T06:44:25Z_
+_Regenerated: 2026-09-26T07:18:00Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-25)
@@ -17,7 +17,6 @@ _Regenerated: 2026-09-26T06:44:25Z_
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
 - **Sable** (S006) — Working — Model balance/token-usage tracking, then running worlds and fixing what surfaces
-- **Ines** (S007) — Working — Pulling origin/main into local main — reconciled two unpushed browser-adapter commits a…
 
 ## Current task
 - **2026-09-25 — Sable / claude-sonnet-5 (S006)** — implement model balance / token-usage tracking (staged), then run the shipped worlds end to end and fix what surfaces. — *in-progress — stage 1 shipped and pushed (`eeafb8e`, `f3cacec`, `3f3d89d`, `151606e`): `OpenAICompatModel` tracks token usage and DeepSeek balance; the sidecar's `settled` frame and the app's top rail surface a run's usage; `files_cli`/`ledger_cli`/`browser/cli` can now actually run `--model builtin` (B-2026-09-24-3, fixed) and print a usage/balance note. Found and fixed along the way: `ledger_cli` crashed on every invocation (`a.ask` referenced an argument `_args()` never defines). All four shipped worlds (maze, files, chess, browser) verified running end to end with the builtin reasoner — no crashes; chess and browser stop honestly on `budget`/`no_moves` since builtin has no synthesizer to phrase a final answer, which is by design, not a bug.*
@@ -28,6 +27,7 @@ _Regenerated: 2026-09-26T06:44:25Z_
 | B-2026-09-24-2 | **A fact is true as of a moment — a world that moves underneath the run.** **Step 1 shipped 2026-09-25 (S005, `6cb8e73`): `AgentState` gains a parallel `fact_times` tuple (populated by `apply`/`learn`, carried through `retreat_to`), `to_dict()` reports `fact_ages_ms`, the engine's `stopped`/`needs_action` events report the age of every known fact, and `RunMemory`'s `recall` marks every line with how long ago it was observed. Purely additive — no reader of `facts` had to change — and purely diagnostic: no new stop reason, no re-probing, no fan narrowing.** What remains, per the brief's own open questions: (1) declared-vs-measured per-action shelf life (an `ActionSpec` field) was NOT added — nothing yet *uses* the age to change behavior; (2) step 2 — re-check the one fact a decision rests on, at the moment of acting (first thing that spends budget); (3) step 3 — adaptive fan narrowing; (4) "prefer the slow facts" (a fourth adaptation) is still just an idea; (5) no fast-but-free test world exists yet to make the "too fast to act" case reproducible in the suite. Contract in **ADR-5**. Brief: `.context_ledger/memory/office/plans/a-world-that-moves-brief.md`. |
 | B-2026-09-23-11 | **Let people bring their own world.** The `Environment` protocol is four members and the README promises a new world is one row — true inside this repo, false outside it: `worlds.py` is a hardcoded dict and there is no discovery mechanism at all. Add a loader over `ti_matrix.worlds` entry points plus a `~/.ti-matrix/worlds/` directory, a template world that is correct by construction, and an order-dependence check at registration — because ADR-4 rule 1 is the rule nobody guesses and the one whose failure looks like model hallucination. Options, costs and three questions for the user: `.context_ledger/memory/office/plans/worlds-users-can-bring-brief.md`. |
 | B-2026-09-23-12 | **Selection over the state space — the within-run half is done; the structural half is not.** `76a0590` gave every run a `recall` action answering from its own observations, built inside `EngineTools` from probes already passing through it, so `Environment.probe` kept its signature and no world implements anything. What is still true: a proposer is handed one flat `AgentState` with no node id, no parent and no structure, and the tree is stamped onto *events*, so a seat still cannot select **nodes** — only facts, and only lexically. If the search's shape is ever wanted at proposal time ("what did I learn down the branch I abandoned?"), that needs the history passed to the proposer or a `Retriever` port, and it is a protocol change that should land before B-2026-09-23-11 opens worlds to users. Brief: `.context_ledger/memory/office/plans/recall-what-is-relevant-brief.md`. |
+| B-2026-09-26-1 | **Reconcile the four `webmcp_*` actions with a CLI that has them — this one thing keeps the browser sweep test red.** The installed `agent-browser` 0.35.1 answers "Unknown command" for `webmcp list` / `webmcp result`; WebMCP *is* documented on agent-browser.dev and npm's latest is 0.38.1, so the table (`43ca964`, written from the docs) is probably right and this machine's binary is old. To do: establish which CLI version first ships WebMCP, then either pin/document that minimum or gate the four actions on the CLI's version (the adapter already asks `available()` for presence), and re-run `tests/test_agent_browser.py::test_every_read_action_is_a_command_the_real_cli_accepts`. Until then, a run that picks one spends budget on a command that cannot work. Evidence, and the three candidate repairs with the reason each was left: correction `20260926T071641Z-Ines-ccfac202`. |
 
 _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 
@@ -37,5 +37,5 @@ _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 9 event(s) on file; most recent: `20260926T060320Z-Sable-ed8d04a7.json`
+- 12 event(s) on file; most recent: `20260926T071726Z-Ines-7f51f9bf.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`

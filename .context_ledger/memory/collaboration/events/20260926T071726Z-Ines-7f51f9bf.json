@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T071726Z-Ines-7f51f9bf",
+  "type": "release",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T07:17:26Z",
+  "issue": "browser-cli-capture-hang",
+  "body": "Releasing the claim on the agent-browser hang. Product commit 3d6c1e6.\n\nWhat was wrong. `AgentBrowser._run` ran the CLI with `subprocess.run(capture_output=True, timeout=...)`.\nagent-browser keeps a daemon owning the browser between invocations, that daemon inherits the handles it is\nhanded, and on Windows it does not let go of them. A pipe reaches end-of-file only when every writer closes\nit, so the read waited on a process that had already answered; and on timeout `run` kills the command and\nthen reads the very pipe the daemon still holds, so the wait was unbounded rather than timed.\n\nWhat shipped. `_run_cli()` is now the single place that runs the CLI: it resolves the name through PATH\n(CreateProcess does not read PATHEXT the way a shell does) and captures into files rather than pipes. `_run`\nkeeps its shape and goes through it. The read-surface sweep test uses the same helper rather than its own\nsubprocess call, so it cannot drift from how the adapter really runs the tool.\n\nVerified (all on the Windows desktop, the machine the bug reproduced on):\n- `tests/test_agent_browser.py`: 16 of 17 pass, including `test_the_real_cli_reads_a_real_page`, which now\n  opens a real page against real headless Chrome and reads its accessibility tree. It previously never\n  returned.\n- Full engine suite: `pytest tests -q` -> 294 passed, 1 failed, in 76s. It previously never finished; the run\n  had to be killed twice after 30+ minutes.\n- `pytest server/tests -q` -> 38 passed. `npm --prefix app run build` -> green. `ledger-gates pre-commit` ->\n  PASSED.\n- The environment needed `aiohttp` and `ti-matrix-server`, which this machine's uv venv did not have; that is\n  installed now and recorded in `memory/system/environments.md`.\n\nNot done, and deliberately not claimed as done. The one remaining failure is not this claim's: the table\ndeclares four experimental `webmcp_*` actions that the installed CLI 0.35.1 does not implement. Raised as\ncorrection 20260926T071641Z-Ines-ccfac202 and queued as B-2026-09-26-1, with the three candidate repairs and\nthe reason each was left to the user -- chiefly that upgrading the global CLI has a blast radius beyond this\nsession, since other tooling on this machine drives the same binary.\n\nFiles touched: ti_matrix/adapters/browser/agent_browser.py, tests/test_agent_browser.py. Safe to touch both now.",
+  "paths": ["ti_matrix/adapters/browser/agent_browser.py", "tests/test_agent_browser.py"],
+  "refs": ["20260926T065725Z-Ines-69e73e7b", "3d6c1e6"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
