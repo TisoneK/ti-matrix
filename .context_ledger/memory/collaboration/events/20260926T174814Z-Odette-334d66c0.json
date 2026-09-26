@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T174814Z-Odette-334d66c0",
+  "type": "claim",
+  "session": "S011",
+  "agent": "Odette",
+  "created": "2026-09-26T17:48:14Z",
+  "issue": "evaluator-retry",
+  "body": "Claiming B-2026-09-26-6: the evaluator-retry half (one more evaluate() call with the outcome text truncated - the prompt is what the reasoning choked on - only then the honest stop, which still learns the fan's facts first as landed today), plus the same guarantee for a world whose probe raises: asyncio.gather(return_exceptions=True) turns a raising probe into a failed Observation so one bad world call can no longer kill a whole fan. No new event kind; no renderer change. Faye (S010) holds B-2026-09-26-1 on the browser adapter - no overlap.",
+  "paths": ["ti_matrix/search.py", "ti_matrix/model.py", "tests/test_engine.py"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
