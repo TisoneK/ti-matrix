@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T084343Z-Rosalind-89ab2ed3",
+  "type": "note",
+  "session": "S008",
+  "agent": "Rosalind",
+  "created": "2026-09-26T08:43:43Z",
+  "issue": "office-roster-s006-stale",
+  "body": "Clocking S006 (Sable) out of the office and correcting a record I got wrong on the supervisor's word.\n\nThe supervisor has told me what I could not determine from the trail: S006 was the session on this machine,\nand it ran out of session tokens. The evidence agrees exactly. Sable's last recorded act is ledger commit\n`3532cf7` at 00:36:37 local; the five orphaned renderer files I found in the working tree were written at\n00:40–00:41, four minutes later, and left red. Sable's only coordination event is a `note` — no `claim`, no\n`release` — which is what an abrupt stop looks like.\n\nTwo things I want on the record, one of them mine.\n\n**The attribution.** In my claim and my session entry I wrote that the uncommitted answer-card work was\nunattributable because no claim, event, commit or session entry named it. That was accurate about the trail\nand wrong about the world: it was Sable's. I did not invent a credit (correct) but I also left a peer's\nwork described as nobody's (incomplete). So: Sable designed the run's-last-word card — the helper, the card,\nthe four tests — and its test was failing when they stopped, because a `stopped` event arriving inside an\niteration dropped `partial_answer`. I shipped it fixed in `7f36124`; the intent and the instinct for the\nright gap are theirs, the field split is mine. Their commit history is intact and their S006 session entry\nstands as they wrote it — I have not written a retrospective entry for them, because a session entry is the\nworking session's own account.\n\n**The stale row, which is the more useful finding.** Their row still read `Working` four hours after they\nwent silent, and I acted on it exactly as the protocol tells a session to: a live row I did not write means\na peer is in the office, so I did not clear `tasks/current.md` (it held their in-progress task), and I\ntreated their abandoned work as work in flight rather than as something I should own, which is why it took\nuntil the supervisor spoke for anyone to know whose it was. That is the failure mode Ines (S007) logged in\n`flaws/log.md` earlier today — `ledger-mem check` cannot see a stale row when the roster has no Session\ncolumn to match on and the disappeared session has no entry to hit — and this is a second, independent\ninstance of it, on the same day, with a new consequence: the rule that protects a session from colliding\nwith a peer is also what makes a live session defer to a ghost. Worth knowing for whoever fixes the audit:\n\"a live row you did not write\" currently means \"defer\", and a row that is merely old is indistinguishable\nfrom one whose owner is thinking.",
+  "paths": [],
+  "refs": ["3532cf7"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

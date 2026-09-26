@@ -7,4 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
-| Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
+| Rosalind | S008 | deepseek-flash | Back in: clocking S006 out and correcting the record after the supervisor reported the abandoned session | Working |

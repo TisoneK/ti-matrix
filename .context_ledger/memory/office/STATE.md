@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T08:36:21Z_
+_Regenerated: 2026-09-26T08:44:36Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-26)
@@ -15,10 +15,10 @@ _Regenerated: 2026-09-26T08:36:21Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Sable** (S006) — Working — Model balance/token-usage tracking, then running worlds and fixing what surfaces
+- **Rosalind** (S008) — Working — Back in: clocking S006 out and correcting the record after the supervisor reported the ab…
 
 ## Current task
-- **2026-09-25 — Sable / claude-sonnet-5 (S006)** — implement model balance / token-usage tracking (staged), then run the shipped worlds end to end and fix what surfaces. — *in-progress — stage 1 shipped and pushed (`eeafb8e`, `f3cacec`, `3f3d89d`, `151606e`): `OpenAICompatModel` tracks token usage and DeepSeek balance; the sidecar's `settled` frame and the app's top rail surface a run's usage; `files_cli`/`ledger_cli`/`browser/cli` can now actually run `--model builtin` (B-2026-09-24-3, fixed) and print a usage/balance note. Found and fixed along the way: `ledger_cli` crashed on every invocation (`a.ask` referenced an argument `_args()` never defines). All four shipped worlds (maze, files, chess, browser) verified running end to end with the builtin reasoner — no crashes; chess and browser stop honestly on `budget`/`no_moves` since builtin has no synthesizer to phrase a final answer, which is by design, not a bug.*
+(idle — no task recorded)
 
 ## Backlog — High priority (the top of the queue)
 | B-2026-09-23-6 | **Duplicate files of any kind, judged by content not filename — the next session's focus, raised by the user.** A registry of file families, each climbing the same cheap→expensive ladder: identify, describe, hash the *payload* (not the file, so retagging does not hide a duplicate), and only where that cannot settle it, the expensive perceptual probe. Songs are the motivating case, not the scope. The brief carries the boundary-test constraint, a per-family feasibility table, the verified stdlib tier, the decision about where a package this size may live, and four questions to put to the user first: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (working spike beside it). |
@@ -31,10 +31,10 @@ _Regenerated: 2026-09-26T08:36:21Z_
 _4 medium, 0 low priority row(s) — see tasks/backlog.md_
 
 ## Logs at a glance — open only if your task touches these
-- flaws/log.md (protocol/.context_ledger friction): 1 entry, last added 2026-09-26
+- flaws/log.md (protocol/.context_ledger friction): 2 entries, last added 2026-09-26
 - inefficiencies/log.md (project code/env friction): 1 entry, last added 2026-09-23
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 18 event(s) on file; most recent: `20260926T083612Z-Rosalind-6e61a22b.json`
+- 19 event(s) on file; most recent: `20260926T084343Z-Rosalind-89ab2ed3.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
