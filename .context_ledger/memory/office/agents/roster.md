@@ -9,3 +9,4 @@
 |---|---|---|---|---|
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
 | Ines | S007 | deepseek-flash | The sidecar outlives the app on Windows — the app cannot reaping its own engine, so neither can it be restarted | Working |
+| Iris | S009 | deepseek-flash | Why a one-step files run settled on a same-named runtime folder instead of the repo checkout — and whether the window's layout holds at a small viewport | Working |
