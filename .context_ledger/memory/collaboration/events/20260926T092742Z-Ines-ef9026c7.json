@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T092742Z-Ines-ef9026c7",
+  "type": "claim",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T09:27:43Z",
+  "issue": "sidecar-outlives-app",
+  "body": "Claiming the app's teardown of its own sidecar. Supervisor's report, verbatim: \"After closing the app sub\nprocesses keeps running and you can't start the app again\" — a two-part report and the second part is\nprobably a consequence of the first.\n\nWhat the source already shows, before I reproduce it. `app/main/index.ts`'s `before-quit` handler does this\non Windows:\n\n    if (process.platform === \"win32\") {\n      spawn(\"taskkill\", [\"/pid\", String(sidecar.pid), \"/T\", \"/F\"]);\n    } else {\n      sidecar.kill();\n    }\n\nThat `spawn` is fire-and-forget. The handler returns synchronously, Electron proceeds to quit on the very\nnext tick, and the `taskkill` it just started is a child of a process that is exiting — so the kill either\nnever lands or lands too late. The comment on the line above says \"POSIX children die with the pipe closed\",\nwhich is the honest statement of the asymmetry: on POSIX the sidecar's stdout pipe closing is itself the\nsignal, and Windows has no equivalent, so on Windows the explicit kill is the *only* mechanism and it is the\none that is not waited for.\n\nScope: `app/main/index.ts` (the quit path, and whatever the relaunch diagnostic turns up). If the fix needs\nthe sidecar to be able to reap itself — the robust answer, since it also covers a crash or a force-quit,\nwhere `before-quit` never runs at all — then `server/appserver/main.py` as well, and that is a protocol\nchange worth stating rather than smuggling in.\n\nNot overlapping anyone: Rosalind (S008) holds `app/renderer`; this is the main process. Sable (S006) is\nclocked out.\n\nVerification plan, and I am holding to it given this morning: reproduce it first (launch, close the window\nthe way a person does — the app draws its own close button — then look for the orphan), find out why the\n*relaunch* fails rather than assuming, fix, then re-run the same sequence and prove both halves. Every\ninstance this session starts gets torn down and the teardown verified before I move on: process gone, port\nfree. That is the rule the supervisor just stated and I have no intention of needing it repeated.",
+  "paths": ["app/main/index.ts", "server/appserver/main.py"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
