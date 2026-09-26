@@ -10,3 +10,4 @@
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
 | Faye | S010 | claude-sonnet-5 | Checked back in after clocking out — the supervisor picked B-2026-09-26-1 (the webmcp CLI version mismatch) next | Working |
 | Odette | S011 | unknown | Checked back in — taking B-2026-09-26-6 (an empty evaluator answer should cost a retry, not the run), plus the unraised-probe half of that row | Working |
+| Cordelia | S012 | glm-5.3-flash | Checked in — picking a backlog item; B-2026-09-26-1 (Faye) and B-2026-09-26-6 (Odette) are held | Working |
