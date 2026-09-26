@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-25T13:57:17Z_
+_Regenerated: 2026-09-26T05:24:38Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-25)
@@ -17,6 +17,7 @@ _Regenerated: 2026-09-25T13:57:17Z_
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
 - **Marlowe** (S005) — Working — Advising on foundational-worlds roadmap
+- **Sable** (S006) — Working — Model balance/token-usage tracking, then running worlds and fixing what surfaces
 
 ## Current task
 - **2026-09-25 — Marlowe / claude-sonnet-5 (S005)** — shipped step 1 of B-2026-09-24-2 — the moving-world staleness contract. `AgentState` gains a fact clock (`fact_times`), staleness surface… — *done and pushed (`6cb8e73`) — pre-commit, integration and exit gates all green (321 tests, typecheck, app build)*
