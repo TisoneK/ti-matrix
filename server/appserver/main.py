@@ -91,12 +91,13 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
     # other model name is an OpenAI-compatible endpoint, exactly as before.
     model: Optional[Any] = None
+    synthesizer: Optional[Any] = None
     if is_builtin(model_name):
         reasoner = reasoner_for(world_name, env.tools(), env)
         seats: tuple[Any, Any] = (reasoner, reasoner)
     else:
         from ti_matrix.adapters.openai_compat import OpenAICompatModel
-        from ti_matrix.model import LLMEvaluator, LLMMoveProposer
+        from ti_matrix.model import LLMEvaluator, LLMMoveProposer, LLMSynthesizer
 
         base_url = str(config.get("base_url", "")).strip()
         if not base_url or not model_name:
@@ -112,12 +113,18 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
         # instead of re-deriving it. The rules above keep the raw world: they read every fact directly
         # and would only propose `recall()` with no arguments.
         seats = (LLMMoveProposer(model, environment.tools()), LLMEvaluator(model))
+        # Every CLI built on `session.py` wires this for a real model; the sidecar never did, so a
+        # hosted run that gathered real, useful facts but never hit the evaluator's `done` stopped with
+        # nothing to show for the tokens it spent — `stopped: no_progress` and a bare fact list, where
+        # the CLIs would have asked the model what those facts amounted to. `builtin` still gets none:
+        # a rule has no `.answer()` to call.
+        synthesizer = LLMSynthesizer(model)
 
     budget_kwargs = {k: v for k, v in budget_in.items() if k in protocol.BUDGET_FIELDS}
     proposer: Any = seats[0]
     if stats_path is not None:
         proposer = LearningProposer(proposer, statistics)
-    engine = StateEngine(environment, proposer=proposer, evaluator=seats[1],
+    engine = StateEngine(environment, proposer=proposer, evaluator=seats[1], synthesizer=synthesizer,
                          confirmer=confirmer, budget=EngineBudget(**budget_kwargs))
     return engine, statistics, model
 
