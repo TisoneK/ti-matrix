@@ -51,6 +51,31 @@ async def test_it_reports_real_facts_and_real_failures(env):
 
 
 @pytest.mark.asyncio
+async def test_a_name_search_can_return_a_directory(env):
+    """A repository is a *directory*, and this action could never return one.
+
+    It filtered its walk to `is_file()`, so a goal naming a folder had no way to be answered by search at
+    all: the folder sat in the tree, one level down, invisible to the only action that searches for
+    anything. Found on a real run that answered with a runtime directory while the checkout the goal meant
+    was a directory the search could not return — and the supervisor spotted it in the panel that lists
+    what the run saw, which showed the files and both halves of the path but never the folder itself.
+    """
+    env_, d = env
+    wanted = d / "Dev" / "acme"
+    (wanted / ".git").mkdir(parents=True)
+    (wanted / "readme.md").write_text("x")
+
+    found = await env_.probe(Action("find_files", {"path": str(d), "contains": "acme"}))
+    assert found.ok
+    assert str(wanted) in found.text, found.text
+    assert "path(s)" in found.text, found.text
+
+    # And the empty answer says what it always said, in the words that are still true.
+    none = await env_.probe(Action("find_files", {"path": str(d), "contains": "nothing-like-this"}))
+    assert none.ok and "no file or directory under" in none.text, none.text
+
+
+@pytest.mark.asyncio
 async def test_a_name_search_is_bounded_and_says_so(env, monkeypatch):
     """A search that stopped must not read as a search that found nothing.
 
@@ -83,7 +108,7 @@ async def test_a_name_search_does_not_walk_past_its_depth(env, monkeypatch):
 
     monkeypatch.setattr(files_adapter, "_WALK_MAX_DEPTH", 1)
     shallow = await env_.probe(Action("find_files", {"path": str(d), "contains": "wanted"}))
-    assert shallow.ok and "no file under" in shallow.text
+    assert shallow.ok and "no file or directory under" in shallow.text
 
     monkeypatch.setattr(files_adapter, "_WALK_MAX_DEPTH", 6)
     reached = await env_.probe(Action("find_files", {"path": str(d), "contains": "wanted"}))

@@ -33,8 +33,8 @@ FILES_ACTIONS: dict[str, ActionSpec] = {
         ActionSpec("list_dir", "List the entries in a directory.", '{"path": "<dir>"}'),
         ActionSpec("read_file", "Read the text of one file.", '{"path": "<file>"}'),
         ActionSpec("stat_path", "Facts about a path: exists, kind, size, modified.", '{"path": "<path>"}'),
-        ActionSpec("find_files", "Find files whose NAME contains a substring, under a directory. "
-                                 "Bounded: it reports when it stopped before searching everything.",
+        ActionSpec("find_files", "Find files or directories whose NAME contains a substring, under a "
+                                 "directory. Bounded: it reports when it stopped before searching everything.",
                    '{"path": "<dir>", "contains": "<substring>"}'),
     )
 }
@@ -134,15 +134,24 @@ class FilesEnvironment:
                     stopped = True
                     break
                 try:
+                    named = needle in entry.name.lower()
                     if entry.is_dir():
+                        # A directory can match, and until now it could not. The walk kept only files, so a
+                        # goal naming a *folder* — "locate the X repo", "where is the config directory" —
+                        # had no way to be answered by search at all: the folder sat in the tree, one level
+                        # down, invisible to the one action that searches for anything. Found on a real run
+                        # that answered with a runtime directory while the checkout the goal meant was a
+                        # directory the search could never return.
+                        if named:
+                            hits.append(entry)
                         if depth < _WALK_MAX_DEPTH:
                             stack.append((entry, depth + 1))
-                    elif entry.is_file() and needle in entry.name.lower():
+                    elif entry.is_file() and named:
                         hits.append(entry)
                 except OSError:
                     continue  # vanished, or unreadable: it cannot be reported either way
         if not hits:
-            told = f"no file under {_display(root)} has {contains!r} in its name ({seen} paths searched"
+            told = f"no file or directory under {_display(root)} has {contains!r} in its name ({seen} paths searched"
             return True, (f"{told}, stopped at the {_WALK_MAX_ENTRIES}-path limit)" if stopped else f"{told})")
         names = " · ".join(_display(p) for p in hits[:40])
-        return True, f"{len(hits)} file(s) under {_display(root)} with {contains!r} in the name: {names}"
+        return True, f"{len(hits)} path(s) under {_display(root)} with {contains!r} in the name: {names}"

@@ -133,7 +133,9 @@ function fileCards(k: FilesKnowledge): Card[] {
     };
     walk(tree, 0);
     cards.push({
-      title: "Directories it saw",
+      // Back to the name it had. "Directories it saw" was my wording from the design pass and it was a
+      // lie: the tree holds files as well, and the supervisor read the card as a bug report because of it.
+      title: `Known under ${tree.name}`,
       hint: k.root ? `rooted at ${k.root}` : undefined,
       rows,
       empty: "no path read yet",
