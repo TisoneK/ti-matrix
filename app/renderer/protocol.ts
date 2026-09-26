@@ -32,10 +32,19 @@ export interface EngineEventFrame {
   [key: string]: unknown;
 }
 
+/** Token totals across every call a hosted run's model made — `null` for `builtin` (no model, nothing
+ * spent) and for an endpoint that never sent a `usage` object back. */
+export interface Usage {
+  calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export type Frame =
   | { type: "event"; [key: string]: unknown }
   | { type: "confirm-request"; id: string; action: { tool: string; args: Record<string, unknown>; label: string }; reason: string }
-  | { type: "settled"; answer: string | null; reason: string | null; events: number; summary: string | null; record: string | null; learned: string | null }
+  | { type: "settled"; answer: string | null; reason: string | null; events: number; summary: string | null; record: string | null; learned: string | null; usage: Usage | null }
   | { type: "error"; message: string }
   | { type: "worlds"; worlds: WorldInfo[] };
 

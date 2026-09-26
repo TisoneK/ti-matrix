@@ -9,6 +9,13 @@ export function formatElapsed(ms: number): string {
   return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, "0")}s`;
 }
 
+/** A token total, compacted the way a person reads it back: 847, 1.2k, 34k — never a bare five-digit run. */
+export function formatTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${Math.round(n / 1000)}k`;
+}
+
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;

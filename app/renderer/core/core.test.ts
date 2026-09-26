@@ -10,7 +10,7 @@ import { boundsOf, cellKey, readKnowledge, statsOf } from "./knowledge";
 import { layoutTree, pathTo, readTree, siblingContext } from "./tree";
 import { readTrust, flagCounts } from "./trust";
 import { artifactOf, newRunId, summarise } from "./library";
-import { outcomeLabel, outcomeTone, splitTruncation } from "./format";
+import { formatTokens, outcomeLabel, outcomeTone, splitTruncation } from "./format";
 
 let pass = 0;
 const failures: string[] = [];
@@ -314,6 +314,12 @@ eq("an unknown reason survives", outcomeLabel(false, "meteor"), "meteor");
 eq("it answered, it gave up, it broke",
    [outcomeTone(true, null), outcomeTone(false, "budget"), outcomeTone(false, "error: boom")],
    ["ok", "warn", "bad"]);
+
+/* ── a token total, read back the way a person reads one ─────────────────── */
+
+eq("under a thousand is exact", [formatTokens(0), formatTokens(847), formatTokens(999)], ["0", "847", "999"]);
+eq("under ten thousand keeps one decimal", [formatTokens(1000), formatTokens(1234), formatTokens(9999)], ["1.0k", "1.2k", "10.0k"]);
+eq("ten thousand and up rounds to the whole thousand", [formatTokens(10_000), formatTokens(34_500)], ["10k", "35k" ]);
 
 /* ── the cut the world made ───────────────────────────────────────────────
  * Every prose world truncates a long read and leaves its own tail note. `splitTruncation` existed to
