@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Frame, Sidecar, Status, TmApi, Usage, WorldInfo } from "../protocol";
+import { Frame, Sidecar, Status, TmApi, Usage, WorldInfo, outcomeFromSettled } from "../protocol";
 import { EngineEventFrame, RunArtifact } from "../core/types";
 import { createLibrary, LibraryBackend, newRunId, summarise } from "../core/library";
 
@@ -33,6 +33,8 @@ export interface Settled {
   summary: string | null;
   record: string | null;
   learned: string | null;
+  verified?: boolean;
+  answer_basis?: string | null;
   usage?: Usage | null;
   error?: string;
 }
@@ -233,6 +235,10 @@ export function useSidecar(bookmarks: number[]): Session {
       answer: artifact.outcome.answer, reason: artifact.outcome.reason,
       events: artifact.events.length, summary: artifact.outcome.summary,
       record: artifact.outcome.record, learned: null,
+      // Older artifacts saved before this field existed read as "not stated" rather than as a claim
+      // of unverification — they simply have nothing to say either way.
+      verified: artifact.outcome.verified,
+      answer_basis: artifact.outcome.answerBasis ?? null,
     });
     setSaved(artifact);
     setStatus("ready");
@@ -305,13 +311,7 @@ function buildArtifact(
     endedAt: new Date().toISOString(),
     remembered: run.remembered,
     events,
-    outcome: {
-      settled: info.error === undefined && info.reason === null && info.answer !== null,
-      answer: info.answer,
-      reason: info.error ?? info.reason,
-      summary: info.summary,
-      record: info.record,
-    },
+    outcome: outcomeFromSettled(info),
     bookmarks: [...bookmarks],
   };
 }

@@ -9,7 +9,7 @@
  * "the sidecar is not running" while a perfectly healthy engine was listening on the port it had just
  * been told about.
  */
-import { Sidecar, Status } from "./protocol";
+import { Sidecar, Status, outcomeFromSettled } from "./protocol";
 import { BUILTIN, budgetFor, isBuiltin, modelSummary, BUDGET, BUILTIN_BUDGET } from "./core/models";
 
 let pass = 0;
@@ -163,6 +163,32 @@ eq("an endpoint still names its provider",
 eq("the rules get their own, larger budget", budgetFor(BUILTIN), BUILTIN_BUDGET);
 eq("a model gets the engine's own defaults", budgetFor("gpt-4o-mini"), BUDGET.defaults);
 ok("and the rules' budget is the bigger of the two", BUILTIN_BUDGET.max_depth > BUDGET.defaults.max_depth);
+
+/* ── the verdict a run's record keeps ───────────────────────────────────── */
+
+{
+  // A verified settlement must read as one on disk, not only on screen.
+  const o = outcomeFromSettled({ answer: "the readme says X", reason: null, verified: true, answer_basis: null });
+  eq("a settled run's record says verified", [o.settled, o.verified], [true, true]);
+  eq("and carries no synthesis note", o.answerBasis, null);
+
+  // The unverified stop: the answer exists but nothing checked it against the world.
+  const s = outcomeFromSettled({
+    answer: "the facts amount to this", reason: "no_progress", verified: false,
+    answer_basis: "synthesised from 4 fact(s); NOT verified against the world",
+  });
+  eq("a stop's synthesized answer is unverified, with its basis",
+     [s.settled, s.verified, s.answerBasis !== null], [false, false, true]);
+
+  // The frame the wire actually sends when the engine fails outright.
+  const e = outcomeFromSettled({ answer: null, reason: null, error: "the engine never started" });
+  eq("an error frame is not settled and is unverified", [e.settled, e.verified, e.reason], [false, false, "the engine never started"]);
+
+  // Artifacts saved before the field existed: undefined means "not stated", never a claim.
+  const old = outcomeFromSettled({ answer: "x", reason: null });
+  eq("a frame without the field is not a claim of unverification", old.verified, false);
+  eq("and still reads as settled", old.settled, true);
+}
 
 /* ── report ─────────────────────────────────────────────────────────────── */
 

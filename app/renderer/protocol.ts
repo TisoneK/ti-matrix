@@ -41,10 +41,45 @@ export interface Usage {
   total_tokens: number;
 }
 
+/**
+ * The run's durable verdict, as an artifact's `outcome` stores it: what the run said, and whether the
+ * world verified it. The builder used to map the answer but drop the verification pair — so a settled
+ * run whose claim the challenge round confirmed and a stop that only *synthesised* an answer from its
+ * facts were saved to the library looking identical. The live view was never wrong (it refolds the
+ * events, which carry the distinction); the saved record was.
+ */
+export function outcomeFromSettled(info: {
+  answer: string | null;
+  reason: string | null;
+  verified?: boolean;
+  answer_basis?: string | null;
+  summary?: string | null;
+  record?: string | null;
+  error?: string;
+}): {
+  settled: boolean;
+  answer: string | null;
+  reason: string | null;
+  summary: string | null;
+  record: string | null;
+  verified: boolean;
+  answerBasis: string | null;
+} {
+  return {
+    settled: info.error === undefined && info.reason === null && info.answer !== null,
+    answer: info.answer,
+    reason: info.error ?? info.reason,
+    summary: info.summary ?? null,
+    record: info.record ?? null,
+    verified: info.verified ?? false,
+    answerBasis: info.answer_basis ?? null,
+  };
+}
+
 export type Frame =
   | { type: "event"; [key: string]: unknown }
   | { type: "confirm-request"; id: string; action: { tool: string; args: Record<string, unknown>; label: string }; reason: string }
-  | { type: "settled"; answer: string | null; reason: string | null; events: number; summary: string | null; record: string | null; learned: string | null; usage: Usage | null }
+  | { type: "settled"; answer: string | null; reason: string | null; verified: boolean; answer_basis: string | null; events: number; summary: string | null; record: string | null; learned: string | null; usage: Usage | null }
   | { type: "error"; message: string }
   | { type: "worlds"; worlds: WorldInfo[] }
   | { type: "models"; models: string[] }

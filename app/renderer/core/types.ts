@@ -132,6 +132,13 @@ export interface RunArtifact {
     reason: string | null;
     summary: string | null;
     record: string | null;
+    /**
+     * Whether the answer was world-verified (`done`) or synthesised from facts on a stop — undefined
+     * for artifacts saved before the field existed, which is "not stated", not a claim either way.
+     */
+    verified?: boolean;
+    /** What an unverified answer was synthesised from, when the engine said so. */
+    answerBasis?: string | null;
   };
   /** Indices into the artifact's own decision list. */
   bookmarks: number[];
