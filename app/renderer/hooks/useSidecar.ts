@@ -62,6 +62,8 @@ export interface Session {
   retry: () => void;
   /** Why the socket is not usable, when it is not — the sentence the UI shows instead of guessing. */
   trouble: string | null;
+  /** Put a trouble sentence there — a goal the socket could not carry, most recently. */
+  setTrouble: (t: string | null) => void;
   /** What the endpoint answered last, from `fetchModels` — `null` before the first call or after `clearModels`. */
   models: string[] | null;
   modelsLoading: boolean;
@@ -289,7 +291,7 @@ export function useSidecar(bookmarks: number[]): Session {
 
   const headless = !tm?.runsSave;
 
-  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory,
+  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, setTrouble,
            open, clear, retry, trouble, models, modelsLoading, modelsError, fetchModels, clearModels };
 }
 

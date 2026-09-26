@@ -243,7 +243,15 @@ export function App() {
     setConfigOpen(next.configOpen);
     setView(next.view);
     setBookmarks([]);
-    void session.run(goal.trim(), world, runConfig, { ...budget }, remember);
+    try {
+      void session.run(goal.trim(), world, runConfig, { ...budget }, remember);
+    } catch (err) {
+      // A goal the socket could not carry must not read as a dead click: the reason, in the lamp's
+      // own trouble slot, with the Reconnect button it offers being the actual fix.
+      session.setTrouble(err instanceof Error ? err.message : String(err));
+      setView("run");
+      setConfigOpen(false);
+    }
   }, [blocked, goal, session, world, runConfig, budget, view, configOpen, remember]);
 
   // The keys a person actually reaches for. Global, so they work wherever the focus happens to be — except
@@ -400,9 +408,10 @@ export function App() {
       ) : null}
 
       {/* The one line that makes waiting legible: where the run is in its loop, and how long the
-          current stretch has been quiet. Only while a run streams — a finished run's silence is not
-          waiting, and an idle window has nothing to narrate. */}
-      {view !== "compare" && running ? <Narrator events={events} live /> : null}
+          current stretch has been quiet. It lives from Run to clear — "starting" before the first
+          event, the last narration dimmed once the run is over — because vanishing at either end is
+          what read as the app being stuck. */}
+      {view !== "compare" && (running || events.length > 0) ? <Narrator events={events} live={running} /> : null}
 
       {/* `view !== "compare"` is belt and braces: onConfig/onView above keep the two in step, and this
           makes the invariant local to where the sheet is actually drawn. */}

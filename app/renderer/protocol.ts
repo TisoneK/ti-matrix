@@ -283,6 +283,14 @@ export class Sidecar {
   }
 
   private send(frame: Record<string, unknown>): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(frame));
+    // A socket that is not open used to swallow the frame without a whisper: the Run click read as
+    // dead (no run, no error, no reason) while the engine restarted under it, and the next goal hit
+    // the same race. A send on a socket that cannot speak is a connection problem — say so, and
+    // offer the one thing that can actually fix it, the same words the crash state uses.
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.reconnect();
+      throw new Error("the engine is not running — reconnecting; try again in a moment");
+    }
+    this.ws.send(JSON.stringify(frame));
   }
 }
