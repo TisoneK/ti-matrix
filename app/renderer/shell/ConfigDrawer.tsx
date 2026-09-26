@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from "react";
 import { WorldField, WorldInfo } from "../protocol";
+import { escapeDismisses } from "../core/nav";
 import { Button } from "../ui/controls";
 import { Budget, BUDGET, BUILTIN, LLM_SUGGESTION, isBuiltin } from "../core/models";
 import { Field, Fieldset } from "../ui/atoms";
@@ -68,12 +69,14 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `endpoint` folds the three real inputs into one key
   }, [rules, endpoint]);
-  // Esc closes, from wherever the focus happens to be — unless it is in a text field mid-word.
+  // Esc closes, from wherever the focus happens to be — including a text field, which is where it is after
+  // you type into this sheet, and which is the state the report came from. `escapeDismisses` names the two
+  // things that may take Escape first.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
-      if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) && document.activeElement === t) return;
+      if (!escapeDismisses(e.isComposing, t?.tagName ?? null)) return;
       onClose();
     };
     window.addEventListener("keydown", onKey);

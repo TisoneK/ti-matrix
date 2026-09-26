@@ -47,3 +47,23 @@ export const toRunning = (_state: Nav): Nav => ({ view: "run", configOpen: false
 export function shortcutsLive(blocking: boolean, modifiers: { alt?: boolean; meta?: boolean; ctrl?: boolean }): boolean {
   return !blocking && !modifiers.alt && !modifiers.meta && !modifiers.ctrl;
 }
+
+/**
+ * Whether Escape, pressed here, dismisses what is up.
+ *
+ * This file already said "Esc closes them" about the sheet and the welcome. The handler did not keep that
+ * promise: it ignored Escape whenever the focus was in a text field, which is exactly where the focus is
+ * after you type into the sheet — so the keyboard exit was dead in the one state a person is in when they
+ * want out, while the sheet's own bar went on offering "close (Esc)" as the tooltip on its ✕. The comment
+ * there said "mid-word", which reads as IME composition; the code was a tag-name test, and those are not
+ * the same rule.
+ *
+ * Two things legitimately take Escape before the sheet does, and only two. An IME mid-composition, where
+ * Escape abandons the composition rather than the sheet. And an open dropdown: the browser closes a
+ * `select`'s popup first, so a `select` is the one control that owns the key here. Everything else — every
+ * text field included — belongs to the sheet.
+ */
+export function escapeDismisses(composing: boolean, tagName: string | null): boolean {
+  if (composing) return false;
+  return (tagName ?? "").toUpperCase() !== "SELECT";
+}

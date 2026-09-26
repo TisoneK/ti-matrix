@@ -4,7 +4,7 @@
  * left `configOpen` true, so the sheet sprang open on the next view change. Pressing **Run** got you
  * the setup sheet. Every case below is one press and the state it must leave behind.
  */
-import { Nav, canConfigure, shortcutsLive, toRunning, toView, toggleConfig } from "./nav";
+import { Nav, canConfigure, escapeDismisses, shortcutsLive, toRunning, toView, toggleConfig } from "./nav";
 
 let pass = 0;
 const failures: string[] = [];
@@ -65,6 +65,22 @@ eq("but not behind the confirmer, the sheet or the welcome", shortcutsLive(true,
 eq("and not as part of a chord",
    [shortcutsLive(false, { alt: true }), shortcutsLive(false, { meta: true }), shortcutsLive(false, { ctrl: true })],
    [false, false, false]);
+
+/* ── Escape, which the sheet's own bar advertises as "close (Esc)" ───────── */
+
+// The reported bug: the sheet could not be dismissed from the state you are in after typing into it,
+// because Escape was ignored wholesale whenever the focus sat in a text field.
+eq("Escape closes from a text field — the state you are in after typing",
+   escapeDismisses(false, "INPUT"), true);
+eq("and from a textarea", escapeDismisses(false, "TEXTAREA"), true);
+eq("and from anything that is not a control", escapeDismisses(false, "BODY"), true);
+eq("and when there is no target at all", escapeDismisses(false, null), true);
+// The only two things that get Escape first.
+eq("an open dropdown keeps it — the browser closes its popup first",
+   escapeDismisses(false, "SELECT"), false);
+eq("an IME mid-word keeps it — Escape abandons the composition, not the sheet",
+   escapeDismisses(true, "INPUT"), false);
+eq("the tag's own case is not part of the rule", escapeDismisses(false, "select"), false);
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) throw new Error("nav checks failed:\n" + failures.map((f) => "  ✗ " + f).join("\n"));

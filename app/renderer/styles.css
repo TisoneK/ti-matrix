@@ -658,7 +658,18 @@ svg { display: block; }
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
   padding: var(--s3);
 }
-.drawer-bar { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); }
+/* The sheet scrolls; this bar does not. Measured before the change, in an ordinary 1280x720 window: the
+   sheet's content overflowed its 598px cap by 86px, and scrolling to the bottom put the close button at
+   top:-23 — three pixels of it left at the edge, and the ✕ is the only pointer way out of the sheet. The
+   bar's own spacing moved from margin to padding, and a matching shadow covers the 12px of the sheet's
+   padding above it, so nothing scrolls through the strip the pinned bar would otherwise leave open. */
+.drawer-bar {
+  display: flex; align-items: center; gap: var(--s2);
+  position: sticky; top: 0; z-index: 2;
+  background: var(--plate-2);
+  box-shadow: 0 calc(var(--s3) * -1) 0 var(--plate-2);
+  padding-bottom: var(--s3); margin-bottom: 0;
+}
 .drawer-bar .spacer { flex: 1; }
 .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s4); }
 @media (max-width: 700px) { .drawer-grid { grid-template-columns: 1fr; } }
@@ -909,12 +920,17 @@ svg { display: block; }
   background: var(--plate-2); border: 1px solid var(--line-2); border-radius: var(--r-3);
   box-shadow: 0 24px 64px -20px rgba(0, 0, 0, 0.9);
   overflow: hidden;
+  /* A dialog with no ceiling grows past the window, and the scrim centres what it cannot fit, so the head
+     and the foot leave the screen together — with the confirmer that means a run blocked on an answer whose
+     Deny and Allow are both unreachable. The body is the only part that may scroll. */
+  max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column;
 }
-.dialog-head { padding: var(--s4) var(--s4) var(--s2); }
+.dialog-head { padding: var(--s4) var(--s4) var(--s2); flex: none; }
 .dialog-head h3 { font: 600 14px/1.3 var(--ui); }
 .dialog-head p { margin-top: 6px; font-size: 12.5px; color: var(--fg-2); line-height: 1.6; }
-.dialog-body { padding: 0 var(--s4) var(--s4); }
-.dialog-foot { display: flex; gap: var(--s2); justify-content: flex-end; padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--plate); }
+.dialog-body { padding: 0 var(--s4) var(--s4); overflow: auto; min-height: 0; }
+.dialog-foot { display: flex; gap: var(--s2); justify-content: flex-end; padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--plate); flex: none; }
 
 .code {
   display: block; margin-top: var(--s2);
