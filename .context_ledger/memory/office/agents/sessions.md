@@ -159,3 +159,13 @@ the sheet up; the readouts disappear on Compare and return on a run.
 - **Open items:** B-2026-09-24-2 updated in place with what step 1 shipped and what's still open (declared-vs-measured per-action shelf life was NOT added; steps 2/3; "prefer the slow facts"; a fast-but-free test world for the suite). P-2026-09-25-1 (civilization worlds) still parked, no owner. Existing backlog otherwise untouched (B-2026-09-23-6/7/11/12, B-2026-09-24-3).
 - **Notes:** none
 - **Report:** none (not a review task)
+
+---
+## 2026-09-25 — Session 6 (model balance / token-usage tracking, then run the worlds)
+- **Agent:** Sable | **Model:** claude-sonnet-5 | **Platform:** bao's Mac — macOS (darwin 24.6.0) | **Role:** engineer | **Core:** 2.0.4
+- **Task:** user asked to implement model balance tracking and token usage staging first, then try running the shipped worlds end to end and fixing what surfaces.
+- **Commits:** in progress
+- **Outcome:** in progress
+- **Open items:** none yet
+- **Notes:** none
+- **Report:** none
