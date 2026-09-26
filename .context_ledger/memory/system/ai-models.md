@@ -26,6 +26,7 @@ its work accordingly).
 | Nadia (ZCode) | deepseek-flash | 2026-09-23 | 2026-09-23 | 1 |
 | Sable (ZCode) | claude-sonnet-5 | 2026-09-25 | 2026-09-26 | 2 |
 | Rosalind (ZCode) | deepseek-flash | 2026-09-26 | 2026-09-26 | 1 |
+| Odette (Freebuff host agent) | unknown | 2026-09-26 | 2026-09-26 | 1 |
 
 ## Observations
 
