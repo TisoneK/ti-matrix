@@ -59,7 +59,11 @@ RUN_KEY: Any = web.AppKey("run", RunState)
 def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
                   confirmer: WsConfirmer, stats_path: Optional[Path]):
     """The engine for one run: the model from config, the world from the registry, the learning record
-    when a path for it exists — the wiring the CLIs do via `session.py`, stated plainly."""
+    when a path for it exists — the wiring the CLIs do via `session.py`, stated plainly.
+
+    Returns ``(engine, statistics, model)`` — ``model`` is the ``OpenAICompatModel`` a hosted run spends
+    tokens through, or ``None`` for `builtin` (rule-based seats touch no network and have no usage to
+    report). The caller reads its `usage_snapshot()` after the run for the `settled` frame."""
     from ti_matrix.adapters.builtin import is_builtin, reasoner_for
     from ti_matrix.learning import LearningProposer, Statistics
     from ti_matrix.search import EngineBudget, StateEngine
@@ -86,6 +90,7 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
     # The two seats. `builtin` fills them with rules and touches no network, so a window with no
     # endpoint configured still produces a real run rather than one `stopped: proposer_error`. Any
     # other model name is an OpenAI-compatible endpoint, exactly as before.
+    model: Optional[Any] = None
     if is_builtin(model_name):
         reasoner = reasoner_for(world_name, env.tools(), env)
         seats: tuple[Any, Any] = (reasoner, reasoner)
@@ -114,7 +119,7 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
         proposer = LearningProposer(proposer, statistics)
     engine = StateEngine(environment, proposer=proposer, evaluator=seats[1],
                          confirmer=confirmer, budget=EngineBudget(**budget_kwargs))
-    return engine, statistics
+    return engine, statistics, model
 
 
 def _maybe_recorder(world_name: str, config: dict[str, Any]) -> Any:
@@ -174,8 +179,8 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
         answer, reason = a, r
 
     try:
-        engine, statistics = _build_engine(state.environment, config, budget_in,
-                                           state.confirmer, stats_path)
+        engine, statistics, model = _build_engine(state.environment, config, budget_in,
+                                                  state.confirmer, stats_path)
     except ValueError as exc:  # a config the engine cannot be built from is an error frame, not a dead task
         await _send_frame(ws, encode("error", message=str(exc)))
         return
@@ -199,12 +204,16 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
         recorded = None
         if state.recorder is not None:
             recorded = state.recorder.record(text).to_text()
+        # `None` for `builtin` (no model, nothing spent) and for a hosted run whose endpoint never sent
+        # a `usage` object — either way there is nothing honest to show, so the frame omits it rather
+        # than reporting zeroes that would read as "this run cost nothing".
+        usage = model.usage_snapshot() if model is not None and model.usage_snapshot()["calls"] else None
         await _send_frame(ws, encode(
             "settled",
             answer=answer, reason=reason,
             events=len(collected),
             summary=events_mod.events_digest(collected),
-            record=recorded, learned=learned or None,
+            record=recorded, learned=learned or None, usage=usage,
         ))
 
 
