@@ -33,6 +33,7 @@ import { MapPanel } from "./panels/MapPanel";
 import { TreePanel } from "./panels/TreePanel";
 import { formatElapsed, formatTokens, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
+import { canRememberKey, forgetKey as forgetStoredKey, loadRememberedKey, rememberKey } from "./core/keyring";
 
 /** Below this, a run finished faster than anyone could have watched it stream — see the timeline effect. */
 const AUTO_REPLAY_MS = 1500;
@@ -45,8 +46,13 @@ export function App() {
   const [model, setModel] = useState<ModelConfig>({ ...MODELS.defaults });
   const [budget, setBudgetState] = useState<Budget>(budgetFor(MODELS.defaults.model));
   const [configOpen, setConfigOpen] = useState(false);
-  /** The pasted key, for this session only — never saved, never sent anywhere but the sidecar. */
+  /** The API key. Remembered across launches (encrypted by the OS, bound to one endpoint), or held in
+   * renderer memory for the session when there is nowhere safe to keep it. */
   const [apiKey, setApiKey] = useState("");
+  /** Whether a key is on disk for the current endpoint — so the sheet can say so, and offer to forget it. */
+  const [keyRemembered, setKeyRemembered] = useState(false);
+  /** The last value that came from (or went to) the keyring, so hydrating one is not mistaken for typing one. */
+  const storedKey = useRef("");
   /** True once stored settings have been read, so hydration does not race the first save. */
   const [hydrated, setHydrated] = useState(false);
   /** The first-run welcome: shown until dismissed (or a run exists), and never again after that. */
@@ -128,6 +134,41 @@ export function App() {
         if (typeof s.remember === "boolean") setRemember(s.remember);
       }
       setHydrated(true);
+      // The key is asked for only for an endpoint we actually know: with no saved endpoint there is
+      // nothing to bind a stored key to, and asking for one anyway would be asking to send it somewhere.
+      const endpoint = s?.model?.base_url ?? "";
+      void loadRememberedKey(endpoint).then((key) => {
+        if (key) {
+          storedKey.current = key;
+          setApiKey(key);
+          setKeyRemembered(true);
+        }
+      });
+    });
+  }, []);
+
+  // A key that was typed is remembered for the endpoint it was typed for — debounced, so a pasted key
+  // writes once and a typed one writes when the typing pauses. A value that came *from* the keyring is
+  // never written back, or every launch would re-encrypt what is already stored.
+  useEffect(() => {
+    if (!hydrated || !canRememberKey()) return;
+    const key = apiKey.trim();
+    if (!key || key === storedKey.current) return;
+    const t = window.setTimeout(() => {
+      void rememberKey(model.base_url, key).then((ok) => {
+        if (ok) {
+          storedKey.current = key;
+          setKeyRemembered(true);
+        }
+      });
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [hydrated, apiKey, model.base_url]);
+
+  const onForgetKey = useCallback(() => {
+    void forgetStoredKey().then(() => {
+      storedKey.current = "";
+      setKeyRemembered(false);
     });
   }, []);
 
@@ -358,6 +399,7 @@ export function App() {
           model={model} setModel={(name, value) => setModel((m) => ({ ...m, [name]: value }))}
           modelLabels={MODELS.labels}
           apiKey={apiKey} setApiKey={setApiKey}
+          keyRemembered={keyRemembered} onForgetKey={onForgetKey}
           budget={budget} setBudget={(name, value) => setBudgetState((b) => ({ ...b, [name]: value }))}
           remember={remember} setRemember={setRemember}
           onPick={async () => {

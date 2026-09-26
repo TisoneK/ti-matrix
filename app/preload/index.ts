@@ -59,6 +59,12 @@ const api = {
   // the renderer sends the env-var *name* and the run-time key only ever goes through the goal config.
   settingsLoad: (): Promise<unknown> => ipcRenderer.invoke("tm:settings-load"),
   settingsSave: (value: unknown): Promise<boolean> => ipcRenderer.invoke("tm:settings-save", value),
+  // The key at rest, kept behind its own three channels so it never shares a call with the settings
+  // above. Encryption happens in main (`safeStorage`); nothing decrypted is written anywhere.
+  keyLoad: (): Promise<{ base_url: string; key: string } | null> => ipcRenderer.invoke("tm:key-load"),
+  keySave: (value: { base_url: string; api_key: string }): Promise<boolean> =>
+    ipcRenderer.invoke("tm:key-save", value),
+  keyClear: (): Promise<boolean> => ipcRenderer.invoke("tm:key-clear"),
   versions: () => ({ electron: process.versions.electron, chrome: process.versions.chrome }),
 };
 

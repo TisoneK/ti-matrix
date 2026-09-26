@@ -21,7 +21,7 @@
  * and resolved inside the runs directory before a file is touched — the renderer is not trusted with a
  * path, even though in this app the caller happens to be our own code.
  */
-import { app, BrowserWindow, ipcMain, Menu, MenuItem } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, MenuItem, safeStorage } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as http from "http";
@@ -376,6 +376,58 @@ function registerWindow(): void {
       return false;
     }
   });
+
+  // The API key at rest — the one setting that is a credential, kept apart from settings.json so that
+  // "which preferences do I have" and "what secrets do I hold" are never the same file.
+  //
+  // `safeStorage` encrypts with the OS's own protection (DPAPI on Windows, the login keychain on
+  // macOS), so the file is readable by this user on this machine and not by a copy of it anywhere else.
+  // If the OS cannot offer that, saving is refused rather than downgraded to plaintext: a key on disk
+  // in the clear is the thing the whole arrangement exists to avoid, and a silent fallback would be
+  // the worst possible version of it.
+  //
+  // A key is stored *with the endpoint it was entered for*, and load returns it only for that same
+  // endpoint. Changing the endpoint is therefore a deliberate act that does not quietly carry one
+  // provider's key to another host.
+  ipcMain.handle("tm:key-load", async () => {
+    try {
+      const held = await readJson<{ base_url?: unknown; secret?: unknown }>(keyFile());
+      if (typeof held?.base_url !== "string" || typeof held?.secret !== "string") return null;
+      if (!safeStorage.isEncryptionAvailable()) return null;
+      return { base_url: held.base_url, key: safeStorage.decryptString(Buffer.from(held.secret, "base64")) };
+    } catch {
+      // An undecryptable file (copied from another machine, or a rotated OS credential) is not an error
+      // to report: it simply means there is no remembered key, which is what the caller does next.
+      return null;
+    }
+  });
+  ipcMain.handle("tm:key-save", async (_e, value: unknown) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const { base_url: baseUrl, api_key: apiKey } = value as { base_url?: unknown; api_key?: unknown };
+    if (typeof baseUrl !== "string" || !baseUrl.trim()) return false;
+    if (typeof apiKey !== "string" || !apiKey.trim()) return false;
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    try {
+      const secret = safeStorage.encryptString(apiKey.trim()).toString("base64");
+      await fs.promises.writeFile(keyFile(), JSON.stringify({ base_url: baseUrl, secret }), "utf8");
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  ipcMain.handle("tm:key-clear", async () => {
+    try {
+      await fs.promises.rm(keyFile(), { force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Where the encrypted key lives. Beside settings.json, never inside it. */
+function keyFile(): string {
+  return path.join(app.getPath("userData"), "key.bin");
 }
 
 /** Both of these change how the rail should draw its button, so both are pushed rather than polled. */

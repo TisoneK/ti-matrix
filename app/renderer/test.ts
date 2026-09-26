@@ -8,4 +8,5 @@
 import "./core/worlds.test";
 import "./core/core.test";
 import "./core/nav.test";
+import "./core/keyring.test";
 import "./protocol.test";

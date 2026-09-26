@@ -23,7 +23,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, remember, setRemember, onPick, headless, apiKey, setApiKey, onClose, models, modelsLoading, modelsError, onFetchModels, onClearModels }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, remember, setRemember, onPick, headless, apiKey, setApiKey, keyRemembered, onForgetKey, onClose, models, modelsLoading, modelsError, onFetchModels, onClearModels }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -40,9 +40,13 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   setRemember: (value: boolean) => void;
   onPick: () => void;
   headless: boolean;
-  /** The pasted key: session memory only, sent with the run, never saved anywhere. */
+  /** The API key: remembered for this endpoint (encrypted by the OS) or held for the session only. */
   apiKey: string;
   setApiKey: (value: string) => void;
+  /** Whether one is stored for the endpoint currently in the field. */
+  keyRemembered: boolean;
+  /** Deletes the stored key — the way back out of remembering one. */
+  onForgetKey: () => void;
   /** Closes the sheet — Esc does the same. A surface the user cannot dismiss is a trap. */
   onClose: () => void;
   /** What the endpoint answered last time it was asked what it offers — `null` before the first ask. */
@@ -146,13 +150,23 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
             </Field>
             <Field label="API key"
                    hint={apiKey.trim()
-                     ? "held in memory for this session only — never saved to disk"
+                     ? keyRemembered
+                       ? "remembered for this endpoint — encrypted by the OS, never in settings.json, never in a saved run"
+                       : "held in memory for this session only — never saved to disk"
                      : model.api_key_env
                        ? `empty: the key is read from $${model.api_key_env} in this machine's environment`
                        : "empty and no env var set: the endpoint is asked without a key"}>
-              {(f) => <input {...f} type="password" value={apiKey} spellCheck={false} autoComplete="off"
-                             placeholder={model.api_key_env ? `leave empty to use $${model.api_key_env}` : "paste a key for this session"}
-                             onChange={(e) => setApiKey(e.target.value)} />}
+              {(f) => (
+                <div className="key-row">
+                  <input {...f} type="password" value={apiKey} spellCheck={false} autoComplete="off"
+                         placeholder={model.api_key_env ? `leave empty to use $${model.api_key_env}` : "paste a key for this session"}
+                         onChange={(e) => setApiKey(e.target.value)} />
+                  {keyRemembered ? (
+                    <Button size="sm" onClick={onForgetKey}
+                            title="Delete the key this machine has stored">Forget</Button>
+                  ) : null}
+                </div>
+              )}
             </Field>
             <Field label="Env var fallback"
                    hint={`advanced: which environment variable holds the key when the field above is empty`}>
