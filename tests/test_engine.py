@@ -156,6 +156,40 @@ async def test_an_unaffordable_challenge_is_marked_not_a_silent_pass():
 
 
 @pytest.mark.asyncio
+async def test_a_challenge_that_only_re_examines_the_same_candidate_does_not_count():
+    """A model can pass the direct-look guard by looking at its own claim's candidate and nothing
+    else — that is the same candidate confirmed by a second tool, not an alternative. The challenge
+    round excludes any action sharing the claim's own path before it is ever probed."""
+    shallow = mv(tool="dir_explorer", path="/a")
+    same_subject = mv(tool="file_read", path="/a")  # a different tool — at the very thing already claimed
+    prop = ScriptedProposer([shallow], [same_subject])
+    evalr = ScriptedEvaluator({
+        shallow.label(): Evaluation(0.9, True, "a folder matching by name", "matches by name"),
+        same_subject.label(): Evaluation(1.0, True, "confirmed by looking", "looked directly"),
+    })
+    ev = await collect(engine(prop, FakeExecutor({}), evalr))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "a folder matching by name"
+    assert ev[-1].data["challenged"] is True
+    # excluded before it could even be probed — not merely outscored
+    assert not any(e.kind == "probe" for e in ev if e.data.get("move") == same_subject.label())
+
+
+@pytest.mark.asyncio
+async def test_a_challenge_still_recognises_a_genuinely_different_candidate():
+    """The same-subject exclusion must not swallow a real alternative — only one that shares the
+    claim's own path is filtered; a different path is a real competitor, exactly as before."""
+    shallow, real = mv(path="/a"), mv(path="/b")
+    prop = ScriptedProposer([shallow], [real])
+    evalr = ScriptedEvaluator({
+        shallow.label(): Evaluation(0.9, True, "a folder matching by name", "matches by name"),
+        real.label(): Evaluation(1.0, True, "the actual checkout", "verified"),
+    })
+    ev = await collect(engine(prop, FakeExecutor({}), evalr))
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "the actual checkout"
+    assert any(e.kind == "probe" and e.data.get("move") == real.label() for e in ev)
+
+
+@pytest.mark.asyncio
 async def test_no_progress_backtracks_and_never_repeats_a_failed_move():
     a, b, c = mv(path="/a"), mv(path="/b"), mv(path="/c")
     prop = ScriptedProposer([a], [b], [a, c])  # depth0: a (progress) ; depth1: b (stalls) ; back at depth0: a is now failed

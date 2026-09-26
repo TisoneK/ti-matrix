@@ -71,6 +71,18 @@ class EngineEvent:
         return {"seq": self.seq, "t_ms": self.t_ms, "kind": self.kind, **self.data}
 
 
+def _subject(action: Action) -> Optional[str]:
+    """The thing an action is plainly ABOUT, when it names one — its ``path`` argument, if it has one.
+
+    None for an action with no such argument (a maze step, a browser click by selector): the challenge's
+    same-subject exclusion is then a no-op, exactly preserving today's behaviour for a world this
+    heuristic cannot read. It is deliberately narrow rather than guessed at generically — a wrong subject
+    would filter the wrong candidate out of a challenge, which is worse than reading none at all.
+    """
+    v = action.args.get("path")
+    return str(v) if isinstance(v, str) and v.strip() else None
+
+
 def _fact_ages_ms(state: AgentState) -> list[int]:
     """Surfaced at the honest end of a run: how old every known fact is, paired index-for-index with
     ``state.facts`` — not just the bounded UI window ``AgentState.to_dict`` shows, because a stop is
@@ -388,7 +400,9 @@ class StateEngine:
                 # A `done` claim is not taken on its own say-so: one more fan is proposed with the
                 # claimed action pruned, and the claim settles only if nothing better or competing
                 # survives it. Real probes, whichever way this goes, are learned as facts.
-                result = await self._challenge(state, avoid | {best_obs.move.fingerprint()}, calls)
+                result = await self._challenge(
+                    state, avoid | {best_obs.move.fingerprint()}, calls, _subject(best_obs.move)
+                )
                 for cev in result.events:
                     yield cev
                 calls += result.calls_spent
@@ -455,13 +469,25 @@ class StateEngine:
             answer_reserve=1 if self.synthesizer is not None else 0,
         )
 
-    async def _challenge(self, state: AgentState, avoid: set[str], calls: int) -> _ChallengeResult:
+    async def _challenge(
+        self, state: AgentState, avoid: set[str], calls: int, exclude_subject: Optional[str] = None
+    ) -> _ChallengeResult:
         """One propose/probe/evaluate cycle run purely to see whether anything competes with a `done`
         claim — never a move the run commits to on its own. Costs two calls (propose, then evaluate,
         the same shape ``BudgetExhausted``'s ``answer_reserve`` already reserves calls for); when the
         budget cannot afford both, the claim is marked unchallenged rather than silently accepted as
         though something was asked and found nothing. Only read-only actions are considered — a
         challenge is exploratory verification, never a write to confirm or a prediction to trust.
+
+        ``exclude_subject`` — the claim's own ``path`` argument, when it names one — is a second prune
+        alongside the claim's fingerprint. Excluding only the fingerprint stops the challenge from
+        repeating the *exact* action that made the claim, but not from re-examining the *same candidate*
+        through a different tool (``find_files(path=X, contains="a")`` claims, and a challenge answers
+        with ``list_dir(path=X)`` — a direct look, passing every guard, that never compared X against
+        anything). That confirms the claim; it does not challenge it. Excluding the subject too forces
+        the challenge to be about something else, or to find nothing — both are real answers, only one
+        of them is a competitor. A run can still settle without ever comparing two real candidates — this
+        does not force that comparison to happen — but it can no longer mistake re-confirmation for one.
         """
         b = self.budget
         if calls + 2 > b.max_model_calls:
@@ -487,6 +513,8 @@ class StateEngine:
         ))
 
         runnable = [m for m in actions if self.environment.is_read_only(m)]
+        if exclude_subject is not None:
+            runnable = [m for m in runnable if _subject(m) != exclude_subject]
         if not runnable:
             return _ChallengeResult(events, 1, True, [], [], {})
 
