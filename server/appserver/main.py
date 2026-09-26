@@ -150,20 +150,6 @@ async def _send_frame(ws: web.WebSocketResponse, frame: str) -> None:
         pass
 
 
-def answer_of(events: list[dict[str, Any]]) -> Optional[str]:
-    for ev in reversed(events):
-        if ev.get("kind") == "done":
-            return str(ev.get("answer") or "")
-    return None
-
-
-def reason_of(events: list[dict[str, Any]]) -> Optional[str]:
-    for ev in reversed(events):
-        if ev.get("kind") == "stopped":
-            return str(ev.get("reason") or "stopped")
-    return None
-
-
 async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world_name: str,
                     config: dict[str, Any], budget_in: dict[str, int],
                     stats_path: Optional[Path], record_path: Optional[Path]) -> None:
@@ -172,6 +158,8 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
     collected: list[dict[str, Any]] = []
     answer: Optional[str] = None
     reason: Optional[str] = None
+    verified = False
+    answer_basis: Optional[str] = None
 
     async def on_event(frame: dict[str, Any]) -> None:
         statistics.observe(_event_like(frame))  # in-run learning, whether or not it is persisted
@@ -181,9 +169,9 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
             run_log.write(record_path, frame)
         await _send_frame(ws, encode("event", **frame))
 
-    async def on_done(a: Optional[str], r: Optional[str]) -> None:
-        nonlocal answer, reason
-        answer, reason = a, r
+    async def on_done(a: Optional[str], r: Optional[str], v: bool, b: Optional[str]) -> None:
+        nonlocal answer, reason, verified, answer_basis
+        answer, reason, verified, answer_basis = a, r, v, b
 
     try:
         engine, statistics, model = _build_engine(state.environment, config, budget_in,
@@ -217,7 +205,7 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
         usage = model.usage_snapshot() if model is not None and model.usage_snapshot()["calls"] else None
         await _send_frame(ws, encode(
             "settled",
-            answer=answer, reason=reason,
+            answer=answer, reason=reason, verified=verified, answer_basis=answer_basis,
             events=len(collected),
             summary=events_mod.events_digest(collected),
             record=recorded, learned=learned or None, usage=usage,

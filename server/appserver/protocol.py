@@ -25,9 +25,15 @@ Server → client:
     {"type": "event",             ...EngineEvent.to_dict()}
     {"type": "confirm-request",   "id": str, "action": {"tool", "args", "label"}, "reason": str}
     {"type": "settled",           "answer": str | null, "reason": str | null, "events": int,
+                                  "verified": bool, "answer_basis": str | null,
                                   "summary": str | null, "record": str | null,
                                   "usage": {"calls": int, "prompt_tokens": int, "completion_tokens": int,
                                             "total_tokens": int} | null}
+
+`answer` is either a settled `done`'s world-verified answer or a stopped run's synthesized
+`partial_answer` — whichever the run produced, so a caller need not choose between two fields to learn
+what the run said. `verified` is `True` only for the former; `answer_basis` (only ever set alongside an
+unverified answer) carries the engine's own note on what it was synthesised from.
     {"type": "error",             "message": str}
     {"type": "worlds",            "worlds": [{...}]}          (answer to GET /worlds, also pushed here)
     {"type": "models",            "models": [str, ...]}       (answer to a `list-models` frame)
