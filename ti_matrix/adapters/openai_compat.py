@@ -136,6 +136,18 @@ class OpenAICompatModel:
         scheme = urllib.parse.urlparse(self.base_url).scheme or "https"
         return await asyncio.to_thread(self._call, f"{scheme}://{host}/user/balance")
 
+    async def list_models(self) -> list[str]:
+        """The model ids this endpoint currently offers, from the OpenAI-compatible ``GET /models`` —
+        every provider named in this module's own docstring implements it, unlike the balance endpoint
+        above. Raises ``RuntimeError`` on a bad call, the same shape ``complete`` and ``fetch_balance``
+        already report one in; a response with no recognisable ``data`` list is an empty result, not an
+        error — some hosts answer with nothing to offer yet, not with a malformed reply."""
+        data = await asyncio.to_thread(self._call, f"{self.base_url}/models")
+        items = data.get("data")
+        if not isinstance(items, list):
+            return []
+        return sorted({str(it["id"]) for it in items if isinstance(it, dict) and it.get("id")})
+
 
 def describe_balance(info: dict[str, Any]) -> str:
     """`fetch_balance`'s response, in the one line a CLI prints — DeepSeek's own shape, read back for a

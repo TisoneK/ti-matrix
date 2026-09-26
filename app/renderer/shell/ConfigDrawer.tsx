@@ -10,7 +10,7 @@
  * their environment — two fields for one secret was a trap nobody should have to read twice.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { WorldField, WorldInfo } from "../protocol";
 import { Button } from "../ui/controls";
 import { Budget, BUDGET, BUILTIN, LLM_SUGGESTION, isBuiltin } from "../core/models";
@@ -22,7 +22,7 @@ export interface ModelConfig {
   api_key_env: string;
 }
 
-export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, remember, setRemember, onPick, headless, apiKey, setApiKey, onClose }: {
+export function ConfigDrawer({ worlds, world, fields, values, set, model, setModel, modelLabels, budget, setBudget, remember, setRemember, onPick, headless, apiKey, setApiKey, onClose, models, modelsLoading, modelsError, onFetchModels, onClearModels }: {
   worlds: WorldInfo[];
   world: string;
   /** The world's own fields, from the sidecar's registry. */
@@ -44,11 +44,30 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
   setApiKey: (value: string) => void;
   /** Closes the sheet — Esc does the same. A surface the user cannot dismiss is a trap. */
   onClose: () => void;
+  /** What the endpoint answered last time it was asked what it offers — `null` before the first ask. */
+  models: string[] | null;
+  modelsLoading: boolean;
+  modelsError: string | null;
+  onFetchModels: () => void;
+  onClearModels: () => void;
 }) {
   const current = worlds.find((w) => w.name === world);
   // The rules need no endpoint, no key and no env var, so those four fields are not shown against them —
   // an empty "API key" box beside a run that will never make a request is a question with no answer.
   const rules = isBuiltin(model.model);
+  // Ask the endpoint what it offers once the fields that matter settle down — not on every keystroke,
+  // which would spend a call per letter typed and spam an incomplete key at whatever is listening.
+  // Debounced rather than on-blur: a field left as-is when focus moves elsewhere (closing the drawer,
+  // say) still deserves the fetch its value earned.
+  const endpoint = `${model.base_url}\u0000${apiKey}\u0000${model.api_key_env}`;
+  const fetching = useRef(onFetchModels);
+  fetching.current = onFetchModels;
+  useEffect(() => {
+    if (rules || !model.base_url.trim()) { onClearModels(); return; }
+    const timer = setTimeout(() => fetching.current(), 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `endpoint` folds the three real inputs into one key
+  }, [rules, endpoint]);
   // Esc closes, from wherever the focus happens to be — unless it is in a text field mid-word.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -99,10 +118,27 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
               {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}
                              onChange={(e) => setModel("base_url", e.target.value)} />}
             </Field>
-            <Field label={modelLabels["model"] ?? "Model"} hint="the name the endpoint knows it by">
-              {(f) => <input {...f} type="text" value={model.model} spellCheck={false}
-                             placeholder="the exact name the endpoint knows"
-                             onChange={(e) => setModel("model", e.target.value)} />}
+            <Field label={modelLabels["model"] ?? "Model"}
+                   hint={modelsLoading ? "asking the endpoint what it offers…"
+                     : modelsError ? `couldn't list models: ${modelsError}`
+                       : models && models.length > 0 ? `${models.length} fetched from the endpoint — pick one, or type your own`
+                         : "the name the endpoint knows it by"}>
+              {(f) => (
+                <div className="model-pick">
+                  <input {...f} type="text" value={model.model} spellCheck={false}
+                         placeholder="the exact name the endpoint knows"
+                         onChange={(e) => setModel("model", e.target.value)} />
+                  {models && models.length > 0 ? (
+                    <select aria-label="pick a model the endpoint offers" value=""
+                            onChange={(e) => { if (e.target.value) setModel("model", e.target.value); }}>
+                      <option value="">pick from the endpoint's own list…</option>
+                      {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  ) : modelsError ? (
+                    <Button size="sm" onClick={onFetchModels}>Retry</Button>
+                  ) : null}
+                </div>
+              )}
             </Field>
           </>
         )}

@@ -349,6 +349,9 @@ export function App() {
           }}
           headless={headless}
           onClose={() => setConfigOpen(false)}
+          models={session.models} modelsLoading={session.modelsLoading} modelsError={session.modelsError}
+          onFetchModels={() => session.fetchModels(model.base_url, apiKey, model.api_key_env)}
+          onClearModels={session.clearModels}
         />
       ) : null}
 

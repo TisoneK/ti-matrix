@@ -43,6 +43,9 @@ class FakeEndpoint:
                                                "finish_reason": "stop"}],
                                   "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}})
 
+    async def models(self, request: web.Request) -> web.Response:
+        return web.json_response({"data": [{"id": "fake-small"}, {"id": "fake-large"}]})
+
 
 def maze_rounds():
     """One step south per round, the exit announced on the last — the shortest maze conversation."""
@@ -103,6 +106,7 @@ async def server(monkeypatch):
     # just server.url + "/v1", and a full run (engine, maze, proposer, evaluator) needs no network.
     endpoint = FakeEndpoint(*maze_rounds())
     app.router.add_post("/v1/chat/completions", endpoint.handle)
+    app.router.add_get("/v1/models", endpoint.models)
 
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()

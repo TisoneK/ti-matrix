@@ -19,6 +19,7 @@ Client → server:
                         "remember": path?, "record": path?}
     {"type": "confirm-response", "id": str, "granted": bool}
     {"type": "stop"}
+    {"type": "list-models", "base_url": str, "api_key": str?, "api_key_env": str?}
 
 Server → client:
     {"type": "event",             ...EngineEvent.to_dict()}
@@ -29,6 +30,14 @@ Server → client:
                                             "total_tokens": int} | null}
     {"type": "error",             "message": str}
     {"type": "worlds",            "worlds": [{...}]}          (answer to GET /worlds, also pushed here)
+    {"type": "models",            "models": [str, ...]}       (answer to a `list-models` frame)
+    {"type": "models-error",      "message": str}             (ditto, when the endpoint refuses)
+
+A `list-models` request runs independently of the one-run-at-a-time rule below — it never touches the
+engine, only the model endpoint's own `GET /models` — so it may be sent whether or not a goal is running.
+Its failure is `models-error`, not the plain `error` frame a bad goal config gets: the renderer's `error`
+handling is a run's, tied to whatever `settled` state the last goal left behind, and a config lookup that
+has nothing to do with any run must not be folded into it.
 """
 from __future__ import annotations
 
@@ -95,3 +104,17 @@ def parse_goal(body: dict[str, Any]) -> tuple[str, str, dict[str, Any], dict[str
     if isinstance(budget_in, dict):
         budget = {k: int(v) for k, v in budget_in.items() if k in BUDGET_FIELDS and isinstance(v, (int, float))}
     return text, world, config, budget
+
+
+def parse_list_models(body: dict[str, Any]) -> tuple[str, Optional[str], Optional[str]]:
+    """(base_url, api_key, api_key_env) from a `list-models` frame's fields.
+
+    Raises ValueError with no `base_url` — the one thing `OpenAICompatModel` cannot work without;
+    `builtin` never sends this frame at all, since it has no endpoint to ask.
+    """
+    base_url = str(body.get("base_url", "")).strip()
+    if not base_url:
+        raise ValueError("a list-models frame needs base_url")
+    api_key = str(body.get("api_key", "")).strip() or None
+    api_key_env = str(body.get("api_key_env", "")).strip() or None
+    return base_url, api_key, api_key_env

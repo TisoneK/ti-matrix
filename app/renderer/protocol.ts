@@ -46,7 +46,9 @@ export type Frame =
   | { type: "confirm-request"; id: string; action: { tool: string; args: Record<string, unknown>; label: string }; reason: string }
   | { type: "settled"; answer: string | null; reason: string | null; events: number; summary: string | null; record: string | null; learned: string | null; usage: Usage | null }
   | { type: "error"; message: string }
-  | { type: "worlds"; worlds: WorldInfo[] };
+  | { type: "worlds"; worlds: WorldInfo[] }
+  | { type: "models"; models: string[] }
+  | { type: "models-error"; message: string };
 
 export type Status = "connecting" | "ready" | "running" | "reconnecting" | "crashed";
 
@@ -230,6 +232,15 @@ export class Sidecar {
 
   confirm(id: string, granted: boolean): void {
     this.send({ type: "confirm-response", id, granted });
+  }
+
+  /** Ask the endpoint what it offers. Independent of any run — safe to call while one is in flight. */
+  listModels(baseUrl: string, apiKey: string, apiKeyEnv: string): void {
+    this.send({
+      type: "list-models", base_url: baseUrl,
+      ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+      ...(apiKeyEnv.trim() ? { api_key_env: apiKeyEnv.trim() } : {}),
+    });
   }
 
   stop(): void {

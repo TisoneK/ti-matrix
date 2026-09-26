@@ -2,8 +2,12 @@
  * The renderer's session with the sidecar: connect once, and let frames become a run.
  *
  * The URL arrives from the main process (the token never crosses into the renderer), and every frame is
- * one of five shapes — worlds, event, confirm-request, settled, error. This hook is the only place that
- * knows them. Panels are handed events and a cursor; they never see a socket.
+ * one of seven shapes — worlds, event, confirm-request, settled, error, models, models-error. This hook
+ * is the only place that knows them. Panels are handed events and a cursor; they never see a socket.
+ *
+ * `models`/`models-error` are the one pair with nothing to do with a run: `fetchModels` can be called
+ * whether or not one is in flight, and its result lives in its own three fields rather than folded into
+ * `settled` — a config lookup is not a run, and must never be mistaken for one finishing.
  *
  * The one thing this hook does beyond relaying frames is hand the run to the library: it asks the main
  * process for a run directory before the goal goes out (so the engine's own run log is written beside the
@@ -56,6 +60,15 @@ export interface Session {
   retry: () => void;
   /** Why the socket is not usable, when it is not — the sentence the UI shows instead of guessing. */
   trouble: string | null;
+  /** What the endpoint answered last, from `fetchModels` — `null` before the first call or after `clearModels`. */
+  models: string[] | null;
+  modelsLoading: boolean;
+  /** Why the last `fetchModels` failed, when it did. Cleared by the next call. */
+  modelsError: string | null;
+  /** Ask the endpoint what it offers. Independent of any run — safe to call mid-run. */
+  fetchModels: (baseUrl: string, apiKey: string, apiKeyEnv: string) => void;
+  /** Drop a stale list — the base URL changed, say, and the old ids no longer mean anything. */
+  clearModels: () => void;
 }
 
 export function useSidecar(bookmarks: number[]): Session {
@@ -78,6 +91,9 @@ export function useSidecar(bookmarks: number[]): Session {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [saved, setSaved] = useState<RunArtifact | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   // Bumped by `retry` to re-run the connect effect from the top.
   const [attempt, setAttempt] = useState(0);
 
@@ -121,6 +137,17 @@ export function useSidecar(bookmarks: number[]): Session {
         }
         if (frame.type === "confirm-request") {
           setConfirm(frame as unknown as ConfirmRequest);
+          return;
+        }
+        if (frame.type === "models") {
+          setModelsLoading(false);
+          setModelsError(null);
+          setModels(frame.models);
+          return;
+        }
+        if (frame.type === "models-error") {
+          setModelsLoading(false);
+          setModelsError(frame.message);
           return;
         }
         if (frame.type === "settled" || frame.type === "error") {
@@ -241,9 +268,23 @@ export function useSidecar(bookmarks: number[]): Session {
     setAttempt((n) => n + 1);
   }, [tm]);
 
+  const fetchModels = useCallback((baseUrl: string, apiKey: string, apiKeyEnv: string) => {
+    if (!baseUrl.trim() || !sidecar.current) return;
+    setModelsLoading(true);
+    setModelsError(null);
+    sidecar.current.listModels(baseUrl, apiKey, apiKeyEnv);
+  }, []);
+
+  const clearModels = useCallback(() => {
+    setModels(null);
+    setModelsError(null);
+    setModelsLoading(false);
+  }, []);
+
   const headless = !tm?.runsSave;
 
-  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, open, clear, retry, trouble };
+  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory,
+           open, clear, retry, trouble, models, modelsLoading, modelsError, fetchModels, clearModels };
 }
 
 /** The run as an artifact: the events verbatim, the world, the model, and how it ended. */

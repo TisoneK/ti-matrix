@@ -288,3 +288,51 @@ def test_describe_balance_flags_an_unavailable_account():
 def test_describe_balance_on_an_unrecognised_shape_says_so_rather_than_guessing():
     assert describe_balance({}) == "(unrecognised balance response)"
     assert describe_balance({"balance_infos": []}) == "(unrecognised balance response)"
+
+
+# ─── the model list: GET /models, every provider named above has one ────────
+
+
+@pytest.mark.asyncio
+async def test_list_models_returns_the_sorted_ids(endpoint):
+    endpoint.body = json.dumps({"data": [
+        {"id": "deepseek-reasoner"}, {"id": "deepseek-chat"}]}).encode()
+    model = OpenAICompatModel("https://api.deepseek.com/v1", "m")
+    assert await model.list_models() == ["deepseek-chat", "deepseek-reasoner"]
+    req = endpoint.requests[-1]
+    assert req.full_url == "https://api.deepseek.com/v1/models"
+    assert req.method == "GET" or req.get_method() == "GET"
+
+
+@pytest.mark.asyncio
+async def test_list_models_sends_the_bearer_key(endpoint, monkeypatch):
+    monkeypatch.setenv("TI_TEST_KEY", "sk-secret-value")
+    endpoint.body = json.dumps({"data": []}).encode()
+    model = OpenAICompatModel("https://api.example.test/v1", "m", api_key_env="TI_TEST_KEY")
+    await model.list_models()
+    assert endpoint.requests[-1].get_header("Authorization") == "Bearer sk-secret-value"
+
+
+@pytest.mark.asyncio
+async def test_list_models_on_a_response_with_no_data_list_is_empty_not_an_error(endpoint):
+    endpoint.body = json.dumps({"object": "list"}).encode()
+    model = OpenAICompatModel("https://api.example.test/v1", "m")
+    assert await model.list_models() == []
+
+
+@pytest.mark.asyncio
+async def test_list_models_drops_entries_with_no_usable_id(endpoint):
+    endpoint.body = json.dumps({"data": [{"id": "m1"}, {"no_id": True}, "not-a-dict", {"id": ""}]}).encode()
+    model = OpenAICompatModel("https://api.example.test/v1", "m")
+    assert await model.list_models() == ["m1"]
+
+
+@pytest.mark.asyncio
+async def test_list_models_reports_a_rejected_key_without_echoing_it(endpoint):
+    endpoint.error = urllib.error.HTTPError(
+        "https://api.example.test/v1/models", 401, "Unauthorized", {},
+        io.BytesIO(b'{"error":{"message":"Authentication Fails"}}'))
+    model = OpenAICompatModel("https://api.example.test/v1", "m", api_key="sk-secret-value")
+    with pytest.raises(RuntimeError) as err:
+        await model.list_models()
+    assert "401" in str(err.value) and "sk-secret-value" not in str(err.value)
