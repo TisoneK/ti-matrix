@@ -54,17 +54,17 @@ export function LogPanel({ decisions, trust, cursor, bookmarks, onSeek, onBookma
         ))}
       </PaneHead>
 
-      <div className="trust">
+      <div className="trust" title="The evaluator's own score for each move the run committed to, 0–100%: how much of the goal it judged known once that move was added. The model's confidence, not a probability.">
         <Sparkline curve={trust} />
         <div>
           <div className="pane-sub">
-            mean belief {Math.round(trust.mean * 100)}% · {trust.trend}
+            belief in its own moves — mean {Math.round(trust.mean * 100)}% · {trust.trend}
           </div>
-          <div className="dim" style={{ fontSize: 10.5 }}>
-            {trust.points.length > 1
-              ? `each point is a move the run committed to, from ${Math.round(trust.min * 100)}% to ${Math.round(trust.max * 100)}%`
-              : "not enough decisions yet to see a trend"}
-          </div>
+          {trust.points.length > 1 ? (
+            <div className="dim" style={{ fontSize: 10.5 }}>
+              each point is a move the run committed to, from {Math.round(trust.min * 100)}% to {Math.round(trust.max * 100)}%
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -63,14 +63,12 @@ export function WorldSurface({ world, events, decisions }: { world: string; even
             vault report, a page — as soon as it is taken.
           </Empty>
         ) : (
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
-            {cards.map((card) => (
-              <section key={card.title} className="card">
-                <h4>{card.title}</h4>
-                {card.hint ? <p className="dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{card.hint}</p> : null}
-                {card.rows.length === 0 ? (
-                  <p className="dim" style={{ fontSize: 11.5 }}>{card.empty ?? "nothing yet"}</p>
-                ) : (
+          <>
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+              {cards.filter((card) => card.rows.length > 0).map((card) => (
+                <section key={card.title} className="card">
+                  <h4>{card.title}</h4>
+                  {card.hint ? <p className="dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{card.hint}</p> : null}
                   <ul>
                     {card.rows.map((row, i) => (
                       <li key={`${row.left}-${i}`} className={row.tone ?? ""} style={{ paddingLeft: (row.indent ?? 0) * 12 }}>
@@ -79,10 +77,21 @@ export function WorldSurface({ world, events, decisions }: { world: string; even
                       </li>
                     ))}
                   </ul>
-                )}
-              </section>
-            ))}
-          </div>
+                </section>
+              ))}
+            </div>
+            {/* A card with nothing in it is not a panel; it is a sentence. They used to take a full column
+                each — three bordered boxes holding one line of apology between them, competing for the same
+                space as the tree — which read as broken rather than as "not yet". One quiet line each, under
+                the cards that do have something, and the tree keeps the room. */}
+            {cards.some((card) => card.rows.length === 0) ? (
+              <p className="card-quiet">
+                {cards.filter((card) => card.rows.length === 0)
+                  .map((card) => `${card.title}: ${card.empty ?? "nothing yet"}`)
+                  .join(" · ")}
+              </p>
+            ) : null}
+          </>
         )}
       </PaneBody>
     </>
@@ -105,18 +114,26 @@ function fileCards(k: FilesKnowledge): Card[] {
 
   if (tree) {
     const rows: Row[] = [];
+    // The synthetic root is the "(everything the run touched)" node the tree invents when a run has
+    // several unconnected roots, and the card's own title already says what this is; printing it as a
+    // row too put the same sentence on screen twice, once as a heading and once as a list item.
     const walk = (node: Node, depth: number): void => {
-      rows.push({
-        left: `${node.name}${node.dir ? "/" : ""}`,
-        right: node.dir ? "dir" : node.bytes === undefined ? "file" : bytes(node.bytes),
-        indent: depth,
-        tone: node.read ? "ok" : undefined,
-      });
-      for (const child of node.children) walk(child, depth + 1);
+      if (node.path !== "") {
+        rows.push({
+          left: `${node.name}${node.dir ? "/" : ""}`,
+          // No "dir" column: the folder glyph and the trailing slash already say it, and printing it on
+          // every row of a 30-row listing is how a tree starts reading like a database dump. A file's
+          // size stays, because nothing else on the row says how big it is.
+          right: node.dir ? "" : node.bytes === undefined ? "file" : bytes(node.bytes),
+          indent: depth,
+          tone: node.read ? "ok" : undefined,
+        });
+      }
+      for (const child of node.children) walk(child, node.path === "" ? depth : depth + 1);
     };
     walk(tree, 0);
     cards.push({
-      title: `Known under ${tree.name}`,
+      title: "Directories it saw",
       hint: k.root ? `rooted at ${k.root}` : undefined,
       rows,
       empty: "no path read yet",

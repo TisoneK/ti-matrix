@@ -290,7 +290,10 @@ svg { display: block; }
 }
 
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--plate); }
-.pane.right { display: grid; grid-template-rows: minmax(160px, 0.85fr) minmax(200px, 1.15fr); gap: 1px; background: var(--line); }
+/* The two halves of the audit column are not equals: the tree is the shape of the search — how wide it
+   went and what it gave up — and the ledger is the list of the same steps in order. The ledger had the
+   larger share, which put the picture in the smaller half of its own column. */
+.pane.right { display: grid; grid-template-rows: minmax(200px, 1.15fr) minmax(160px, 0.85fr); gap: 1px; background: var(--line); }
 
 /*
  * Panes are not equals. An empty one recedes — quieter head, no body weight — and the pane the cursor is
@@ -443,6 +446,31 @@ svg { display: block; }
 }
 .answer-card .answer-basis { margin-top: var(--s2); font-size: 10.5px; color: var(--fg-4); line-height: 1.5; }
 .answer-card.verified { border-color: var(--green); background: var(--green-dim); }
+
+/* The run's answer is the one thing on this pane someone came here for, so it is the view's only focal
+   weight: a wider plate, the largest type on screen, and an accent edge that reads as the run's own word
+   rather than the bordered boxes the evidence under it gets. Everything below it is a card; this is the
+   answer. The vocabulary stays exactly as it is — what changes is that the eye now has somewhere to land
+   first, instead of six equals competing for the top of the screen. */
+.answer-card {
+  padding: var(--s4) var(--s5);
+  margin-bottom: var(--s4);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.answer-card .answer-body { font-size: 16.5px; line-height: 1.45; }
+
+/* What a pane has to say when it has nothing: a sentence, not a panel. Empty cards used to take a full
+   column each, so three bordered boxes holding one line of apology sat beside the tree at the same weight
+   — which reads as broken rather than as "not yet". This is the whole of it now, at the foot of the pane,
+   under the cards that do have something. */
+.card-quiet {
+  margin: var(--s3) 0 0;
+  padding: 7px var(--s3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-2);
+  font: 400 11.5px/1.5 var(--mono);
+  color: var(--fg-4);
+}
 .answer-card.verified h4 { color: var(--green); }
 .answer-card.unverified { border-color: var(--amber); background: var(--amber-dim); }
 .answer-card.unverified h4 { color: var(--amber); }
@@ -452,24 +480,34 @@ svg { display: block; }
 .treewrap { position: absolute; inset: 0; overflow: auto; padding: var(--s3); }
 .treewrap svg { min-width: 100%; }
 
-.node-dot { stroke-width: 1.5; pointer-events: none; }
-.node-dot.alive { fill: var(--plate-2); stroke: var(--ice-line); }
-.node-dot.live { fill: var(--ice); stroke: #bfe2ff; animation: node-born 900ms ease-out; }
-.node-dot.cold { fill: #131922; stroke: var(--line-2); }
-.node-dot.settled { fill: var(--green); stroke: #a9f0cd; }
+/* A node is a labelled plate, not a dot: it says which move the run made from this state, and the bar
+   under the label is the belief it held here — the bar's length is the number, with the number itself
+   small in the corner for the exact value. The branch's state is the plate's own treatment: ice where the
+   run stands, green for the branch that settled it, dashed and dim for one it gave up. */
+.node-body { stroke-width: 1.5; }
+.node-body.alive { fill: var(--plate-2); stroke: var(--ice-line); }
+.node-body.live { fill: var(--ice-dim); stroke: var(--ice); animation: node-born 900ms ease-out; }
+.node-body.cold { fill: #131922; stroke: var(--line-2); stroke-dasharray: 3 3; }
+.node-body.settled { fill: var(--green-dim); stroke: var(--green); }
+.node-group:hover .node-body, .node-group:focus-within .node-body { stroke: var(--fg-2); }
+.node-move { font: 500 10.5px/1 var(--mono); fill: var(--fg-2); pointer-events: none; }
+.node-move.cold { fill: var(--fg-4); }
+.node-move.live { fill: var(--fg); }
+.node-move.settled { fill: #a9f0cd; }
+.node-score { font: 500 8.5px/1 var(--mono); fill: var(--fg-4); pointer-events: none; }
+.node-belief-track { fill: rgba(255, 255, 255, 0.08); }
+.node-belief { fill: var(--ice); }
+.node-belief.cold { fill: var(--line-2); }
+.node-belief.settled { fill: var(--green); }
 @keyframes node-born { 0% { transform: scale(0.2); opacity: 0; } 45% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); } }
-.node-dot.peek { stroke: var(--fg); stroke-width: 2.5; }
 .node-edge { transition: stroke 140ms ease, opacity 140ms ease; }
 .node-hit { fill: transparent; cursor: pointer; }
-.node-hit:hover + .node-dot, .node-hit:focus-visible + .node-dot { stroke: var(--fg); stroke-width: 2.5; }
-.node-hit:hover ~ .node-dot { stroke: var(--fg); }
 .node-peek { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-dasharray: 2 2; pointer-events: none; }
 .node-selected { fill: none; stroke: var(--ice); stroke-width: 2; pointer-events: none; }
 
 .node-edge { stroke: var(--line-2); stroke-width: 1.5; fill: none; }
 .node-edge.live { stroke: var(--ice-line); }
 .node-edge.cold { stroke: #1a212c; stroke-dasharray: 3 3; }
-.node-label { font: 500 9px/1 var(--mono); fill: var(--fg-4); pointer-events: none; }
 
 .fold-chip { fill: var(--plate-2); stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 2; cursor: pointer; }
 .fold-chip:hover { stroke: var(--fg-3); }
@@ -609,10 +647,15 @@ svg { display: block; }
   align-items: center; gap: var(--s3);
   padding: 0 var(--s3);
   border-top: 1px solid var(--line-2);
-  background: linear-gradient(180deg, var(--plate), #0a0d13);
+  /* The rails at the top and the foot of the window are the two ends of one instrument, so they wear the
+     same plate: this bar was a recessed strip of its own, which is what made the playback controls read
+     as bolted underneath the panes rather than as part of the frame they sit in. */
+  background: linear-gradient(0deg, var(--plate-2), var(--plate));
 }
 .transport-controls { display: flex; align-items: center; gap: 2px; }
-.transport-time { display: flex; align-items: center; gap: var(--s2); font: 500 11px/1 var(--mono); color: var(--fg-3); }
+/* The run's identity is a caption for the scrubbing, not a third control cluster: it keeps its place and
+   loses the weight that had it competing with the transport for the same row. */
+.transport-time { display: flex; align-items: center; gap: var(--s2); font: 400 11px/1 var(--mono); color: var(--fg-4); }
 
 .scrubwrap { position: relative; padding: 8px 0; }
 .scrub { width: 100%; appearance: none; -webkit-appearance: none; background: transparent; height: 22px; cursor: pointer; display: block; }
@@ -1045,13 +1088,19 @@ svg { display: block; }
 .stub-edge {
   stroke: var(--line-2); stroke-width: 1; fill: none; opacity: 0.75;
 }
-.stub-dot {
-  fill: var(--bg); stroke: var(--fg-4); stroke-width: 1;
-}
+/* A passed-over candidate is a lane, not a dot: a small plate naming the move and scoring it, hung off
+   the node it was weighed at. It still has to read as less than a node — nothing here was ever stood
+   on — so the plate is unfilled, dashed and dimmer than a real one, and the elbow reaching it is a
+   hairline. */
+.stub-plate { fill: none; stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 3 2; }
+.stub-move { font: 500 9.5px/1 var(--mono); fill: var(--fg-4); pointer-events: none; }
+.stub-score { font: 500 9px/1 var(--mono); fill: var(--fg-4); pointer-events: none; }
 /* Weighed and passed over: the amber the ledger already uses for a move taken on a hunch. */
 .stub:hover .stub-edge { stroke: var(--amber); opacity: 1; }
-.stub:hover .stub-dot { stroke: var(--amber); }
+.stub:hover .stub-plate { stroke: var(--amber); }
+.stub:hover .stub-move, .stub:hover .stub-score { fill: var(--amber); }
 /* The world pushed back on this one — the same red a surprise gets in the gutter. */
-.stub.refused .stub-dot { stroke: var(--red); opacity: 0.85; }
+.stub.refused .stub-plate { stroke: rgba(255, 106, 106, 0.55); }
+.stub.refused .stub-move, .stub.refused .stub-score { fill: var(--red); opacity: 0.85; }
 .stub.refused .stub-edge { stroke: rgba(255, 106, 106, 0.4); stroke-dasharray: 2 2; }
 .stubs.cold { opacity: 0.35; }

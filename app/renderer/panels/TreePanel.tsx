@@ -19,9 +19,13 @@ import { Decision } from "../core/types";
 import { Chip } from "../ui/controls";
 import { Empty, PaneBody, PaneHead } from "../ui/atoms";
 
-const COL = 46;
-const ROW = 44;
-const NODE = 7;
+// Room for a node that says something, plus the lane of passed-over candidates that hangs beside it —
+// these were sized for a 7px dot, and the picture was exactly that: anonymous circles with the move's name
+// on the few leaves that happened to get one.
+const COL = 136;
+const ROW = 62;
+const NODE_W = 92;
+const NODE_H = 28;
 
 export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   tree: SearchTree;
@@ -81,7 +85,7 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                 <path
                   key={`${edge.from.id}->${edge.to.id}`}
                   className={`node-edge ${edge.to.id === hover ? "live" : ""} ${edge.dead ? "cold" : edge.live ? "live" : ""}`}
-                  d={`M${edge.from.x} ${edge.from.y + NODE} C${edge.from.x} ${edge.from.y + ROW * 0.6}, ${edge.to.x} ${edge.to.y - ROW * 0.6}, ${edge.to.x} ${edge.to.y - NODE}`}
+                  d={`M${edge.from.x} ${edge.from.y + NODE_H / 2} C${edge.from.x} ${edge.from.y + ROW * 0.55}, ${edge.to.x} ${edge.to.y - ROW * 0.55}, ${edge.to.x} ${edge.to.y - NODE_H / 2}`}
                 />
               ))}
 
@@ -100,11 +104,15 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                 return (
                   <g key={`stubs-${node.id}`} className={node.dead ? "stubs cold" : "stubs"}>
                     {passed.map((option, i) => {
-                      // Fan them to the right of the trunk, so the applied edge stays the vertical one.
-                      const spread = (i - (passed.length - 1) / 2) * 0.34;
-                      const dx = Math.sin(spread + 0.9) * COL * 0.62;
-                      const dy = Math.cos(spread + 0.9) * ROW * 0.42;
+                      // A lane out of the node's right edge, one per candidate, stacked so their names
+                      // can be read. These were 2.6px dots on a fan: the shape was honest and the
+                      // information was invisible — which option was weighed, and what it scored,
+                      // existed only in a tooltip.
                       const refused = option.ok === false;
+                      const lane = 23;
+                      const x0 = node.x + NODE_W / 2;
+                      const x1 = x0 + 14;
+                      const y = node.y + (i - (passed.length - 1) / 2) * lane;
                       return (
                         <g key={option.fp} className={`stub ${refused ? "refused" : ""}`}>
                           <title>
@@ -113,9 +121,12 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                                 : `scored ${Math.round(option.progress * 100)}%`}`}
                             {option.excerpt ? `\n${option.excerpt.slice(0, 160)}` : ""}
                           </title>
-                          <path className="stub-edge"
-                                d={`M${node.x} ${node.y} L${node.x + dx} ${node.y + dy}`} />
-                          <circle className="stub-dot" cx={node.x + dx} cy={node.y + dy} r={2.6} />
+                          <path className="stub-edge" d={`M${x0} ${node.y} L${x1} ${y}`} />
+                          <rect className="stub-plate" x={x1} y={y - 9} width={100} height={18} rx={4} />
+                          <text className="stub-move" x={x1 + 6} y={y + 3.5}>{shortMove(option.label)}</text>
+                          <text className="stub-score" x={x1 + 94} y={y + 3.5} textAnchor="end">
+                            {refused ? "refused" : option.progress === undefined ? "—" : `${Math.round(option.progress * 100)}%`}
+                          </text>
                         </g>
                       );
                     })}
@@ -127,18 +138,44 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                 const fold = view.folds.find((f) => f.from === node.id);
                 const isCurrent = node.id === tree.current;
                 const settled = decisions[node.decision ?? -1]?.kind === "done";
-                const cls = `node-dot ${node.dead ? "cold" : isCurrent ? "live" : settled ? "settled" : "alive"}`;
+                // The branch's state decides the plate's treatment; the same class goes on the label and
+                // the belief bar so a cold branch recedes as one object rather than three faded pieces.
+                const state = node.dead ? "cold" : isCurrent ? "live" : settled ? "settled" : "alive";
                 const clickable = node.decision !== null;
                 const here = node.decision !== null && node.decision === cursor;
                 const seen = node.decision !== null && node.decision === peek;
+                const move = node.depth === 0 ? "entry" : shortMove(node.last);
                 return (
-                  <g key={node.id}
+                  <g key={node.id} className="node-group"
                      onMouseEnter={() => { setHover(node.id); if (node.decision !== null) onHover?.(node.decision); }}
                      onMouseLeave={() => { setHover((h) => (h === node.id ? null : h)); onHover?.(null); }}>
                     <title>{nodeTitle(node.id, node.depth, node.progress, node.dead, node.current, siblingContext(tree, decisions, node.id))}</title>
-                    <circle
+                    {here ? <rect className="node-selected" x={node.x - NODE_W / 2 - 3} y={node.y - NODE_H / 2 - 3} width={NODE_W + 6} height={NODE_H + 6} rx={9} /> : null}
+                    {seen && !here ? <rect className="node-peek" x={node.x - NODE_W / 2 - 2} y={node.y - NODE_H / 2 - 2} width={NODE_W + 4} height={NODE_H + 4} rx={8} /> : null}
+                    {fold ? (
+                      <g className="node-fold" onClick={() => toggleFold(node.id)}>
+                        <rect className="fold-chip" x={node.x - NODE_W / 2} y={node.y - NODE_H / 2} width={NODE_W} height={NODE_H} rx={6} />
+                        <text className="fold-text" x={node.x} y={node.y + 3.5} textAnchor="middle">+{fold.hidden} folded</text>
+                      </g>
+                    ) : (
+                      <>
+                        <rect className={`node-body ${state}`} x={node.x - NODE_W / 2} y={node.y - NODE_H / 2} width={NODE_W} height={NODE_H} rx={6} />
+                        {/* The move it made, on every node rather than only on the leaves: a diagram whose
+                            boxes have no names makes the reader cross-reference the ledger for the one thing
+                            the diagram exists to show. */}
+                        <text className={`node-move ${state}`} x={node.x} y={node.y + 1} textAnchor="middle">{move}</text>
+                        {/* What it believed here, drawn rather than printed — the bar's length is the number
+                            — with the number itself small in the corner for the exact value. */}
+                        <rect className="node-belief-track" x={node.x - NODE_W / 2 + 7} y={node.y + NODE_H / 2 - 6} width={NODE_W - 14} height={2.5} rx={1.25} />
+                        <rect className={`node-belief ${state}`} x={node.x - NODE_W / 2 + 7} y={node.y + NODE_H / 2 - 6} width={Math.max(1, (NODE_W - 14) * node.progress)} height={2.5} rx={1.25} />
+                        <text className="node-score" x={node.x + NODE_W / 2 - 4} y={node.y - NODE_H / 2 + 2} textAnchor="end">
+                          {Math.round(node.progress * 100)}
+                        </text>
+                      </>
+                    )}
+                    <rect
                       className="node-hit"
-                      cx={node.x} cy={node.y} r={NODE + 6}
+                      x={node.x - NODE_W / 2} y={node.y - NODE_H / 2} width={NODE_W} height={NODE_H} rx={6}
                       tabIndex={clickable ? 0 : -1}
                       role={clickable ? "button" : undefined}
                       aria-label={clickable ? `jump to step ${node.decision! + 1}: ${node.last || "entry"}` : undefined}
@@ -148,20 +185,6 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek(node.decision!); }
                       }}
                     />
-                    {fold ? (
-                      <rect className="fold-chip" x={node.x - 13} y={node.y - NODE - 1} width={26} height={NODE * 2 + 2} rx={3}
-                            onClick={() => toggleFold(node.id)} />
-                    ) : (
-                      <circle className={cls} cx={node.x} cy={node.y} r={NODE} />
-                    )}
-                    {fold ? <text className="fold-text" x={node.x} y={node.y + 3} textAnchor="middle">+{fold.hidden}</text> : null}
-                    {here ? <circle className="node-selected" cx={node.x} cy={node.y} r={NODE + 4} /> : null}
-                    {seen && !here ? <circle className="node-peek" cx={node.x} cy={node.y} r={NODE + 3} /> : null}
-                    {node.children.length === 0 || node.id === ROOT ? (
-                      <text className="node-label" x={node.x} y={node.y + NODE + 11} textAnchor="middle">
-                        {node.depth === 0 ? "entry" : shortMove(node.last)}
-                      </text>
-                    ) : null}
                   </g>
                 );
               })}
