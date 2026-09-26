@@ -62,11 +62,21 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
   folder") cannot be satisfied by search at all, only by opening directories one at a time and reading their
   listings. Verified by running it — `find_files(path=<fixture>, contains='acme')` over a tree holding
   `Dev/acme/.git` answers "no file under … has 'acme' in its name (3 paths searched)". Whether the honest
-  repair is a directory-inclusive search or a separate action is an open design question, and it interacts
-  with B-2026-09-26-2 (the same function's unbounded double walk). (2026-09-26)
+  repair is a directory-inclusive search or a separate action is an open design question. The walk it filters
+  was bounded on 2026-09-26 (20,000 entries, six levels, and a line that says when it stopped early), so a
+  search over a home directory now finishes and says so; the directory blindness is untouched by that and
+  still stands. (2026-09-26)
 - **`stat_path` reports a directory as `0 bytes`.** An artefact of the platform — `stat().st_size` for a
   directory is not a content size — but the observation is read by a model, and "dir, 0 bytes" reads as
   "empty". It is the line the real run used as its confirmation of the wrong answer. (2026-09-26)
+- **Every other world's probe runs on the host's event loop too.** `FilesEnvironment.probe` was the one found
+  blocking, and the way it surfaced is worth keeping: a `find_files` over a real home directory wedged the
+  sidecar, so the window showed a run that looked alive — the elapsed clock kept ticking — and that could not
+  be stopped, because the stop path is served by the same loop. Fixed there (probes on a worker thread,
+  `82796d0`), but the other adapters were not audited and the same shape is available in each: the browser
+  world shells out to `agent-browser` and speaks CDP, the ledger world reads a vault, and any call that hangs
+  takes the loop — and the stop button — with it for as long as it hangs. Worth auditing before another
+  long-running world ships. (2026-09-26)
 
 - **A real model costs ~35 seconds per decision.** Two runs against `deepseek-flash` took 3m29s/6
   decisions and 6m37s/10 decisions — roughly 35s per step, because each step is a proposer call plus an
@@ -105,7 +115,6 @@ becomes a backlog row or an ADR in `plans/decisions.md`).
 | ID | Summary |
 |----|---------|
 | P-2026-09-25-1 | **Should we build a "civilization" world (Civ-style: cities, tech trees, diplomacy, long time horizons)?** Raised by the user, discussed with Marlowe (S005). Lean: not yet as a fifth first-party shipped world (`worlds.py`) — it's a different order of scope than maze/chess/files/browser (long-horizon, heavily stateful, arguably multi-agent) and would stress every open architecture question at once (the moving-world staleness contract in `plans/a-world-that-moves-brief.md` / ADR-5, the state-identity gap, structural recall in `plans/recall-what-is-relevant-brief.md`) rather than let any one of them get settled first. It's a strong fit as the flagship example world for **bring-your-own-world** (B-2026-09-23-11, `plans/worlds-users-can-bring-brief.md`) once that plugin loader ships — exactly the kind of world a third party would want to plug in rather than have hardcoded. No owner, no next step yet; promote to backlog once bring-your-own-world lands and someone wants to build the example. |
-| P-2026-09-26-1 | **Should the API key survive a restart, or should the sheet say more loudly why it does not?** The supervisor's question — "why do i have to enter the settings every time???" — asked after a session spent in the setup sheet, and the honest answer is narrower than the question: nothing else is being retyped. `%APPDATA%/Ti Matrix/settings.json` already holds the endpoint, the model name, the env-var name, the world, the world's fields, the goal, the budget and the memory flag. What it never holds is the key's **value** — `stripKeyish` in `core/settings.ts` and the deliberate omission in `hooks/useSidecar.ts:202` keep it out of both the settings file and the saved run artifact, and the sheet's own bar states the rule ("the key never leaves this window"). So a person re-enters the key, not the settings. The route that avoids even that exists today and is already named in the stored settings: the sidecar is spawned with no `env:` override (`app/main/index.ts:140`), so it inherits the app's environment, and `OPENAI_API_KEY` set before launch makes the field unnecessary. The question is whether that is enough. Options: store the value (Electron's `safeStorage`, DPAPI-backed on Windows, so it is never a plaintext file anywhere) — or keep it session-only and say the env-var route more prominently, so a person stops retyping something the app has deliberately decided not to keep. Not a defect: the behaviour is intentional, does what its author said, and is tested. A decision, and a security-shaped one, so it is the supervisor's. |
 
 ## Deferred work
 
