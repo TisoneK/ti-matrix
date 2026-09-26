@@ -199,3 +199,35 @@ async def test_a_remembering_run_shows_the_model_the_recall_tool(server, client_
     assert settled["reason"] is None, settled["reason"]
     assert settled["learned"] and "remembered" in settled["learned"], settled["learned"]
     assert stats.exists(), "the run remembered nothing"
+
+
+async def test_list_models_returns_the_endpoints_own_ids(server, client_factory):
+    client = await client_factory()
+    await client.send(type="list-models", base_url=f"{server.url}/v1")
+    frame = await client.drain_until("models")
+    assert frame["models"] == ["fake-large", "fake-small"]
+
+
+async def test_list_models_needs_a_base_url(server, client_factory):
+    client = await client_factory()
+    await client.send(type="list-models", base_url="")
+    err = await client.drain_until("models-error")
+    assert "base_url" in err["message"]
+
+
+async def test_list_models_reports_a_bad_endpoint_as_its_own_error_frame_not_a_runs(server, client_factory):
+    client = await client_factory()
+    await client.send(type="list-models", base_url="http://127.0.0.1:1")
+    err = await client.drain_until("models-error")
+    assert "cannot reach" in err["message"]
+
+
+async def test_list_models_works_while_a_run_is_in_flight(server, client_factory):
+    """It never touches `RunState` — a run in progress must not block it."""
+    client = await client_factory()
+    await client.send(type="goal", text="reach the exit of the maze from its entry", world="maze",
+                      config={"base_url": f"{server.url}/v1", "model": "fake"})
+    await client.drain_until("probe")  # the run is definitely in flight now
+    await client.send(type="list-models", base_url=f"{server.url}/v1")
+    frame = await client.drain_until("models")
+    assert frame["models"] == ["fake-large", "fake-small"]

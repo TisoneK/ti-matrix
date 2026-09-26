@@ -29,7 +29,7 @@ from aiohttp import WSMsgType, web
 from . import events as events_mod
 from . import protocol, worlds
 from .confirm_ws import WsConfirmer, parse_confirm_response
-from .protocol import decode, encode, parse_goal
+from .protocol import decode, encode, parse_goal, parse_list_models
 
 WS_AUTH = "token"
 
@@ -217,6 +217,28 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
         ))
 
 
+async def _list_models(ws: web.WebSocketResponse, body: dict[str, Any]) -> None:
+    """Answer a `list-models` frame — independent of any run, so it never touches `RunState`.
+
+    Its own `models-error` on failure, never the plain `error` frame: that one is a run's, and folding
+    an unrelated config lookup into it would leave `useSidecar.ts` reading a "run" that never happened.
+    """
+    try:
+        base_url, api_key, api_key_env = parse_list_models(body)
+    except ValueError as exc:
+        await _send_frame(ws, encode("models-error", message=str(exc)))
+        return
+    from ti_matrix.adapters.openai_compat import OpenAICompatModel
+
+    model = OpenAICompatModel(base_url, "", api_key=api_key, api_key_env=api_key_env)
+    try:
+        models = await model.list_models()
+    except RuntimeError as exc:
+        await _send_frame(ws, encode("models-error", message=str(exc)))
+        return
+    await _send_frame(ws, encode("models", models=models))
+
+
 def _goal(text: str):
     from ti_matrix.protocols import Goal
     return Goal(text)
@@ -290,6 +312,8 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 parsed = parse_confirm_response(body)
                 if parsed is not None:
                     state.confirmer.resolve(*parsed)
+            elif kind == "list-models":
+                loop.create_task(_list_models(ws, body))
             elif kind == "stop":
                 if state.running:
                     state.stop = True

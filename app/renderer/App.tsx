@@ -349,13 +349,16 @@ export function App() {
           }}
           headless={headless}
           onClose={() => setConfigOpen(false)}
+          models={session.models} modelsLoading={session.modelsLoading} modelsError={session.modelsError}
+          onFetchModels={() => session.fetchModels(model.base_url, apiKey, model.api_key_env)}
+          onClearModels={session.clearModels}
         />
       ) : null}
 
       {view === "run" ? (
         <main className="stage">
           {projection.decisions.length === 0 && status !== "running" && !welcomeSeen ? (
-            <Welcome onConfigure={() => setConfigOpen(true)} onDismiss={() => setWelcomeSeen(true)} />
+            <Welcome onConfigure={() => { setWelcomeSeen(true); setConfigOpen(true); }} onDismiss={() => setWelcomeSeen(true)} />
           ) : (
             <>
               <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}
