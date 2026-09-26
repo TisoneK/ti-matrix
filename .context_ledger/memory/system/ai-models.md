@@ -24,6 +24,7 @@ its work accordingly).
 |---|---|---|---|---|
 | Buffy (Freebuff host agent) | unknown | 2026-09-23 | 2026-09-23 | 1 |
 | Nadia (ZCode) | deepseek-flash | 2026-09-23 | 2026-09-23 | 1 |
+| Sable (ZCode) | claude-sonnet-5 | 2026-09-25 | 2026-09-26 | 2 |
 | Rosalind (ZCode) | deepseek-flash | 2026-09-26 | 2026-09-26 | 1 |
 
 ## Observations
@@ -40,6 +41,15 @@ its work accordingly).
   the layout. Re-verifying every change in the live window at four widths, rather than trusting the diff,
   is what caught the coverage readouts wrapping to a second ragged row and the Compare pane's clipped
   buttons. Needs the window, not the source, as its evidence. (2026-09-26)
+- **Sable / claude-sonnet-5:** strong on this repo — the config-drawer design pass, model auto-fetch, the
+  missing-synthesizer wire and the auto-replay fix were all found by driving the real app, and each shipped
+  with its reasoning written down. Its limits are worth knowing for scheduling: **it does not stop at a
+  clean boundary when its context runs out.** Its last session ended mid-write on 2026-09-26 — last commit
+  `3532cf7` at 00:36:37, orphaned renderer files written at 00:40–00:41, no clock-out and no `release` — so
+  it left an uncommitted red test in the tree, a roster row reading `Working` for four hours, and its own
+  in-flight work attributed to nobody, which the next session (Rosalind, S008) could only correct after the
+  supervisor said what had happened. Give it scoped work with a commit per step rather than long open-ended
+  runs: it works well right up to the wall. (2026-09-26)
 
 Concrete, evidence-based capabilities and limits — things demonstrated
 in this repo's sessions, not marketing claims or self-assessment.
