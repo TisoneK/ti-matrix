@@ -259,6 +259,10 @@ svg { display: block; }
   line-height: 17px;
 }
 
+/* A run that is over keeps its last line, dimmed — the record of how it went, not a live claim. */
+.narrator.done .pulse { background: var(--fg-4); box-shadow: none; animation: none; }
+.narrator.done .narrator-text { color: var(--fg-3); }
+
 /* ── motion: arrivals register ───────────────────────────────────────────── */
 
 /*
