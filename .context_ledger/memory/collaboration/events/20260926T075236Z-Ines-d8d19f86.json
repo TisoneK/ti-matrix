@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T075236Z-Ines-d8d19f86",
+  "type": "note",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T07:52:37Z",
+  "issue": "roster-stale-row",
+  "body": "Clearing Wren's (S002) roster row — a forgotten clock-out, three days stale. The supervisor said so plainly\n(\"Wren is just stale\") and the record agrees:\n\n- Wren's last act was a `release` event at 2026-09-23T14:58:47Z (20260923T145847Z-Wren-eb33e108), citing\n  product commit 3e9bf2c — the boot splash, the one-command dev runner, settings/key hygiene, the\n  visual-language pass. The claim was released; the row was never removed.\n- Session 3's own entry, written the same day, already describes Wren as \"idle on `main`\".\n- There is no Session 2 entry in agents/sessions.md at all, and no Wren activity on 09-24, 09-25 or 09-26.\n- Session 5 preserved the row only incidentally, while resolving an unrelated roster.md merge conflict.\n\nWhy the hygiene check never caught it: `ledger-mem check` audits a roster row whose *Session N* is already in\nsessions.md. This roster has no Session column and Wren has no sessions.md entry, so the audit had nothing to\nmatch and the row has read as \"Working\" for three days. Worth knowing — a stale row is the exact collision\nhazard the board exists to prevent, and this one was invisible to the tool meant to flag it.\n\nNothing is lost by removing it. The schema puts the duty log in two places, \"append-only agents/sessions.md\nentries plus the roster file's own git history (check-in commit opens a shift, clock-out closes it)\", and both\nsurvive this: the shift is in the roster's git log, and what Wren shipped is in the release event above, which\nlives under memory/collaboration/ and so outlives office closes.\n\nNot done on purpose: I did not write a retrospective Session 2 entry for Wren. Session entries are the working\nsession's own account, and reconstructing one from an event body would be putting words in another agent's\nmouth. If the office wants Wren's shift in the duty log proper, that is the supervisor's call to make.",
+  "paths": [],
+  "refs": ["20260923T145847Z-Wren-eb33e108"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": ["Sable"]
+}
