@@ -16,20 +16,38 @@ the same semantics and there is one description of what the flags mean.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TextIO
+from typing import Any, Callable, Optional, TextIO
 
 from ti_matrix.adapters import run_log, stats_file
 from ti_matrix.adapters.confirm import Ask
 from ti_matrix.learning import LearningProposer, Statistics
-from ti_matrix.model import LLMMoveProposer, LLMSynthesizer
+from ti_matrix.model import LLMEvaluator, LLMMoveProposer, LLMSynthesizer
 from ti_matrix.protocols import Action, ActionSpec, Confirmer, Environment, Proposer
 
-__all__ = ["Session"]
+__all__ = ["Seats", "Session"]
 
 
 def _names(flag: Optional[str]) -> set[str]:
     return {name.strip() for name in (flag or "").split(",") if name.strip()}
+
+
+@dataclass
+class Seats:
+    """What one run needs in its seats — the two required ones, and the two that only a real model fills.
+
+    ``model`` is the ``OpenAICompatModel`` a hosted run spends tokens through, or ``None`` for
+    ``builtin`` — the rule-based reasoner touches no network and has no usage or balance to report.
+    A CLI reads ``model.usage_snapshot()`` (and, opt in, ``await model.fetch_balance()``) after the run,
+    the same thing the desktop app's sidecar does for its own ``settled`` frame.
+    """
+
+    proposer: Proposer
+    evaluator: Any
+    simulator: Optional[Any] = None
+    synthesizer: Optional[Any] = None
+    model: Optional[Any] = None
 
 
 class Session:
@@ -65,12 +83,42 @@ class Session:
 
     def proposer(self, port: Any, specs: dict[str, ActionSpec]) -> Proposer:
         """The model's proposals, ordered by what this world has actually rewarded — when there is a record."""
-        inner = LLMMoveProposer(port, specs)
-        return LearningProposer(inner, self.statistics) if self.remember else inner
+        return self._learned(LLMMoveProposer(port, specs))
 
     def synthesizer(self, port: Any) -> LLMSynthesizer:
         """Answers from the facts when a run stops unsettled. Costs no extra call: the budget reserved one."""
         return LLMSynthesizer(port)
+
+    def _learned(self, proposer: Proposer) -> Proposer:
+        """Wrapped in what earlier runs rewarded, when there is a record — the one thing every proposer
+        gets regardless of whether it is a model's guesses or a world's own rules."""
+        return LearningProposer(proposer, self.statistics) if self.remember else proposer
+
+    def seats(self, world_name: str, env: Environment, model_name: str,
+              model_factory: Callable[[], Any], *, want_simulator: bool = False) -> Seats:
+        """The seats for one run, routed by ``model_name``.
+
+        ``"builtin"`` fills both required seats with this world's rule-based reasoner
+        (``ti_matrix.adapters.builtin.reasoner_for``) and never calls ``model_factory`` — the CLIs used
+        to build an ``OpenAICompatModel`` unconditionally, so ``--model builtin`` still dialled the
+        default ``base_url`` and every run hit ``proposer_error`` against nothing listening there.
+        Anything else builds the model from ``model_factory`` and wires the three LLM-backed seats
+        exactly as before. A reasoner has nothing to predict with, so ``want_simulator`` is only honoured
+        for a real model — a world driven by rules only ever names a non-read-only action for
+        confirmation, the same as a real model with no simulator configured.
+        """
+        from ti_matrix.adapters.builtin import is_builtin, reasoner_for
+
+        tools = env.tools()
+        if is_builtin(model_name):
+            reasoner = reasoner_for(world_name, tools, env)
+            return Seats(self._learned(reasoner), reasoner)
+        model = model_factory()
+        simulator = None
+        if want_simulator:
+            from ti_matrix.simulator import LLMSimulator
+            simulator = LLMSimulator(model)
+        return Seats(self.proposer(model, tools), LLMEvaluator(model), simulator, self.synthesizer(model), model)
 
     def confirmer(self, available: dict[str, ActionSpec]) -> Optional[Confirmer]:
         """The confirmer, having checked its names against the actions that exist.
@@ -102,6 +150,31 @@ class Session:
         learned = probes_now - self._probes_before
         return (f"remembered: {learned} new probe(s), {len(self.statistics.by_tool)} tool(s) known in "
                 f"{self.remember}") if learned else f"remembered: nothing new to add to {self.remember}"
+
+    async def usage_note(self, model: Optional[Any], *, balance: bool = False) -> str:
+        """One line for stderr: the tokens this run spent, and — opt in — what the account has left.
+
+        ``model`` is ``Seats.model``: ``None`` for ``builtin``, which touched no network and spent
+        nothing to report. A hosted endpoint that never sent a ``usage`` object back also reports
+        nothing, honestly, rather than a set of zeroes that would read as "this run cost nothing".
+        """
+        if model is None:
+            return ""
+        usage = model.usage_snapshot()
+        if not usage["calls"]:
+            return ""
+        parts = [f"tokens: {usage['prompt_tokens']} in + {usage['completion_tokens']} out = "
+                 f"{usage['total_tokens']} total over {usage['calls']} call(s)"]
+        if balance:
+            from ti_matrix.adapters.openai_compat import describe_balance
+            try:
+                info = await model.fetch_balance()
+            except RuntimeError as exc:
+                parts.append(f"balance: unavailable ({exc})")
+            else:
+                parts.append(f"balance: {describe_balance(info)}" if info is not None
+                             else "balance: not published for this endpoint")
+        return " · ".join(parts)
 
 
 class _OnlyThese:
