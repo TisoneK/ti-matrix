@@ -14,7 +14,7 @@ import pytest
 
 from ti_matrix import Action, CompositeEnvironment, EngineBudget, Evaluation, Goal, StateEngine
 from ti_matrix.adapters.browser import BrowserEnvironment
-from ti_matrix.adapters.browser.agent_browser import READS, AgentBrowser, _run_cli
+from ti_matrix.adapters.browser.agent_browser import READS, AgentBrowser, _agent_browser_actions, _run_cli
 from ti_matrix.adapters.confirm import Granted
 
 HAS_CLI = shutil.which("agent-browser") is not None
@@ -177,9 +177,14 @@ def test_the_read_set_and_the_table_agree():
     mapped to a subcommand reaches the CLI as `auth_save`, which it does not know: with no arguments, the only
     tokens left after the session are subcommand tokens, and the CLI's subcommands never contain an
     underscore.
+
+    Against the raw table (`_agent_browser_actions`), not `AgentBrowser().tools()`: this is a design-time
+    invariant about the table itself, and `tools()` on this machine may have gated the `webmcp_*` entries
+    out of it entirely depending on what CLI (if any) `agent-browser` resolves to — a fact about this
+    machine, not about whether the table and READS agree.
     """
+    offered = set(_agent_browser_actions(frozenset(), None))
     env = AgentBrowser()
-    offered = set(env.tools())
     assert set(READS) <= offered, f"declared as reads but not offered: {sorted(set(READS) - offered)}"
     for name in sorted(offered):
         after_binary = env.argv(name, {})[3:]  # drop the binary, --session and its value
@@ -189,7 +194,11 @@ def test_the_read_set_and_the_table_agree():
 
 def test_a_grant_widens_and_the_only_set_narrows():
     base = AgentBrowser()
-    assert sum(1 for s in base.tools().values() if s.read_only) == len(READS)
+    # READS itself, minus whichever webmcp_* actions this machine's CLI does not support — the table
+    # they came from is gated the same way `tools()` is, so the two must still agree on what is left.
+    webmcp_reads = {name for name in READS if name.startswith("webmcp_")}
+    expected_reads = len(READS) if base.supports_webmcp() else len(READS) - len(webmcp_reads)
+    assert sum(1 for s in base.tools().values() if s.read_only) == expected_reads
     assert base.is_read_only(Action("click", {})) is False
 
     one = AgentBrowser(perform={"click"})
@@ -203,6 +212,53 @@ def test_a_grant_widens_and_the_only_set_narrows():
     narrow = AgentBrowser(only={"snapshot", "get", "click"})
     assert sorted(narrow.tools()) == ["click", "get", "snapshot"]
     assert narrow.is_read_only(Action("click", {})) is False  # narrowing does not grant
+
+
+def test_webmcp_actions_are_gated_on_the_installed_clis_own_support(monkeypatch):
+    """A CLI old enough to predate WebMCP does not have these four commands at all — found first on a
+    machine where `--help` had no `webmcp` anywhere and neither did the installed package tree, while
+    `agent-browser --version` reported 0.35.1 against an npm latest of 0.38.1. Offering them anyway is
+    exactly how a run spends budget on a command that cannot work; gone from the table is the same
+    guarantee `available()` already makes for the whole CLI, just for the one corner that can be missing
+    on its own."""
+    import ti_matrix.adapters.browser.agent_browser as ab
+
+    monkeypatch.setattr(ab, "_supports_webmcp", lambda command: False)
+    unsupported = AgentBrowser()
+    assert unsupported.supports_webmcp() is False
+    assert not any(name.startswith("webmcp_") for name in unsupported.tools())
+    # asking for one directly still says plainly that it is not offered, not a silent no-op
+    assert unsupported.is_read_only(Action("webmcp_list", {})) is None
+
+    monkeypatch.setattr(ab, "_supports_webmcp", lambda command: True)
+    supported = AgentBrowser()
+    assert supported.supports_webmcp() is True
+    assert {"webmcp_list", "webmcp_invoke", "webmcp_result", "webmcp_cancel"} <= set(supported.tools())
+
+
+def test_the_detection_itself_reads_the_clis_own_help_text(tmp_path):
+    """Not mocked this time: a real, tiny stand-in binary for each shape a real installed CLI can take —
+    old enough to say nothing about WebMCP, and new enough to mention it in `--help` — proving the
+    detection reads what the CLI actually says rather than a version number this project would have to
+    keep in sync by hand."""
+    import ti_matrix.adapters.browser.agent_browser as ab
+
+    old = tmp_path / "old-agent-browser"
+    old.write_text("#!/bin/sh\necho 'usage: agent-browser [command]'\n")
+    old.chmod(0o755)
+    new = tmp_path / "new-agent-browser"
+    new.write_text("#!/bin/sh\necho 'WebMCP (experimental):'\necho '  webmcp list   List tools'\n")
+    new.chmod(0o755)
+
+    ab._webmcp_support_cache.clear()
+    assert ab._supports_webmcp(str(old)) is False
+    assert ab._supports_webmcp(str(new)) is True
+    # cached — a second ask of the same command does not re-run the binary
+    old.unlink()
+    assert ab._supports_webmcp(str(old)) is False  # still answers from the cache, not a rerun that would fail
+
+    ab._webmcp_support_cache.clear()
+    assert ab._supports_webmcp(str(tmp_path / "does-not-exist")) is False
 
 
 def test_the_cli_keeps_its_own_confirmation_queue_and_a_host_can_answer_it():
@@ -220,7 +276,10 @@ def test_the_cli_keeps_its_own_confirmation_queue_and_a_host_can_answer_it():
 def test_the_boundary_matches_the_native_environment():
     env = AgentBrowser()
     reads = {name for name, spec in env.tools().items() if spec.read_only}
-    assert reads == set(READS)
+    # READS itself, minus whichever webmcp_* actions this machine's CLI does not support (see
+    # `test_a_grant_widens_and_the_only_set_narrows` for why the two can honestly differ).
+    expected_reads = set(READS) if env.supports_webmcp() else set(READS) - {n for n in READS if n.startswith("webmcp_")}
+    assert reads == expected_reads
     assert {"click", "fill", "select", "drag", "upload", "eval", "close"} <= set(env.tools()) - reads
     assert env.is_read_only(Action("snapshot", {})) is True
     assert env.is_read_only(Action("click", {})) is False
@@ -450,7 +509,13 @@ _READ_ARGS: dict[str, dict] = {
 
 @pytest.mark.skipif(not HAS_CLI, reason="agent-browser is not installed")
 def test_every_read_action_is_a_command_the_real_cli_accepts(tmp_path):
-    """The whole read surface, checked against the tool rather than against my reading of its docs."""
+    """The whole read surface, checked against the tool rather than against my reading of its docs.
+
+    Against `env.tools()`, not the raw `READS` constant: a CLI old enough to predate WebMCP has those
+    four actions gated out of the table already (`_supports_webmcp`), so this sweep tests exactly what
+    this adapter would actually offer a run on this machine, not a fixed list this project's docs happen
+    to name — the same distinction the `webmcp_*` version-drift correction turned on.
+    """
     import functools
     import http.server
     import socketserver
@@ -476,7 +541,7 @@ def test_every_read_action_is_a_command_the_real_cli_accepts(tmp_path):
         _run_cli(env.argv("open", {"url": url}), timeout=120)
         version = (_run_cli(["agent-browser", "--version"], timeout=60).stdout or "").strip() or "the installed CLI"
         rejected = []
-        for name in sorted(READS):
+        for name in sorted(name for name, spec in env.tools().items() if spec.read_only):
             args = {k: (v.format(**replaced) if isinstance(v, str) else v)
                     for k, v in _READ_ARGS.get(name, {}).items()}
             done = _run_cli(env.argv(name, args), timeout=180)

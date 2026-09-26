@@ -343,6 +343,34 @@ def _build(name: str, args: dict) -> list[str]:
     return p
 
 
+_webmcp_support_cache: dict[str, bool] = {}
+
+
+def _supports_webmcp(command: str) -> bool:
+    """Whether the installed CLI's own ``--help`` mentions WebMCP at all.
+
+    Version drift, not a wrong table: the four ``webmcp_*`` actions are real and documented
+    (agent-browser.dev), but a machine can easily be running a CLI old enough to predate them — found
+    first on one where ``--help`` had no ``webmcp`` anywhere and neither did the installed package tree,
+    while ``agent-browser --version`` reported 0.35.1 against an npm latest of 0.38.1. There is no
+    version number worth parsing here: the help text already answers the only question that matters, and
+    a caller with the CLI itself in hand can ask that question more reliably than this project can track
+    which release first shipped the feature. Cached per command name — this runs a real process, and one
+    adapter may be constructed many times over a run's lifetime for the same CLI.
+    """
+    if command not in _webmcp_support_cache:
+        resolved = shutil.which(command)
+        supported = False
+        if resolved is not None:
+            try:
+                done = subprocess.run([resolved, "--help"], capture_output=True, text=True, timeout=5.0)
+                supported = "webmcp" in (done.stdout + done.stderr).lower()
+            except (OSError, subprocess.TimeoutExpired):
+                supported = False
+        _webmcp_support_cache[command] = supported
+    return _webmcp_support_cache[command]
+
+
 def _agent_browser_actions(perform: frozenset[str], only: Optional[frozenset[str]]) -> dict[str, ActionSpec]:
     """The command table. `read_only` is decided by what the host allows itself to perform."""
     specs = [
@@ -546,6 +574,11 @@ class AgentBrowser:
         self.timeout_s = timeout_s
         self.perform = frozenset(perform or ())
         self._actions = _agent_browser_actions(self.perform, frozenset(only) if only else None)
+        if not _supports_webmcp(self.command):
+            # A run that picks one of these on a CLI that predates them spends budget on a command that
+            # cannot work — gone from the table entirely is the same guarantee `available()` already
+            # makes for the whole CLI, just for the one corner of it that can be missing on its own.
+            self._actions = {name: spec for name, spec in self._actions.items() if not name.startswith("webmcp_")}
         self._lock = threading.Lock()  # one session, one command at a time, however wide the fan is
 
     # ── the contract ──
@@ -595,6 +628,12 @@ class AgentBrowser:
     def available(self) -> bool:
         """Whether the CLI this adapter needs is actually here — nothing is installed on its behalf."""
         return shutil.which(self.command) is not None
+
+    def supports_webmcp(self) -> bool:
+        """Whether the installed CLI's own surface includes WebMCP — already reflected in `tools()`
+        (the four `webmcp_*` actions are absent when this is `False`); exposed for a caller that wants
+        to ask the question directly rather than infer it from a table's shape."""
+        return _supports_webmcp(self.command)
 
     def _run(self, action: Action, argv: list[str], stdin: Optional[str]) -> Observation:
         command = self.argv(action.tool, action.args)
