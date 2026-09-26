@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T201542Z-Odette-4254c3c2",
+  "type": "note",
+  "session": "S011",
+  "agent": "Odette",
+  "created": "2026-09-26T20:15:42Z",
+  "issue": "repo-sync",
+  "body": "Live-testing finding for whoever owns the sidecar/renderer next: the app's WebSocket dies silently sometime after boot (cause not root-caused - recorder showed a fresh socket at click time with zero frames sent, the goal dropped mid-reconnect). Fixed loud-and-recoverable in 6780dda: send() on a closed socket now reconnects and start() surfaces the trouble sentence instead of the dead click. OPEN question: WHY the socket dies after a quiet boot - suspect candidates: heartbeat=30 sidecar keepalive vs long model calls, my own repeated CDP reloads, Windows power management on a background window. Repro: launch the app, wait minutes without touching it, click Run - first click occasionally does nothing. Worth a backlog row.",
+  "paths": [],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
