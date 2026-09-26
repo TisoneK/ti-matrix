@@ -300,6 +300,13 @@ class StateEngine:
             try:
                 evals = await self.evaluator.evaluate(state, outcomes)
             except Exception as exc:  # noqa: BLE001
+                # The probes in this fan already ran, against the real world, and their results are real
+                # observations. Losing them because the *scoring* call failed throws away everything the run
+                # paid for — a timeout, a provider returning nothing but reasoning, a rate limit — and leaves
+                # a window showing zero facts beside panels that visibly hold data. So they are learned
+                # first: the stop below then reports them, and says what they amount to, unverified.
+                for o in outcomes:
+                    state = state.learn(o, observed_at.get(o.move.fingerprint()))
                 yield await self._stopped(f"evaluator_error: {exc}", state, calls)
                 return
             calls += 1
@@ -442,7 +449,7 @@ class StateEngine:
             "fact_ages_ms": _fact_ages_ms(state),
             "trail": list(state.trail), "model_calls": calls,
         }
-        if "error" not in reason and state.facts and self.synthesizer is not None:
+        if state.facts and self.synthesizer is not None:
             try:
                 answer = " ".join(str(await self.synthesizer.answer(state)).split())
             except Exception as exc:  # noqa: BLE001 — a host bug must not eat the run's result
