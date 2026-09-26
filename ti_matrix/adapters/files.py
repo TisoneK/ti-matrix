@@ -8,6 +8,7 @@ accidental dependency on the application it first ran inside, this adapter stops
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 from pathlib import Path
 from typing import Optional
@@ -16,6 +17,15 @@ from ti_matrix.protocols import Action, ActionSpec, Observation
 
 _OBS_MAX_CHARS = 3000
 _MAX_ENTRIES = 200
+# A name search is the one action here that can run for minutes: it walks whatever tree it was pointed
+# at, and the files world now begins at the home directory, so the tree is somebody's whole profile —
+# caches, `AppData`, every `node_modules` they own. Two bounds, both reported rather than silent: how
+# many entries may be looked at, and how deep the walk goes. They exist so that "nothing matched" and
+# "I stopped looking" are different answers, which is the difference between an empty result a run can
+# trust and one it cannot. Measured: unbounded, a search of a real home directory on Windows did not
+# finish inside five minutes and left the window showing a run at 0% that had not stopped.
+_WALK_MAX_ENTRIES = 20_000
+_WALK_MAX_DEPTH = 6
 
 FILES_ACTIONS: dict[str, ActionSpec] = {
     s.name: s
@@ -23,7 +33,8 @@ FILES_ACTIONS: dict[str, ActionSpec] = {
         ActionSpec("list_dir", "List the entries in a directory.", '{"path": "<dir>"}'),
         ActionSpec("read_file", "Read the text of one file.", '{"path": "<file>"}'),
         ActionSpec("stat_path", "Facts about a path: exists, kind, size, modified.", '{"path": "<path>"}'),
-        ActionSpec("find_files", "Find files whose NAME contains a substring, under a directory.",
+        ActionSpec("find_files", "Find files whose NAME contains a substring, under a directory. "
+                                 "Bounded: it reports when it stopped before searching everything.",
                    '{"path": "<dir>", "contains": "<substring>"}'),
     )
 }
@@ -49,6 +60,16 @@ class FilesEnvironment:
         return None if spec is None else spec.read_only
 
     async def probe(self, action: Action) -> Observation:
+        # Every probe runs on a worker thread rather than on the caller's event loop. A filesystem call
+        # is the one thing here that can take real time — a directory listing on a slow disk, a read of a
+        # big file, and above all a name search — and the caller awaits it on the loop it serves
+        # everything else from. Run on the loop, one slow probe starves the whole host: the sidecar stops
+        # answering, so a run cannot be stopped or even reported on while it happens, and the window shows
+        # a live-looking run that will not move. These calls are read-only, so a thread costs one hop and
+        # takes nothing else with it.
+        return await asyncio.to_thread(self._probe_now, action)
+
+    def _probe_now(self, action: Action) -> Observation:
         try:
             return Observation(action, *getattr(self, f"_{action.tool}")(**action.args))
         except TypeError as exc:  # wrong or missing arguments — a failure the search can use
@@ -94,9 +115,34 @@ class FilesEnvironment:
         if not root.is_dir():
             return False, f"not a directory: {_display(root)}"
         needle = contains.lower()
-        hits = [p for p in root.rglob("*") if p.is_file() and needle in p.name.lower()]
+        hits: list[Path] = []
+        # One walk, not two, and bounded on both axes. The count this reports is the number of entries
+        # actually looked at — which, when the bound bit, is *not* the size of the tree, and the line says
+        # so rather than leaving a run to read a truncated answer as a whole one.
+        seen = 0
+        stopped = False
+        stack: list[tuple[Path, int]] = [(root, 0)]
+        while stack and not stopped:
+            here, depth = stack.pop()
+            try:
+                entries = sorted(here.iterdir(), key=lambda e: e.name.lower())
+            except OSError:
+                continue  # a directory that cannot be read is not a failed search
+            for entry in entries:
+                seen += 1
+                if seen > _WALK_MAX_ENTRIES:
+                    stopped = True
+                    break
+                try:
+                    if entry.is_dir():
+                        if depth < _WALK_MAX_DEPTH:
+                            stack.append((entry, depth + 1))
+                    elif entry.is_file() and needle in entry.name.lower():
+                        hits.append(entry)
+                except OSError:
+                    continue  # vanished, or unreadable: it cannot be reported either way
         if not hits:
-            searched = len(list(root.rglob("*")))
-            return True, f"no file under {_display(root)} has {contains!r} in its name ({searched} paths searched)"
+            told = f"no file under {_display(root)} has {contains!r} in its name ({seen} paths searched"
+            return True, (f"{told}, stopped at the {_WALK_MAX_ENTRIES}-path limit)" if stopped else f"{told})")
         names = " · ".join(_display(p) for p in hits[:40])
         return True, f"{len(hits)} file(s) under {_display(root)} with {contains!r} in the name: {names}"

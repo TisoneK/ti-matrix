@@ -1,8 +1,12 @@
 """Adapter #2 — a read-only filesystem — must work with no host application present."""
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 
+from ti_matrix.adapters import files as files_adapter
 from ti_matrix.adapters.files import FilesEnvironment
 from ti_matrix.protocols import Action
 
@@ -44,3 +48,65 @@ async def test_it_reports_real_facts_and_real_failures(env):
 
     bad = await env_.probe(Action("list_dir", {"wrong_argument": "x"}))
     assert bad.ok is False and "bad arguments" in bad.text
+
+
+@pytest.mark.asyncio
+async def test_a_name_search_is_bounded_and_says_so(env, monkeypatch):
+    """A search that stopped must not read as a search that found nothing.
+
+    The bound exists because this action walks whatever tree it is pointed at, and the files world now
+    begins at the home directory — `find_files` over a real profile did not finish inside five minutes.
+    """
+    env_, d = env
+    for i in range(6):
+        (d / f"file{i}.txt").write_text("x")
+
+    # Well under the tree's size: the walk must stop, and admit it.
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_ENTRIES", 4)
+    stopped = await env_.probe(Action("find_files", {"path": str(d), "contains": "nomatch"}))
+    assert stopped.ok
+    assert "stopped at the 4-path limit" in stopped.text, stopped.text
+    assert "paths searched" in stopped.text
+
+    # And when nothing interrupted it, the answer is a plain one with no such caveat.
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_ENTRIES", 10_000)
+    whole = await env_.probe(Action("find_files", {"path": str(d), "contains": "nomatch"}))
+    assert whole.ok and "stopped at" not in whole.text, whole.text
+
+
+@pytest.mark.asyncio
+async def test_a_name_search_does_not_walk_past_its_depth(env, monkeypatch):
+    env_, d = env
+    deep = d / "one" / "two" / "three"
+    deep.mkdir(parents=True)
+    (deep / "wanted.txt").write_text("x")
+
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_DEPTH", 1)
+    shallow = await env_.probe(Action("find_files", {"path": str(d), "contains": "wanted"}))
+    assert shallow.ok and "no file under" in shallow.text
+
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_DEPTH", 6)
+    reached = await env_.probe(Action("find_files", {"path": str(d), "contains": "wanted"}))
+    assert reached.ok and "wanted.txt" in reached.text
+
+
+@pytest.mark.asyncio
+async def test_a_slow_probe_does_not_freeze_the_callers_event_loop(env, monkeypatch):
+    """The reason this matters is not tidiness: the host awaits a probe on the loop it serves the run's
+    own control channel from, so a probe that blocks it stops a run being reported on — or stopped."""
+    env_, d = env
+    monkeypatch.setattr(FilesEnvironment, "_list_dir", lambda self, path: (time.sleep(0.3), (True, "slow"))[1])
+
+    ticks = 0
+
+    async def heartbeat() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.02)
+            ticks += 1
+
+    beat = asyncio.create_task(heartbeat())
+    obs = await env_.probe(Action("list_dir", {"path": str(d)}))
+    beat.cancel()
+    assert obs.ok and obs.text == "slow"
+    assert ticks >= 3, f"the event loop was starved while the probe ran ({ticks} beats in 300ms)"
