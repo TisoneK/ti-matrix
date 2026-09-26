@@ -110,3 +110,18 @@ def test_the_browser_world_builds_without_starting_a_browser():
     env = build("browser", {"url": "https://example.com"})
     assert isinstance(env, BrowserEnvironment)
     assert env.start_url == "https://example.com"
+
+
+def test_the_browser_world_captures_page_frames_where_the_host_says(tmp_path):
+    """A `frames_dir` in the config is the sidecar saying "put a picture of the page beside every
+    applied move, in this run's own directory". The factory passes it through and nothing else
+    changes: same actions, same prompts, and a caller without one — the CLI, a test — gets today's
+    behaviour, because the config that carries it is the app's alone."""
+    from ti_matrix.adapters.browser import BrowserEnvironment
+
+    plain = build("browser", {})
+    assert getattr(plain, "frames_dir", None) is None
+    frames = build("browser", {"frames_dir": str(tmp_path / "frames")})
+    assert isinstance(frames, BrowserEnvironment)
+    assert frames.frames_dir == tmp_path / "frames"
+    assert set(frames.tools()) == set(plain.tools())  # the tool table the model sees is unchanged

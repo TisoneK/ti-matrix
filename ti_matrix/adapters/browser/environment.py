@@ -37,7 +37,7 @@ import tempfile
 import threading
 from dataclasses import replace
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from ti_matrix.adapters.browser.cdp import BrowserError, CdpError, Chrome
 from ti_matrix.protocols import Action, ActionSpec, Observation
@@ -182,6 +182,23 @@ class BrowserEnvironment:
         if self._owns_chrome and self._chrome is not None:
             self._chrome.close()
             self._chrome = None
+
+    def capture_frame(self, path: str | Path) -> tuple[bool, str]:
+        """One JPEG of the page as it stands, for the host's run record — best effort, by design.
+
+        Called by the sidecar right after the engine applies a move, so the picture is the page the
+        *applied* action produced: what a person scrubbing the run wants to see next to that step. A
+        capture that fails (the tab navigated, the browser died, the disk is gone) reports itself as a
+        `(False, why)` tuple instead of raising — the run must not end over a picture that did not get
+        taken, and the panel's own empty state is where that failure gets said."""
+        try:
+            page = self.page()
+            _, width, height = page.screenshot(path, fmt="jpeg", quality=72)
+            return True, f"{width}x{height}"
+        except (CdpError, BrowserError, OSError) as exc:
+            return False, f"{type(exc).__name__}: {exc}"[:300]
+        except Exception as exc:  # noqa: BLE001 — the same bargain `probe` keeps: never crash the run
+            return False, f"{type(exc).__name__}: {exc}"[:300]
 
     def __enter__(self) -> "BrowserEnvironment":
         return self

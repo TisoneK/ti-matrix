@@ -18,7 +18,7 @@ import { MazeKnowledge, KnownCell, boundsOf, cellKey, parseCellKey, statsOf } fr
 import { Decision, EngineEventFrame } from "../core/types";
 import { Chip, IconButton } from "../ui/controls";
 import { Empty, PaneBody, PaneHead, Readouts } from "../ui/atoms";
-import { WorldSurface } from "./WorldSurface";
+import { WorldSurface, PageView } from "./WorldSurface";
 
 const PITCH = 20;
 const GAP = 1.6;
@@ -29,7 +29,7 @@ export interface MapFocus {
   onPin: (cell: string | null) => void;
 }
 
-export function MapPanel({ knowledge, decisions, world, events, focus, liveStep, hoverCell }: {
+export function MapPanel({ knowledge, decisions, world, events, focus, liveStep, hoverCell, page }: {
   knowledge: MazeKnowledge;
   decisions: Decision[];
   world: string;
@@ -38,6 +38,8 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
   liveStep: number;
   /** The cell the shared cursor is over — a ledger row or tree node elsewhere in the window. */
   hoverCell?: string | null;
+  /** Who owns the page frames — handed to the world surface, which shows the browser world's page. */
+  page?: PageView;
 }) {
   const [heat, setHeat] = useState(false);
   const [ghost, setGhost] = useState(true);
@@ -51,7 +53,7 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
   if (world !== "maze") {
     return (
       <section className="pane" aria-label="the world">
-        <WorldSurface world={world} events={events} decisions={decisions} />
+        <WorldSurface world={world} events={events} decisions={decisions} page={page} />
       </section>
     );
   }

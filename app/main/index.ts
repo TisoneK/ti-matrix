@@ -32,6 +32,8 @@ const START_TIMEOUT_MS = 15000;
 /** Run ids are minted by the renderer, so they are validated here: no dots, no separators, nothing to climb. */
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
+/** One captured page frame. At 72-quality JPEG a 1080p page is tens of KB; the cap is for the pathological page. */
+const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 
 let sidecar: ChildProcess | null = null;
 /** The splash: small, first on screen, closed the moment the app takes over. */
@@ -222,6 +224,50 @@ async function readJson<T>(file: string): Promise<T | null> {
   }
 }
 
+/**
+ * One captured frame of a run's own directory, as bytes — or null when the request could not name one.
+ *
+ * The renderer has no filesystem and is never trusted with a path, so it asks by run id + frame name
+ * and this resolves both: the id through the same strict `runDir` check every other handler uses, the
+ * name through `NNN.jpg` — digits, nothing else, so `..`, separators and any other climb are not merely
+ * rejected but unrepresentable — and the file must land inside that run's `frames/` or it is refused.
+ * A frame that is not there yet (the capture has not happened, or failed) is null, which the renderer
+ * reads as its empty state rather than as an error.
+ */
+async function readFrame(id: unknown, name: unknown): Promise<{ data: Buffer; size: number } | null> {
+  if (typeof name !== "string" || !/^\d{1,6}\.jpg$/.test(name)) return null;
+  const dir = runDir(id);
+  if (dir === null) return null;
+  const file = path.join(dir, "frames", name);
+  const root = path.resolve(dir, "frames") + path.sep;
+  if (!path.resolve(file).startsWith(root)) return null;
+  try {
+    const stat = await fs.promises.stat(file);
+    if (!stat.isFile() || stat.size > MAX_FRAME_BYTES) return null;
+    return { data: await fs.promises.readFile(file), size: stat.size };
+  } catch {
+    return null; // a missing frame is the empty state, not an error
+  }
+}
+
+/** The size of a run directory on disk, frames and all — or null when it is not there to measure. */
+async function dirSize(dir: string): Promise<number | null> {
+  let total = 0;
+  const walk = async (d: string): Promise<void> => {
+    for (const entry of await fs.promises.readdir(d, { withFileTypes: true })) {
+      const p = path.join(d, entry.name);
+      if (entry.isDirectory()) await walk(p);
+      else total += (await fs.promises.stat(p)).size;
+    }
+  };
+  try {
+    await walk(dir);
+    return total;
+  } catch {
+    return null; // a directory that vanished mid-listing reads as "no size to report"
+  }
+}
+
 function registerLibrary(): void {
   /**
    * Where a world's accumulated experience lives. One file per world, because what the maze taught a
@@ -250,8 +296,15 @@ function registerLibrary(): void {
     // only says yes or no to it, after checking it names a directory directly under runs/.
     const dir = runDir(id);
     if (dir === null) return null;
-    await fs.promises.mkdir(dir, { recursive: true });
-    return { id, dir, recordPath: path.join(dir, "events.jsonl") };
+    const framesDir = path.join(dir, "frames");
+    await fs.promises.mkdir(framesDir, { recursive: true });
+    return { id, dir, framesDir, recordPath: path.join(dir, "events.jsonl") };
+  });
+
+  ipcMain.handle("tm:run-frame", async (_e, id: unknown, name: unknown) => {
+    const frame = await readFrame(id, name);
+    if (frame === null) return null;
+    return frame.data.toString("base64");
   });
 
   ipcMain.handle("tm:run-save", async (_e, artifact: unknown, meta: unknown) => {
@@ -275,13 +328,28 @@ function registerLibrary(): void {
     } catch {
       return [];
     }
-    const metas = await Promise.all(names.map((name) => readJson<Record<string, unknown>>(path.join(runsDir(), name, "meta.json"))));
+    const metas = await Promise.all(names.map(async (name) => {
+      const meta = await readJson<Record<string, unknown>>(path.join(runsDir(), name, "meta.json"));
+      if (meta === null || typeof meta["id"] !== "string") return null;
+      // What the run actually occupies on disk. A browser run now keeps a frame per step, so a long
+      // one can be tens of megabytes where the JSON is kilobytes — a size the row should say, or a
+      // person wonders where their disk went (the brief's own "size on disk" watch-out).
+      const bytes = await dirSize(path.join(runsDir(), name)).catch(() => null);
+      const row: Record<string, unknown> = { ...meta };
+      if (bytes !== null && bytes > 0) row["bytes"] = bytes;
+      return row;
+    }));
     return metas.filter((m): m is Record<string, unknown> => m !== null && typeof m["id"] === "string");
   });
 
   ipcMain.handle("tm:run-load", async (_e, id: unknown) => {
     const dir = runDir(id);
-    return dir === null ? null : readJson(path.join(dir, "run.json"));
+    if (dir === null) return null;
+    const artifact = await readJson<Record<string, unknown>>(path.join(dir, "run.json"));
+    if (artifact === null) return null;
+    // Compare shows the disk cost of both runs beside their scorecard; measured here where the files are.
+    const bytes = await dirSize(dir);
+    return bytes === null ? artifact : { ...artifact, bytes };
   });
 
   ipcMain.handle("tm:run-delete", async (_e, id: unknown) => {

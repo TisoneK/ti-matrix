@@ -140,6 +140,9 @@ function Scorecard({ a, b, atA, atB }: {
     { label: "mean belief", x: `${Math.round(atA.trust.mean * 100)}%`, y: `${Math.round(atB.trust.mean * 100)}%` },
     { label: "trend", x: trustA, y: trustB },
     { label: "cells seen", x: atA.knowledge.cells.size, y: atB.knowledge.cells.size, delta: diff(atA.knowledge.cells.size, atB.knowledge.cells.size) },
+    // What each run occupies on disk — mostly the browser world's page frames. Measured by main when
+    // the run was loaded; undefined ("not measured") rather than a zero that claims the run is free.
+    { label: "on disk", x: a.bytes === undefined ? "—" : bytes(a.bytes), y: b.bytes === undefined ? "—" : bytes(b.bytes) },
   ];
   return (
     <dl className="scorecard">
@@ -166,6 +169,8 @@ function Scorecard({ a, b, atA, atB }: {
 }
 
 const count = (ds: Decision[], kind: Decision["kind"]): number => ds.filter((d) => d.kind === kind).length;
+const bytes = (n: number): string =>
+  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;
 const countFlag = (ds: Decision[], flag: string): number => ds.filter((d) => d.flags.includes(flag as Decision["flags"][number])).length;
 const diff = (x: number, y: number): string => {
   const d = x - y;

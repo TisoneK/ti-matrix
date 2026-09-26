@@ -43,6 +43,8 @@ export interface Session {
   status: Status;
   worlds: WorldInfo[];
   events: EngineEventFrame[];
+  /** The id of the run on screen — live or reopened from the library; the page frames key off it. */
+  runId: string | null;
   settled: Settled | null;
   confirm: ConfirmRequest | null;
   /** The artifact of the run that just finished, once the library has it. */
@@ -57,6 +59,8 @@ export interface Session {
   pickDirectory: () => Promise<string | null>;
   /** Reopen a stored run: its events become the current run, with no socket involved. */
   open: (artifact: RunArtifact) => void;
+  /** One captured page frame of one run, base64 — null when that run has none (or this is a plain tab). */
+  frame: (id: string, name: string) => Promise<string | null>;
   clear: () => void;
   /** Try the socket again now, from a button. Also respawns the sidecar when it is the thing that died. */
   retry: () => void;
@@ -85,6 +89,7 @@ export function useSidecar(bookmarks: number[]): Session {
     list: async () => (tm.runsList ? tm.runsList() : []),
     load: async (id) => (tm.runsLoad ? tm.runsLoad(id) : null),
     remove: async (id) => (tm.runsDelete ? tm.runsDelete(id) : false),
+    frame: async (id, name) => (tm.runFrame ? tm.runFrame(id, name) : null),
   } : undefined), [tm]);
   const library = useMemo(() => createLibrary(backend), [backend]);
 
@@ -109,6 +114,8 @@ export function useSidecar(bookmarks: number[]): Session {
   bookmarksRef.current = bookmarks;
   const pending = useRef<{ id: string; goal: string; world: string; config: Record<string, unknown>;
                           startedAt: string; remembered: boolean } | null>(null);
+  // The run-directory reply, kept beside `pending` so the artifact can record where its frames live.
+  const startedRef = useRef<{ framesDir?: string } | null>(null);
 
   useEffect(() => {
     if (!tm) {
@@ -162,7 +169,8 @@ export function useSidecar(bookmarks: number[]): Session {
           setStatus("ready");
           const run = pending.current;
           if (run) {
-            const artifact = buildArtifact(run, collected.current, info, bookmarksRef.current);
+            const artifact = buildArtifact(run, collected.current, info, bookmarksRef.current,
+                                           startedRef.current?.framesDir ?? null);
             void library.save(artifact, summarise(artifact)).then((ok) => { if (ok) setSaved(artifact); });
             pending.current = null;
           }
@@ -202,23 +210,35 @@ export function useSidecar(bookmarks: number[]): Session {
     setConfirm(null);
     setStatus("running");
     // A pasted key rides to the sidecar and nowhere else: the run directory and the artifact are
-    // written to disk, and a secret has no business in either.
-    const { api_key, ...kept } = config as Record<string, unknown>;
+    // written to disk, and a secret has no business in either. `frames_dir` is the same kind of thing:
+    // main names the directory, the goal config carries it to the world factory, and neither the saved
+    // artifact nor the settings may keep it — it only means something to this run on this machine.
+    const { api_key, frames_dir, ...kept } = config as Record<string, unknown>;
     // A run directory first, so the engine's own JSON-lines log lands next to the artifact. If there is no
     // preload the run still happens — it simply will not outlive the window.
     const id = newRunId();
     const started = await library.begin(id, world, goal, kept).catch(() => null);
+    startedRef.current = started;
+    setRunId(id);
+    const withFrames = started?.framesDir
+      ? { ...kept, frames_dir: started.framesDir }
+      : kept;
     // What earlier runs in this world established. The sidecar loads it before the run and saves it
     // after, which is what puts `recall` in the model's tools and wraps the proposer in the learning
     // layer. A browser tab has no filesystem, so it simply runs without a memory.
     const memory = remember && tm?.memoryPath ? await tm.memoryPath(world).catch(() => null) : null;
     pending.current = { id, goal, world, config: kept, startedAt: new Date().toISOString(),
                         remembered: memory !== null };
-    sidecar.current?.goal(goal, world, api_key === undefined ? config : { ...kept, api_key },
+    sidecar.current?.goal(goal, world,
+                          { ...withFrames, ...(api_key === undefined ? {} : { api_key }) },
                           { record: started?.recordPath ?? null, remember: memory, budget });
   }, [library, tm]);
 
   const stop = useCallback(() => sidecar.current?.stop(), []);
+
+  // The id of the run on screen. It is known from the moment the run directory is asked for (before the
+  // goal goes out), so the page surface can fetch a frame the instant the first applied move lands.
+  const [runId, setRunId] = useState<string | null>(null);
 
   const answer = useCallback((granted: boolean) => {
     setConfirm((request) => {
@@ -233,6 +253,7 @@ export function useSidecar(bookmarks: number[]): Session {
   const open = useCallback((artifact: RunArtifact) => {
     collected.current = [...artifact.events];
     setEvents(collected.current);
+    setRunId(artifact.id);  // a reopened run's frames live in its own directory — same id, still servable
     setSettled({
       answer: artifact.outcome.answer, reason: artifact.outcome.reason,
       events: artifact.events.length, summary: artifact.outcome.summary,
@@ -251,6 +272,7 @@ export function useSidecar(bookmarks: number[]): Session {
     setEvents([]);
     setSettled(null);
     setSaved(null);
+    setRunId(null);
   }, []);
 
   /**
@@ -291,8 +313,12 @@ export function useSidecar(bookmarks: number[]): Session {
 
   const headless = !tm?.runsSave;
 
-  return { status, worlds, events, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, setTrouble,
-           open, clear, retry, trouble, models, modelsLoading, modelsError, fetchModels, clearModels };
+  const frame = useCallback(
+    (id: string, name: string) => (tm?.runFrame ? tm.runFrame(id, name) : Promise.resolve(null)),
+    [tm]);
+
+  return { status, worlds, events, runId, settled, confirm, saved, headless, library, run, stop, answer, pickDirectory, setTrouble,
+           open, clear, retry, trouble, models, modelsLoading, modelsError, fetchModels, clearModels, frame };
 }
 
 /** The run as an artifact: the events verbatim, the world, the model, and how it ended. */
@@ -302,6 +328,7 @@ function buildArtifact(
   events: EngineEventFrame[],
   info: Settled,
   bookmarks: number[],
+  framesDir?: string | null,
 ): RunArtifact {
   const seedPart = String(run.config["seed"] ?? "").trim();
   return {
@@ -315,5 +342,8 @@ function buildArtifact(
     events,
     outcome: outcomeFromSettled(info),
     bookmarks: [...bookmarks],
+    // The panel fetches a frame by run id + seq; the path main handed out is only recorded when there
+    // is one, and the artifact keeps it in a `framesDir` field, not inside `config`.
+    ...(framesDir ? { framesDir } : {}),
   };
 }

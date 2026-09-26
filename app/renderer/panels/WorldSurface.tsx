@@ -17,6 +17,15 @@ import { finalAnswerOf } from "../core/decisions";
 import { readFiles, treeOf, Node, FilesKnowledge } from "../core/worlds/files";
 import { readBrowser, BrowserKnowledge } from "../core/worlds/browser";
 import { Empty, PaneBody, PaneHead } from "../ui/atoms";
+import { PageSurface } from "./PageSurface";
+
+/** Everything the page surface needs that the world surface cannot derive: who owns the frames. */
+export interface PageView {
+  runId: string | null;
+  upto: number;
+  at: Decision | null;
+  getFrame: (id: string, name: string) => Promise<string | null>;
+}
 
 export interface Row {
   left: string;
@@ -32,9 +41,15 @@ export interface Card {
   empty?: string;
 }
 
-export function WorldSurface({ world, events, decisions }: { world: string; events: EngineEventFrame[]; decisions: Decision[] }) {
+export function WorldSurface({ world, events, decisions, page }: { world: string; events: EngineEventFrame[]; decisions: Decision[]; page?: PageView }) {
   const cards = useMemo(() => cardsFor(world, events), [world, events]);
   const finalAnswer = useMemo(() => finalAnswerOf(decisions), [decisions]);
+  // Where the page stood at the cursor, as the run's own answers named it — the browser fold tracks it
+  // from `loaded <url>`, `title_and_url` and friends, so a run that never asked never says.
+  const upto = page?.upto ?? events.length;
+  const pageUrl = useMemo(
+    () => (world === "browser" ? readBrowser(events.slice(0, upto)).page?.url ?? null : null),
+    [world, events, upto]);
   // A card with no rows is still worth drawing once the run has read something — "nothing was refused" is
   // news. Before it has, three cards saying nothing are three empty boxes, which is what a first glance at
   // this pane used to be: an answerless grid of nothings instead of one sentence saying so.
@@ -44,6 +59,10 @@ export function WorldSurface({ world, events, decisions }: { world: string; even
     <>
       <PaneHead title="World" sub={`${world} — read as it is observed, never in advance`} />
       <PaneBody scroll pad>
+        {world === "browser" && page ? (
+          <PageSurface runId={page.runId} events={events} upto={upto} at={page.at} pageUrl={pageUrl}
+                       getFrame={page.getFrame} />
+        ) : null}
         {finalAnswer ? (
           <section className={`card answer-card ${finalAnswer.verified ? "verified" : "unverified"}`}>
             <h4>{finalAnswer.verified ? "Answer" : "Best answer from what it read"}</h4>

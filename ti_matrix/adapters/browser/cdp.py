@@ -486,9 +486,15 @@ class Page:
         self.call("Input.dispatchMouseEvent", type="mouseWheel", x=10, y=10,
                   deltaX=delta_x, deltaY=delta_y, button="none", buttons=0)
 
-    def screenshot(self, path: str | Path, *, full_page: bool = False) -> tuple[Path, int, int]:
-        """Write a PNG and say what size it is — the one thing here a text-only model cannot read itself."""
-        result = self.call("Page.captureScreenshot", format="png", captureBeyondViewport=full_page)
+    def screenshot(self, path: str | Path, *, full_page: bool = False, fmt: str = "png",
+                   quality: int = 85) -> tuple[Path, int, int]:
+        """Write a screenshot and say what size it is — the one thing here a text-only model cannot read
+        itself. `fmt="jpeg"` (with a `quality`) is for the frames a run writes per applied move, where
+        tens of kilobytes beat PNG's fidelity: these are for a person to glance at, never for a model."""
+        params: dict[str, Any] = {"format": fmt, "captureBeyondViewport": full_page}
+        if fmt == "jpeg":
+            params["quality"] = max(1, min(int(quality), 100))
+        result = self.call("Page.captureScreenshot", **params)
         data = result.get("data")
         if not data:
             raise CdpError("the browser returned no screenshot data")

@@ -525,6 +525,37 @@ svg { display: block; }
   margin-bottom: var(--s4);
   box-shadow: inset 3px 0 0 var(--green);
 }
+
+/* ── the page surface (browser world) ─────────────────────────────────────
+   Two layers, deliberately unequal in voice: the screenshot is the *world* (it gets the picture, a
+   hairline frame, no chrome), the reading under it is *the engine's own words* (mono, quoted back). The
+   caption says the difference outright — a bare screenshot would claim the agent saw what the viewer
+   sees, and this app's whole premise is the gap between those two things. Class names are prefixed:
+   the stylesheet is one flat global file, so a bare `.page` would be this session's `.ghost`. */
+.page-surface { padding: var(--s3) var(--s4); margin-bottom: var(--s3); }
+.page-surface h4 { font-size: 11px; margin-top: var(--s2); }
+.page-surface h4:first-child { margin-top: 0; }
+.page-shot {
+  display: block;
+  width: 100%;
+  margin-top: var(--s2);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: #000;
+}
+.page-shot-none { margin: var(--s2) 0 0; font-size: 11px; line-height: 1.5; }
+.page-note { margin: var(--s2) 0 0; font-size: 10.5px; line-height: 1.55; color: var(--fg-3); }
+.page-note b { color: var(--fg-2); }
+.page-read {
+  margin: var(--s2) 0 0;
+  font: 400 11.5px/1.6 var(--mono);
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.page-read-none { margin: var(--s2) 0 0; font-size: 11px; }
 .answer-card .answer-body { font-size: 16.5px; line-height: 1.45; }
 
 /* What a pane has to say when it has nothing: a sentence, not a panel. Empty cards used to take a full

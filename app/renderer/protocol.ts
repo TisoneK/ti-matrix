@@ -93,6 +93,8 @@ export interface RunStartInfo {
   dir: string;
   /** The run log the sidecar appends to — `ti_matrix.adapters.run_log` reads it back. */
   recordPath: string | null;
+  /** Where captured page frames go — present whenever a run directory exists, used by the browser world. */
+  framesDir?: string;
 }
 
 /** The window controls the rail draws itself, wherever the OS does not draw them. */
@@ -127,6 +129,8 @@ export interface TmApi {
   runsLoad?: (id: string) => Promise<RunArtifact | null>;
   runsDelete?: (id: string) => Promise<boolean>;
   runsDir?: () => Promise<string>;
+  /** One captured page frame, base64 — by id + frame name, never a path (main resolves and validates). */
+  runFrame?: (id: string, name: string) => Promise<string | null>;
   /** The file holding what previous runs in this world established. Absent in a plain browser tab. */
   memoryPath?: (world: string) => Promise<string | null>;
   /** Settings that outlive the window. Absent in a plain browser tab; `core/settings.ts` copes. */

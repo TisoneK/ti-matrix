@@ -115,7 +115,15 @@ def _browser_world(config: dict[str, Any]) -> Any:
 
     url = str(config.get("url", "")).strip() or None
     # headless=False on purpose: a person is watching, and the app's confirmer dialogs pair with it.
-    return BrowserEnvironment(url, headless=bool(config.get("headless", False)))
+    env = BrowserEnvironment(url, headless=bool(config.get("headless", False)))
+    # A `frames_dir` in the config means "put a picture of the page beside every applied move", and the
+    # app sets it under the run's own directory (see `main.py`). A caller without one — the CLI, a test
+    # — gets today's behaviour, unchanged. The factory only passes the directory through; nothing about
+    # the world's actions, tool table or prompts changes, and no capture happens unless the sidecar asks.
+    frames_dir = str(config.get("frames_dir", "")).strip()
+    if frames_dir:
+        env.frames_dir = Path(frames_dir)
+    return env
 
 
 # ── the registry — the whole list of what v1 can drive ──────────────────────

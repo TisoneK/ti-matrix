@@ -17,7 +17,7 @@ import { outcomeLabel, outcomeTone } from "../core/format";
 import { Badge, Empty, PaneHead } from "../ui/atoms";
 import { Button } from "../ui/controls";
 
-type SortKey = "startedAt" | "durationMs" | "decisions" | "surprises" | "backtracks" | "meanConfidence" | "world" | "model" | "seed";
+type SortKey = "startedAt" | "durationMs" | "decisions" | "surprises" | "backtracks" | "meanConfidence" | "world" | "model" | "seed" | "bytes";
 
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
   { key: "startedAt", label: "when" },
@@ -29,6 +29,7 @@ const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
   { key: "surprises", label: "surprises", numeric: true },
   { key: "meanConfidence", label: "mean belief", numeric: true },
   { key: "durationMs", label: "took", numeric: true },
+  { key: "bytes", label: "on disk", numeric: true },
 ];
 
 export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, selected, onSelect, onRefresh, persisted }: {
@@ -123,6 +124,7 @@ export function LibraryPanel({ metas, loading, onOpen, onDelete, onCompare, sele
                   <td className="num" style={{ color: m.surprises > 0 ? "var(--red)" : undefined }}>{m.surprises}</td>
                   <td className="num">{Math.round(m.meanConfidence * 100)}%</td>
                   <td className="num dim">{took(m.durationMs)}</td>
+                  <td className="num dim">{m.bytes === undefined ? "—" : bytes(m.bytes)}</td>
                   <td>
                     <div className="lib-actions">
                       <Button size="sm" onClick={() => onOpen(m.id)}>open</Button>
@@ -150,3 +152,6 @@ const took = (ms: number): string => {
   const s = Math.round(ms / 1000);
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}`;
 };
+
+const bytes = (n: number): string =>
+  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;

@@ -85,6 +85,8 @@ export interface Decision {
   tMs: number;
   /** Terminal decisions only: the reason the run gave for stopping. */
   reason?: string;
+  /** True when the run captured a picture of the page beside this move (the browser world, with a host that asks). */
+  hasFrame?: boolean;
   /** The settled answer, when the run reached the goal and the world confirmed it. */
   answer?: string | null;
   /**
@@ -115,6 +117,8 @@ export interface RunArtifact {
   seed: string | null;
   startedAt: string;
   endedAt: string;
+  /** Where this run's captured page frames live — present when the run directory exists; never a secret. */
+  framesDir?: string;
   /**
    * Whether this run carried what earlier runs in the same world had established.
    *
@@ -142,6 +146,8 @@ export interface RunArtifact {
   };
   /** Indices into the artifact's own decision list. */
   bookmarks: number[];
+  /** What this run occupies on disk, frames included — measured by main, shown by the library and Compare. */
+  bytes?: number;
 }
 
 /** The library's row — an artifact without its event log, which is most of its weight. */
@@ -161,6 +167,8 @@ export interface ArtifactMeta {
   backtracks: number;
   surprises: number;
   meanConfidence: number;
+  /** What the run occupies on disk, frames included — undefined when main had nothing to measure. */
+  bytes?: number;
 }
 
 /** A pointer into a run: which decision, and which panel the pointer came from. */

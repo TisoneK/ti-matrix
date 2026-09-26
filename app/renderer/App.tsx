@@ -76,12 +76,19 @@ export function App() {
   // arrive first and the count follows, so the hook is fed the count it currently has and clamps.
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const session = useSidecar(bookmarks);
-  const { status, worlds, events, settled, confirm, headless } = session;
+  const { status, worlds, events, runId, settled, confirm, headless } = session;
   const chrome = useWindowChrome();
 
   const projection = useMemo(() => project(events, Number.MAX_SAFE_INTEGER), [events]);
   const playback = usePlayback(projection.decisions.length);
   const shown = useMemo(() => project(events, playback.cursor), [events, playback.cursor]);
+
+  // Everything the browser world's page surface needs that the panels cannot derive themselves: the
+  // run whose directory holds the frames, the event index the shared cursor stands at, the decision
+  // there (its evidence is the "what it read" layer), and the one file channel a panel may use.
+  const page = useMemo(
+    () => ({ runId, upto: shown.eventIndex + 1, at: shown.at, getFrame: session.frame }),
+    [runId, shown.eventIndex, shown.at, session.frame]);
 
   // A new run starts a new timeline: cursor at the end, no bookmarks carried over.
   const [timeline, setTimeline] = useState<string>("");
@@ -448,7 +455,8 @@ export function App() {
             <>
               <MapPanel knowledge={shown.knowledge} decisions={shown.decisions} world={world} events={events}
                         liveStep={playback.cursor} focus={{ cell: focus, onFocus: setFocus, onPin: setFocus }}
-                        hoverCell={hover === null ? null : shown.decisions[hover]?.cell ?? null} />
+                        hoverCell={hover === null ? null : shown.decisions[hover]?.cell ?? null}
+                        page={page} />
 
           <div className="pane right">
             <section className="pane" aria-label="search tree">

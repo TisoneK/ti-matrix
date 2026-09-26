@@ -19,6 +19,8 @@ export interface RunStart {
   id: string;
   /** Where the run's own directory is, for the "reveal in folder" affordance and the CLI's run log. */
   recordPath: string | null;
+  /** Where captured page frames go — created with the run; the sidecar writes into it, the panel reads. */
+  framesDir?: string;
 }
 
 export interface LibraryBackend {
@@ -29,6 +31,8 @@ export interface LibraryBackend {
   list(): Promise<ArtifactMeta[]>;
   load(id: string): Promise<RunArtifact | null>;
   remove(id: string): Promise<boolean>;
+  /** One captured page frame of one run, base64 — null when that run has none. */
+  frame?(id: string, name: string): Promise<string | null>;
 }
 
 /** A run id that sorts by time and cannot be mistaken for another: `20260923-181500-4f2a`. */
@@ -66,6 +70,9 @@ export function summarise(artifact: RunArtifact, decisions?: Decision[]): Artifa
     backtracks: run.filter((d) => d.kind === "backtrack").length,
     surprises: run.filter((d) => d.flags.includes("surprise")).length,
     meanConfidence: trust.mean,
+    // main measured the run directory (frames included); undefined stays undefined rather than a zero
+    // that would claim the run is free, when the truth is "not measured".
+    ...(artifact.bytes !== undefined ? { bytes: artifact.bytes } : {}),
   };
 }
 

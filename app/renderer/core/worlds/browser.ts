@@ -151,3 +151,25 @@ export function readBrowser(events: EngineEventFrame[]): BrowserKnowledge {
   if (k.page && k.page.title === "" && k.texts.length > 0) k.page.title = "(title not asked for)";
   return k;
 }
+
+/**
+ * The frame of the page as it stood at `upto` — the seq of the newest `state` event inside the cursor
+ * that captured one, named by its `frame` field.
+ *
+ * Keyed on `state` because that is the event the engine emits exactly when a move is *applied*: the
+ * picture is the page the applied action produced, which is the one a person scrubbing wants to see
+ * beside that step. A capture is written per event seq, so the seq is the frame's name on disk. The
+ * depth check mirrors the sidecar's — the depth-0 state is the run's opening, not a move — and a run
+ * without frames (older, capture failed, non-browser world) answers null, which is the panel's cue to
+ * say which of those it is rather than draw a blank page.
+ */
+export function frameOf(events: EngineEventFrame[], upto: number): number | null {
+  const to = Math.min(Math.max(upto, 0), events.length);
+  for (let i = to - 1; i >= 0; i -= 1) {
+    const e = events[i];
+    if (e.kind === "state" && Number(e["depth"] ?? 0) > 0 && typeof e["frame"] === "string" && e["frame"]) {
+      return Number(e["seq"]);
+    }
+  }
+  return null;
+}

@@ -6,7 +6,7 @@
  */
 import { EngineEventFrame } from "../protocol";
 import { readFiles, treeOf } from "./worlds/files";
-import { readBrowser } from "./worlds/browser";
+import { readBrowser, frameOf } from "./worlds/browser";
 
 let pass = 0;
 const failures: string[] = [];
@@ -80,6 +80,24 @@ eq("browser errors", browser.errors.length, 1);
 // evaluate is a write action in this adapter, so it is grouped with the clicks, not with the reads.
 eq("browser trail kinds", browser.trail.map((t) => t.kind),
    ["navigate", "read", "read", "read", "read", "wait", "interact", "read", "interact", "interact", "read"]);
+
+/* ── the page frame the cursor stands at ───────────────────────────────── */
+const stateEv = (seq: number, depth: number, frame?: string): EngineEventFrame =>
+  ({ seq, t_ms: seq * 10, kind: "state", depth, ...(frame ? { frame } : {}) });
+const frames = [
+  stateEv(1, 0),                     // the run's opening — never captured
+  { seq: 2, t_ms: 20, kind: "probe" },
+  stateEv(3, 1, "/runs/r/frames/3.jpg"),   // first applied move
+  stateEv(4, 1, "/runs/r/frames/4.jpg"),   // second applied move
+  { seq: 5, t_ms: 50, kind: "selected" },
+];
+eq("the newest frame at or before the cursor wins", frameOf(frames, 5), 4);
+eq("an earlier cursor sees only earlier frames", frameOf(frames, 3), 3);
+eq("before the first applied move there is no frame", frameOf(frames, 2), null);
+eq("a run with no frames answers null", frameOf(browser.trail.map((t, i) =>
+  ({ seq: i + 1, t_ms: i * 10, kind: "probe" } as EngineEventFrame)), 10), null);
+eq("a state without depth is the opening", frameOf([stateEv(1, 0, "/x.jpg")], 1), null);
+eq("the cursor never looks past the events it has", frameOf(frames, 99), 4);
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) throw new Error("world parser checks failed:\n" + failures.map((f) => "  ✗ " + f).join("\n"));

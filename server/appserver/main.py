@@ -162,6 +162,7 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
     answer_basis: Optional[str] = None
 
     async def on_event(frame: dict[str, Any]) -> None:
+        _maybe_capture(frame, state.environment)  # the engine is paused here; the page will hold still
         statistics.observe(_event_like(frame))  # in-run learning, whether or not it is persisted
         collected.append(dict(frame))
         if record_path is not None:
@@ -191,6 +192,17 @@ async def _run_goal(state: RunState, ws: web.WebSocketResponse, text: str, world
     except Exception as exc:  # noqa: BLE001 — a run's failure is a frame, not a dead task
         reason = f"error: {exc}"
     finally:
+        # The world's own resources go with the run — exactly what the CLIs' `finally: env.close()`
+        # does and what the app never did. The browser is the world that holds a real one: without
+        # this, every browser run in the window left a Chrome with a throwaway profile running, and
+        # the frame captures here made the cost of noticing that much likelier. Duck-typed like
+        # `EngineTools.close`, because most worlds hold nothing that needs releasing.
+        closer = getattr(state.environment, "close", None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception:  # noqa: BLE001 — a world that will not close is not a crash
+                pass
         learned = ""
         if stats_path is not None:
             from ti_matrix.adapters import stats_file
@@ -242,6 +254,41 @@ def _goal(text: str):
 def _event_like(frame: dict[str, Any]):
     """A wire frame reshaped as `Statistics.observe` expects it — it reads only kind and data."""
     return SimpleNamespace(kind=frame.get("kind"), data=frame)
+
+
+# ── the browser world's page frames ────────────────────────────────────────
+
+
+def _maybe_capture(frame: dict[str, Any], environment: Any) -> None:
+    """A picture of the page, beside the move that was just applied — best effort, always.
+
+    The hook lives here rather than in the engine: capture is host work about one world, and the engine
+    must not learn to take pictures. Keyed on the `state` event, which the engine yields exactly after
+    applying a move (and once at depth 0, before anything has happened — the `depth > 0` check skips
+    that one), it runs while the engine is paused inside the caller's `async for`, so nothing else
+    probes the page under us. The environment opta in by carrying a `frames_dir` and a `capture_frame`
+    (the browser world's factory gets the directory from the goal config; other worlds carry neither,
+    so this is a no-op for them). A capture that fails is *dropped*, not fatal — the run must not end
+    over a picture that did not get taken — and the frame records that it failed rather than quietly
+    showing nothing.
+    """
+    if frame.get("kind") != "state" or not int(frame.get("depth", 0) or 0) > 0:
+        return
+    frames_dir = getattr(environment, "frames_dir", None)
+    capture = getattr(environment, "capture_frame", None)
+    if not frames_dir or capture is None:
+        return
+    path = Path(frames_dir) / f"{int(frame.get('seq', 0) or 0)}.jpg"
+    try:
+        ok, _ = capture(path)
+    except Exception as exc:  # noqa: BLE001 — a broken capture must never break a run
+        ok = False
+        frame["frame_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return
+    if ok:
+        frame["frame"] = str(path)
+    else:
+        frame["frame_error"] = "capture failed this step"
 
 
 # ── HTTP + WS handlers ──────────────────────────────────────────────────────
