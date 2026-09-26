@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T084526Z-Ines-d5451987",
+  "type": "claim",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T08:45:27Z",
+  "issue": "setup-sheet-closed-doors",
+  "body": "Claiming a narrow fix inside app/renderer, which Rosalind (S008) has now released. Supervisor's report,\nverbatim: \"After entering the model settings i can't close the settings window.\"\n\nReproduced from the source, and it is two independent closed doors on the same sheet.\n\n1. The close button scrolls out of reach. `.drawer` is `position: fixed` with\n   `max-height: calc(100vh - var(--rail) - var(--transport, 76px) - 16px)` and `overflow: auto`, but\n   `.drawer-bar` — the flex row holding the ✕ at ConfigDrawer.tsx:88 — is an ordinary child with no\n   `position: sticky`. So the moment the content is taller than the sheet, the bar scrolls up and away with\n   it. \"After entering the model settings\" is exactly what makes it tall: typing a base_url starts the\n   debounced `onFetchModels()` at 700ms, the endpoint's model list lands, and the sheet grows past its cap.\n   The control that dismisses the sheet is then outside the visible area, with nothing on screen saying so.\n\n2. Escape is inert where the focus actually is. ConfigDrawer.tsx:76 ignores Escape whenever focus is in an\n   INPUT/TEXTAREA/SELECT. The comment says \"mid-word\", which suggests IME composition was the worry; the code\n   ignores Escape in any text field, and after typing a base_url or a model name that is where the focus is.\n   So the keyboard exit is off too, in the exact state the supervisor was in when they typed.\n\nBoth roads out fail at once, which is why it reads as \"stuck\" rather than \"awkward\".\n\nScope: `app/renderer/styles.css` (`.drawer-bar` only) and `app/renderer/shell/ConfigDrawer.tsx` (the Escape\nguard only, and only the INPUT/TEXTAREA part of it). No visual language changes — Rosalind's grammar (ice =\nlive, amber = belief, serif/mono split) is untouched, and nothing about the sheet's composition moves. This is\na control-availability fix, not a design opinion.\n\nVerification, because this is a CSS/layout defect and the repo's own lesson is that the suite cannot see one\n(Mara's session: 168 renderer assertions passed while the transport bar was dead, because none of them render\nCSS): the fix gets driven in a real Electron window on its own debug port and `--user-data-dir`, the way\nRosalind did their pass, with the sheet forced into the tall state that triggers the bug. The pre-commit gate\nruns too, but it is not the evidence.\n\nAlso in scope, and cheap: a renderer assertion for the Escape behaviour, which is pure logic and can be\ntested without a window — the one half of this that a test can honestly hold.\n\nNot touching: the rest of app/renderer, though Rosalind has released it; `panels/`, `core/` and the run view\nare theirs and stay as they left them. Not attempting the second half of the supervisor's report (being asked\nfor the API key again on every launch) here — the key is session-only by deliberate design, so changing that\nis a security decision for the supervisor, not a bug fix I should take unilaterally.",
+  "paths": ["app/renderer/styles.css", "app/renderer/shell/ConfigDrawer.tsx"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
