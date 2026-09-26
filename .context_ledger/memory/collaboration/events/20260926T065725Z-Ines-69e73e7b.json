@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T065725Z-Ines-69e73e7b",
+  "type": "claim",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T06:57:26Z",
+  "issue": "browser-cli-capture-hang",
+  "body": "Claiming the pipe-vs-daemon hang in the agent-browser adapter (found while running the exit gate on Windows).\n\nSymptom: `tests/test_agent_browser.py::test_the_real_cli_reads_a_real_page` never returns on Windows; the\nengine suite stalls there indefinitely (observed 30+ min with the process alive and no output).\n\nEvidence, isolated from the test:\n- `agent-browser --session X open http://127.0.0.1:8731/index.html` with stdout/stderr captured to PIPES:\n  never returns (120s and 150s caps both elapsed with output still empty).\n- The exact same command with stdout/stderr redirected to a FILE: returns in 3.675s, exit 0, correct output\n  (\"✓ Ledger demo / http://127.0.0.1:8731/index.html\").\n- The CLI is a native binary (agent-browser-win32-x64.exe, v0.35.1) that keeps a daemon owning the browser\n  between invocations -- its own help lists `--namespace` \"Isolate daemon sockets\" and `close [--all]`.\n- After the foreground command exits, that daemon is still alive (PID 14448) holding an established\n  DevTools connection to Chrome (PID 19952, port 7760) and holding the inherited stdout/stderr pipe handles.\n\nCause: `AgentBrowser._run` uses `subprocess.run(..., capture_output=True, timeout=...)`. The handle the daemon\ninherits is a pipe, a pipe only reaches EOF when every writer closes it, and the daemon does not -- so\n`communicate()` waits on a process that has already answered. `timeout=` does not save it either: on\nTimeoutExpired `run()` kills the direct child and then calls `communicate()` a second time *without* a\ntimeout, still blocking on the pipe the daemon holds. Hence an unbounded hang rather than a 300s one.\n\nScope: `ti_matrix/adapters/browser/agent_browser.py` (_run, capture only) and a regression test in\n`tests/test_agent_browser.py`. No behaviour change beyond capturing into files instead of pipes. This is the\nsame Windows-portability seam the previously-unpushed `48e044a` touched (it made the CLI resolvable via\n`shutil.which`; that fix is what let the CLI run at all and exposed this).\n\nNot touching: cdp.py, cli.py, the action table, README.",
+  "paths": ["ti_matrix/adapters/browser/agent_browser.py", "tests/test_agent_browser.py"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
