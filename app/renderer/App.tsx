@@ -34,6 +34,9 @@ import { TreePanel } from "./panels/TreePanel";
 import { formatElapsed, formatTokens, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
 
+/** Below this, a run finished faster than anyone could have watched it stream — see the timeline effect. */
+const AUTO_REPLAY_MS = 1500;
+
 export function App() {
   const [view, setView] = useState<View>("run");
   const [world, setWorld] = useState("maze");
@@ -80,6 +83,18 @@ export function App() {
     if (timeline === key) return;
     setTimeline(key);
     playback.reset(events.length === 0 ? [] : undefined);
+    // A run that settles before a person could watch it stream live — `builtin` routinely finishes a
+    // whole maze in under half a second — lands with the map, tree and ledger already at their final
+    // state. That is indistinguishable, to someone who just clicked Run, from nothing having happened:
+    // this is what "the button changes and goes back to Run, but nothing happens" turned out to be, live
+    // over the app's own window, not a report. Below the threshold, autoplay the recorded decisions once
+    // at a watchable pace instead of silently landing at the end; a run slow enough to have been watched
+    // live (any real network call reliably clears it) is left where it is, since replaying it would only
+    // repeat what they already saw happen.
+    const finishedMs = events.length > 0 ? events[events.length - 1].t_ms : 0;
+    if (settled && !settled.error && events.length > 0 && finishedMs > 0 && finishedMs < AUTO_REPLAY_MS) {
+      playback.toggle();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events.length, world, settled]);
 
