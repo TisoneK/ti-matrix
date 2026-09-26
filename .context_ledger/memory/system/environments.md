@@ -54,6 +54,18 @@ block (and its "last verified" date) every time you run on it again.
   `button.click()` inside `Runtime.evaluate` are different experiments. Vite serves the renderer at
   `http://127.0.0.1:5173/`, so renderer edits hot-reload with no reload step (a reload is still worth it
   after structural changes).
+- **Main and preload are NOT hot-reloaded (found 2026-09-26 by Cordelia/S012).** `VITE_DEV=1 npx
+  electron .` loads `dist-electron/main/index.js` and `dist-electron/preload/index.js` from disk — built
+  only by `npm run build` — so a session that edits main/preload and relaunches without rebuilding drives
+  the *old* code and every conclusion from it is about a version that no longer exists. Symptom: a new
+  preload API reads `undefined` in a window whose renderer (vite) is current. Rebuild before any window
+  round whose edits touch `app/main/` or `app/preload/`, and confirm the new symbol is in the bundle
+  (`grep -c runFrame app/dist-electron/preload/index.js`) before believing a negative result.
+- **Keeping a second Electron instance alive across tool calls:** a backgrounded `npx electron` (even
+  `nohup` + `disown`) dies when the launching shell is reaped. A Python double-fork (fork → `setsid()` →
+  fork → `execvpe`) detaches it into its own session and it survives. Tear it down with
+  `pkill -f "user-data-dir=/tmp/<name>"` and verify the port is free — and remember the instance spawns
+  its own sidecar, which the app closes with itself.
 
 ---
 ## Lameck — the user's Windows desktop (last verified 2026-09-26)

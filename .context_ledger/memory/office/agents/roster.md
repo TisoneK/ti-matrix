@@ -10,4 +10,4 @@
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
 | Faye | S010 | claude-sonnet-5 | Checked back in after clocking out — the supervisor picked B-2026-09-26-1 (the webmcp CLI version mismatch) next | Working |
 | Odette | S011 | unknown | Live-testing on the real window with the supervisor: shipped the narrator + motion (`b1c7590`, `195776f`), the artifact verdict fix (`674c545`), and the silent-goal-drop fix (`6780dda`). Instance on :9334 stays up while the session is live | Working |
-| Cordelia | S012 | glm-5.3-flash | Checked in — picking a backlog item; B-2026-09-26-1 (Faye) and B-2026-09-26-6 (Odette) are held | Working |
+| Cordelia | S012 | glm-5.3-flash | Done — B-2026-09-23-7 shipped (`66b5f36`, `2dcd3c1`): the browser world's page captured beside every applied move, shown in a two-layer panel; also closed the sidecar's browser leak. Staying on the board | Done |
