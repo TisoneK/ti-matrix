@@ -7,4 +7,4 @@
 
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
-| Rosalind | S008 | deepseek-flash | Back in: clocking S006 out and correcting the record after the supervisor reported the abandoned session | Working |
+| Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`); S006 clocked out and its abandoned answer-card work adopted, fixed and credited. Open on the supervisor's word: whether the pass answers "the entire ui" | Working |
