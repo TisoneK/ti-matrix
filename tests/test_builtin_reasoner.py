@@ -25,6 +25,7 @@ from ti_matrix.adapters.builtin import (
     SurveyReasoner,
     goal_words,
     is_builtin,
+    is_generated_artifact,
     is_noise,
     reasoner_for,
 )
@@ -225,6 +226,43 @@ def test_reading_the_file_the_goal_named_settles_it_with_the_file_s_own_words():
     [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("find the README")), [obs]))
     assert verdict.done is True
     assert "README.md" in verdict.answer and "state-driven" in verdict.answer
+
+
+@pytest.mark.parametrize("path,generated", [
+    ("/w/app/package-lock.json", True),
+    ("/w/yarn.lock", True),
+    ("/w/frontend/pnpm-lock.yaml", True),
+    ("/w/Cargo.lock", True),
+    ("/w/app/dist/bundle.min.js", True),
+    ("/w/app/dist/bundle.js.map", True),
+    ("/w/ti_matrix/adapters/builtin.py", False),
+    ("/w/package.json", False),  # the manifest itself, not its lockfile, still names a real answer
+])
+def test_lockfiles_and_generated_bundles_are_never_the_files_own_answer(path, generated):
+    assert is_generated_artifact(path) is generated
+
+
+def test_a_lockfile_that_happens_to_share_a_goal_word_does_not_settle_the_run():
+    """B-2026-09-26-3, reproduced exactly: a goal containing the word "package" is not, coincidentally,
+    answered by package-lock.json — the run must keep looking rather than settle on the first file whose
+    name carries a goal word by convention."""
+    r = FilesReasoner({}, _Rooted("/w"))
+    goal = GoalType("how many python files are in the ti_matrix package directory, and what does it do?")
+    move = Action("read_file", {"path": "/w/app/package-lock.json"}, "")
+    obs = Observation(move, True, '{"name": "ti-matrix-app", "lockfileVersion": 3}')
+    [verdict] = asyncio.run(r.evaluate(AgentState(goal), [obs]))
+    assert verdict.done is False
+    assert verdict.answer == ""
+
+
+def test_a_goal_word_matching_only_an_ancestor_directory_does_not_settle_the_run():
+    """"Named" means the file itself, not merely something upstream of it — a goal that happens to share
+    a word with a directory the file lives under is not the goal naming that file."""
+    r = FilesReasoner({}, _Rooted("/w"))
+    move = Action("read_file", {"path": "/w/app/tests/unrelated.py"}, "")
+    obs = Observation(move, True, "print('nothing to do with the goal')")
+    [verdict] = asyncio.run(r.evaluate(AgentState(GoalType("run the test suite")), [obs]))
+    assert verdict.done is False
 
 
 def test_a_files_probe_that_failed_still_scores_nothing():

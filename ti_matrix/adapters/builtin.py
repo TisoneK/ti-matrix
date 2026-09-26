@@ -239,6 +239,23 @@ def is_noise(path: str) -> bool:
     return any(p in _NOISE or p.endswith(".egg-info") for p in parts)
 
 
+# A file named by convention, not by intent: a lockfile pins dependency versions, a manifest restates
+# what the package manager already knows, a minified bundle is generated. Reading one is still fine as
+# ordinary evidence, but it must never be mistaken for "the file the goal named" and settle a run on its
+# own — a goal containing the word "package" is not, coincidentally, answered by `package-lock.json`.
+_GENERATED_BASENAMES = frozenset("""
+package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
+Cargo.lock poetry.lock Pipfile.lock composer.lock Gemfile.lock
+""".split())
+_GENERATED_SUFFIXES = (".min.js", ".min.css", ".lock", ".map")
+
+
+def is_generated_artifact(path: str) -> bool:
+    """Whether this path is a lockfile, manifest, or build artifact — named by convention, not intent."""
+    name = path.rsplit("/", 1)[-1]
+    return name in _GENERATED_BASENAMES or name.endswith(_GENERATED_SUFFIXES)
+
+
 def goal_words(text: str) -> list[str]:
     """The words in a goal worth searching a filesystem for, longest first."""
     words = {w.strip(".,:;!?'\"()[]") for w in str(text).split()}
@@ -354,9 +371,16 @@ class FilesReasoner:
                 out.append(Evaluation(0.0, False, "", "probe failed"))
                 continue
             # Reading a file the goal named, and getting real content back, is as settled as a rule
-            # can honestly be: the answer is the file's own text, not an inference from it.
+            # can honestly be: the answer is the file's own text, not an inference from it. "Named" is
+            # checked against the file's own basename, not the whole path — a goal word that only
+            # matches an ancestor directory (an ordinary word like "test" or "app") is not the same
+            # claim as the goal actually naming this file. And a lockfile or generated bundle whose name
+            # happens to carry a goal word by convention is excluded outright: `package-lock.json`
+            # answering a goal that merely contains the word "package" is the failure mode this guards.
             read = obs.move.tool == "read_file"
-            named = any(w in str(obs.move.args.get("path", "")).lower() for w in words)
+            path = str(obs.move.args.get("path", ""))
+            basename = path.rsplit("/", 1)[-1].lower()
+            named = any(w in basename for w in words) and not is_generated_artifact(path)
             if read and named and not obs.predicted and obs.text.strip():
                 head = " ".join(obs.text.split())[:200]
                 out.append(Evaluation(1.0, True, f"{obs.move.args.get('path')}: {head}",
