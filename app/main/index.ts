@@ -21,7 +21,7 @@
  * and resolved inside the runs directory before a file is touched — the renderer is not trusted with a
  * path, even though in this app the caller happens to be our own code.
  */
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, MenuItem } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as http from "http";
@@ -392,6 +392,23 @@ function watchWindowState(window: BrowserWindow): void {
   window.on("leave-full-screen", tell);
 }
 
+/** Electron draws no context menu on its own — a right-click in a text field does nothing at all, which
+ * reads as "paste is broken" (it is the app's job to offer one, not Chromium's). Cut/Copy/Paste/Select
+ * All only, gated on what the field the click landed in actually supports (`editFlags`), and only shown
+ * over an editable field at all — a right-click on the map or the tree stays silent, as it should. */
+function attachEditContextMenu(window: BrowserWindow): void {
+  window.webContents.on("context-menu", (_event, params) => {
+    if (!params.isEditable) return;
+    const menu = new Menu();
+    menu.append(new MenuItem({ label: "Cut", role: "cut", enabled: params.editFlags.canCut }));
+    menu.append(new MenuItem({ label: "Copy", role: "copy", enabled: params.editFlags.canCopy }));
+    menu.append(new MenuItem({ label: "Paste", role: "paste", enabled: params.editFlags.canPaste }));
+    menu.append(new MenuItem({ type: "separator" }));
+    menu.append(new MenuItem({ label: "Select All", role: "selectAll", enabled: params.editFlags.canSelectAll }));
+    menu.popup();
+  });
+}
+
 /** The splash: small, fast, and the whole story of the boot until the app replaces it. */
 function createSplash(): void {
   const mac = process.platform === "darwin";
@@ -436,6 +453,7 @@ function createAppWindow(): void {
     },
   });
   watchWindowState(appWin);
+  attachEditContextMenu(appWin);
   mainWindow = appWin;
   stage("renderer", "active", process.env.VITE_DEV ? "from the vite dev server" : "from the built bundle");
   // True while dev-mode connect retries are outstanding: during that window did-fail-load is the loop's
