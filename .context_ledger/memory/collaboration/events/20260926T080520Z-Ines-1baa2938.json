@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T080520Z-Ines-1baa2938",
+  "type": "claim",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T08:05:21Z",
+  "issue": "files-root-default",
+  "body": "Claiming the files world's root default, in both surfaces it exists in.\n\nThe report: \"the root directory default should be ~/\". The evidence is unambiguous and comes from the app's\nown saved state — %APPDATA%/Ti Matrix/settings.json holds world \"files\", values {\"root\": \"\"}, goal \"Locate\nLocalMind repo\". That is the run that failed, and it failed with \"the files world needs a root directory\"\nbecause the field ships empty and _files_world treats empty as an error.\n\nNote what that saved file means for the fix: App.tsx seeds field values with `values[f.name] ?? f.default`, so\na saved \"\" is NOT nullish and wins over any new default. Changing the declared default alone would leave this\nuser's app exactly as broken as it is now. Empty has to mean home as well — which is also what the repo's own\nexample already does (examples/files_ui.py: `config.get(\"root\") or \"~\"`, field default \"~/code\") and what\nLocalMind does (terminal.py: `if target == \"~\" or target == \"\": session[\"cwd\"] = os.path.expanduser(\"~\")`).\n\nScope:\n- server/appserver/worlds.py: the files field's default becomes \"~/\", and _files_world stops erroring on an\n  empty root and expands to home instead — aligning the app's registry with examples/files_ui.py, which\n  diverged from it.\n- ti_matrix/adapters/files_cli.py: the builtin reasoner's fallback root becomes home rather than the process's\n  current directory, so the two surfaces agree on what \"the default root\" means.\n- The three existing assertions that used \"the files world with no root\" as the canonical bad-config example\n  need re-pointing, since that config is no longer bad. That is a deliberate consequence, not collateral.\n\nNot touching: cdp.py, the browser adapter, the ledger world (already out of the picker), the files world's\nread-only boundary or its RootedFiles confinement. No new validation is being added.",
+  "paths": ["server/appserver/worlds.py", "ti_matrix/adapters/files_cli.py", "server/tests/test_worlds.py", "server/tests/test_server.py"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

@@ -8,3 +8,4 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Sable | S006 | claude-sonnet-5 | Model balance/token-usage tracking, then running worlds and fixing what surfaces | Working |
+| Ines | S007 | deepseek-flash | The files world's root default — `~/`, and empty means home, so a saved "" stops breaking the app | Working |
