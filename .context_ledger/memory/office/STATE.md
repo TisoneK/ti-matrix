@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T10:15:27Z_
+_Regenerated: 2026-09-26T10:31:07Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-26)
@@ -15,7 +15,7 @@ _Regenerated: 2026-09-26T10:15:27Z_
 - Full params: `memory/workflows/active.md`
 
 ## Office — who's in, right now
-- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the recor…
+- **Rosalind** (S008) — Working — Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record,…
 - **Faye** (S010) — Working — Continuing the supervisor's own conversation with S006 (Sable), whose session ran out of …
 
 ## Current task

@@ -92,3 +92,36 @@ block (and its "last verified" date) every time you run on it again.
   (its `agent-browser-win32-x64.exe` owns the browser between invocations); stray Chrome accumulates in
   `%LOCALAPPDATA%\Temp\agent-browser-chrome-*` unless a session is closed with `agent-browser close --all`.
   The sibling package clone is at `C:/Users/tison/Dev/context-ledger`.
+- **The window CAN be launched, driven and read here — the recipe (verified 2026-09-26).** A UI change is
+  verified by rendering it and looking at it, never by reading the CSS. This is how, on this machine, and
+  without touching the supervisor's own window:
+  1. **Build first**, because a plain launch loads `dist/`: `npm --prefix app run build`.
+  2. **Launch a second instance on its own profile and debug port, as a *background* task.** Backgrounded
+     inside an ordinary shell command it dies with that shell — that cost a whole attempt:
+     `npx electron . --remote-debugging-port=9334 --user-data-dir="C:/Users/tison/AppData/Local/Temp/tm-<name>"`.
+     The single-instance lock is per `--user-data-dir`, so a second instance *without* one exits silently and
+     looks like a broken launch; the profile is also what keeps this read-only with respect to the
+     supervisor — separate settings, separate library.
+  3. **Give it something to look at**: *copy* (never move) `%APPDATA%/Ti Matrix/runs` and `settings.json`
+     into the temp profile — `runs-list` reads the directory, so a copy made after launch appears on
+     `location.reload()`.
+  4. **Find the page target:** `curl -s http://127.0.0.1:9334/json`. The app's page is `splash.html` first and
+     `index.html` once the real window is up — wait for `index.html` before driving anything.
+  5. **Drive it over CDP with Node's built-in `WebSocket`** (Node 24 has it; nothing to install): a ~30-line
+     script that connects to the target's `webSocketDebuggerUrl` and sends `Runtime.evaluate` with
+     `awaitPromise: true, returnByValue: true`, plus `Page.enable` / `Page.captureScreenshot` for a picture.
+     An `await`-ed IIFE is enough to click through the UI — `el.click()` fires React's handlers.
+  6. **What this answers that reading the source cannot:** set a width with
+     `Emulation.setDeviceMetricsOverride`, then read
+     `getComputedStyle(document.querySelector('.stage')).gridTemplateColumns` — one line, and it says which
+     layout a window is really in. That is how the `≤1180px` single-column fallback was caught (two widths,
+     two different compositions). Write the PNG out of the same script and look at it.
+  7. **To see a recorded run:** click the rail's **Library** button, then the row's own **`open`** button.
+     Clicking the *row* only selects it for comparison, which looks like nothing happened; and a run still
+     streaming has no `meta.json`, so it is not in the library at all — the newest listed run is not always
+     the one you mean.
+  8. **Tear down and prove it:** close through the app's own channel (`window.tm.window.close()`, which reaps
+     the sidecar), then check facts — no `electron.exe` in `tasklist`, no stray `python.exe`, and the port
+     from `window.tm.connection()` no longer accepting connections. Delete the temp profile. Leaving
+     instances up is a violation on this project, and a search that could not have found one is worse than no
+     search at all.
