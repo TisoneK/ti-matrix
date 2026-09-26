@@ -57,15 +57,13 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
   observation of its own. A run that lists a large directory and decides several steps later is reasoning
   over its first 320 characters — and the model is never told the fact was cut, unlike the reader of an
   observation, who gets the world's own "… (truncated)" tail. (2026-09-26)
-- **`find_files` cannot match a directory.** `_find_files` filters its walk to `p.is_file()`, so a name
-  search can never return a folder: a goal naming a directory ("locate the X repo", "where is the config
-  folder") cannot be satisfied by search at all, only by opening directories one at a time and reading their
-  listings. Verified by running it — `find_files(path=<fixture>, contains='acme')` over a tree holding
-  `Dev/acme/.git` answers "no file under … has 'acme' in its name (3 paths searched)". Whether the honest
-  repair is a directory-inclusive search or a separate action is an open design question. The walk it filters
-  was bounded on 2026-09-26 (20,000 entries, six levels, and a line that says when it stopped early), so a
-  search over a home directory now finishes and says so; the directory blindness is untouched by that and
-  still stands. (2026-09-26)
+- **A name search could not return a directory — fixed 2026-09-26 (`d40b1ae`).** `find_files` filtered its
+  walk to `is_file()`, so a folder could never be found by name and a goal naming one had no way to be
+  answered by search at all. The supervisor diagnosed it from the world panel, which showed the run's
+  hits as files and never the folder the goal meant. Directories whose name matches are returned now;
+  against this machine's real home the same search returns both the runtime folder and the checkout one
+  level down. What this does *not* fix: whether a run then weighs the two candidates — that is the
+  settlement gap, a backlog row of its own.
 - **`stat_path` reports a directory as `0 bytes`.** An artefact of the platform — `stat().st_size` for a
   directory is not a content size — but the observation is read by a model, and "dir, 0 bytes" reads as
   "empty". It is the line the real run used as its confirmation of the wrong answer. (2026-09-26)
