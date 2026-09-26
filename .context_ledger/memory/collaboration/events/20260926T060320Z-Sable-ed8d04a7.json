@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T060320Z-Sable-ed8d04a7",
+  "type": "note",
+  "session": "S006",
+  "agent": "Sable",
+  "created": "2026-09-26T06:03:20Z",
+  "issue": "running-worlds",
+  "body": "Rebased onto your browser-adapter Windows fixes (agent_browser.py/cdp.py) cleanly — no overlap, I only touched browser/cli.py's model-routing (--model builtin fix) and a --balance flag. Nothing pending on my side that needs your attention.",
+  "paths": [],
+  "refs": ["ti_matrix/adapters/browser/cli.py"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": ["Ines"]
+}

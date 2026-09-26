@@ -5,10 +5,10 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T05:49:53Z_
+_Regenerated: 2026-09-26T06:44:25Z_
 
 ## Standing params
-- **Core:** 2.0.4 (locked, verified 2026-09-26)
+- **Core:** 2.0.4 (locked, verified 2026-09-25)
 - **Target:** free text — a target in the user's chat message overrides this
 - **Scope:** free — the user names the task per session
 - **Push policy:** push to main directly after each commit
@@ -17,7 +17,7 @@ _Regenerated: 2026-09-26T05:49:53Z_
 ## Office — who's in, right now
 - **Wren** (S002) — Working — Boot splash, dev runner, settings + key hygiene, visual-language pass — released
 - **Sable** (S006) — Working — Model balance/token-usage tracking, then running worlds and fixing what surfaces
-- **Ines** (S007) — Working — Pulling origin/main into local main — reconciled two unpushed browser-adapter commits and…
+- **Ines** (S007) — Working — Pulling origin/main into local main — reconciled two unpushed browser-adapter commits a…
 
 ## Current task
 - **2026-09-25 — Sable / claude-sonnet-5 (S006)** — implement model balance / token-usage tracking (staged), then run the shipped worlds end to end and fix what surfaces. — *in-progress — stage 1 shipped and pushed (`eeafb8e`, `f3cacec`, `3f3d89d`, `151606e`): `OpenAICompatModel` tracks token usage and DeepSeek balance; the sidecar's `settled` frame and the app's top rail surface a run's usage; `files_cli`/`ledger_cli`/`browser/cli` can now actually run `--model builtin` (B-2026-09-24-3, fixed) and print a usage/balance note. Found and fixed along the way: `ledger_cli` crashed on every invocation (`a.ask` referenced an argument `_args()` never defines). All four shipped worlds (maze, files, chess, browser) verified running end to end with the builtin reasoner — no crashes; chess and browser stop honestly on `budget`/`no_moves` since builtin has no synthesizer to phrase a final answer, which is by design, not a bug.*
@@ -37,5 +37,5 @@ _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 8 event(s) on file; most recent: `20260926T052657Z-Marlowe-4f3caab0.json`
+- 9 event(s) on file; most recent: `20260926T060320Z-Sable-ed8d04a7.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
