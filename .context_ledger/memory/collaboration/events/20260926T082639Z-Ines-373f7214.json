@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T082639Z-Ines-373f7214",
+  "type": "correction",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T08:26:39Z",
+  "issue": "files-root-default",
+  "body": "Correction to my own claim 20260926T080520Z-Ines-1baa2938, on a point of citation, not of substance.\n\nThe claim justified the home default partly by naming a sibling project outside this repo and quoting a line\nfrom it. That name does not belong in this repo's artifacts, and the user said so. The justification does not\nneed it: this repo's own example has always done the same thing (`examples/files_ui.py` reads its root as\n`config.get(\"root\") or \"~\"`), and that is the precedent the app's registry had drifted from. In-repo\nprecedent alone carries the argument.\n\nThe claim's scope, the change it describes, and commit c6f5511 are all unaffected — no code depends on the\nexternal reference, and nothing in the product touches it. Recording this rather than editing the claim,\nbecause events are immutable once published.",
+  "paths": [],
+  "refs": ["20260926T080520Z-Ines-1baa2938"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
