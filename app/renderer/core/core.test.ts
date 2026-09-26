@@ -144,6 +144,36 @@ const early = foldDecisions(run.slice(0, decisions[1].to + 1));
 eq("a prefix folds to the decisions inside it", early.map((d) => d.kind), ["move", "move"]);
 eq("a prefix keeps the earlier decisions identical", early[1].confidence, decisions[1].confidence);
 
+/* A model call in flight has nothing to fold — it must pass through wherever it lands, not split the
+ * iteration it interrupts. `thinking` arrives once before `candidates` (skipped by the outer scan) and
+ * once mid-fan, between a probe and its evaluation (the case that used to hit the inner loop's "next
+ * iteration's candidates" fallback and cut the decision short). Two fans, so a wrongly-split iteration
+ * would show up as an extra decision rather than being hidden by the done-swallows-the-fan shape. */
+const thinkingRun: EngineEventFrame[] = stamped([
+  ev("state", { depth: 0, goal: "g", trail: [], progress: 0, facts: 0, failed: 0, fact_list: [], failed_fps: [] }),
+  ev("thinking", { phase: "propose" }),
+  ev("candidates", { moves: [move("a1", "step(cell=1,1, direction=south)")] }),
+  probeEv("a1", "step(cell=1,1, direction=south)", true, "from 1,1 south: cell 1,2"),
+  ev("thinking", { phase: "evaluate" }),
+  evalEv("a1", "step(cell=1,1, direction=south)", 0.5),
+  ev("selected", { fp: "a1", move: "step(cell=1,1, direction=south)", progress: 0.5 }),
+  ev("state", { depth: 1, trail: ["step(cell=1,1, direction=south)"], progress: 0.5, facts: 1, failed: 0, fact_list: ["x"], failed_fps: [] }),
+  ev("thinking", { phase: "propose" }),
+  ev("candidates", { moves: [move("a2", "step(cell=1,2, direction=south)")] }),
+  probeEv("a2", "step(cell=1,2, direction=south)", true, "from 1,2 south: cell 1,3 — THIS IS THE EXIT"),
+  ev("thinking", { phase: "evaluate" }),
+  evalEv("a2", "step(cell=1,2, direction=south)", 1.0, true, "settled"),
+  ev("selected", { fp: "a2", move: "step(cell=1,2, direction=south)", progress: 1.0 }),
+  ev("state", { depth: 2, trail: ["step(cell=1,1, direction=south)", "step(cell=1,2, direction=south)"], progress: 1.0, facts: 2, failed: 0, fact_list: ["x", "y"], failed_fps: [] }),
+  ev("done", { answer: "settled", trail: ["step(cell=1,1, direction=south)", "step(cell=1,2, direction=south)"], model_calls: 4 }),
+]);
+const thinkingDecisions = foldDecisions(thinkingRun);
+eq("a mid-fan thinking event does not split or duplicate an iteration", thinkingDecisions.map((d) => d.kind), ["move", "done"]);
+eq("the move iteration still resolved its one option", thinkingDecisions[0].options.map((o) => [o.label, o.ok, o.progress]),
+   [["step(cell=1,1, direction=south)", true, 0.5]]);
+eq("the done iteration's own fan is intact too", thinkingDecisions[1].options.map((o) => [o.label, o.ok, o.progress]),
+   [["step(cell=1,2, direction=south)", true, 1.0]]);
+
 /* ── what the run believed about the world ─────────────────────────────── */
 const knowledge = readKnowledge(run);
 eq("the grid's own size is read from the world", knowledge.grid, { width: 5, height: 5, floors: 9 });

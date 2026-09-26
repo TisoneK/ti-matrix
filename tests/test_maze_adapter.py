@@ -209,8 +209,8 @@ async def test_the_engine_cannot_tell_it_has_been_somewhere_before(env):
     assert relit["ok"] is True and "cell 1,5" in relit["excerpt"], "the re-walk did not happen"
 
     # ... and nothing in the record says so: the engine's own vocabulary has no word for a place it knows
-    told = {"state", "candidates", "probe", "evaluation", "selected", "backtrack", "needs_confirmation",
-            "done", "stopped"}
+    told = {"state", "thinking", "candidates", "probe", "evaluation", "selected", "backtrack",
+            "needs_confirmation", "done", "stopped"}
     assert {e.kind for e in events} <= told
     facts = [f for e in events if e.kind == "state" for f in e.data["fact_list"]]
     assert sum(1 for f in facts if "cell 1,5" in f) >= 2, "the same place was learned twice"

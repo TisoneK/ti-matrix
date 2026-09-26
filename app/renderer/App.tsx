@@ -318,7 +318,16 @@ export function App() {
    * person nothing. Once there is a run on screen, the lamp reports how *it* ended.
    */
   const lamp = useMemo((): { detail?: string; tone?: "ok" | "warn" | "bad" } => {
-    if (running) return { detail: "running" };
+    if (running) {
+      // A model call is real network time, sometimes 20-30s of it, and until now the rail said
+      // "running" for the whole run regardless — the one event kind with nothing to report yet
+      // (`thinking`) exists so the last thing on screen is never silence while the model answers.
+      const last = events.length > 0 ? events[events.length - 1] : null;
+      const phase = last?.kind === "thinking" ? String(last["phase"] ?? "") : null;
+      return { detail: phase === "propose" ? "thinking — choosing what to try next"
+        : phase === "evaluate" ? "thinking — weighing what it found"
+        : "running" };
+    }
     if (status !== "ready") return {};
     const done = session.settled;
     if (!done) return {};

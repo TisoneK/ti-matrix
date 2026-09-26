@@ -52,8 +52,13 @@ class EngineBudget:
 class EngineEvent:
     """One step, as a plain record. This is the UI contract: states, actions, outcomes — never reasoning.
 
-    kinds: state | candidates | probe | evaluation | selected | backtrack | confirmation |
+    kinds: state | thinking | candidates | probe | evaluation | selected | backtrack | confirmation |
     needs_confirmation | done | stopped
+
+    ``thinking`` is the one kind with nothing to report yet — it marks a model call as started
+    (``phase``: ``propose`` or ``evaluate``), so a UI has something to show for the seconds a real
+    hosted model spends before its next real event. It carries no tree id and is never itself part of
+    the run's outcome; a reader may drop it and lose nothing but the "something is happening" signal.
     Tree ids: `state` carries `node` and `parent`; `selected`/`backtrack` name the node they move to.
     """
 
@@ -226,6 +231,7 @@ class StateEngine:
                 return
 
             avoid = set(state.failed) | set(state.tried)
+            yield EngineEvent("thinking", {"phase": "propose"})
             try:
                 actions = await self.proposer.propose(state, b.max_branches, avoid)
             except Exception as exc:  # noqa: BLE001
@@ -310,6 +316,7 @@ class StateEngine:
                     },
                 )
 
+            yield EngineEvent("thinking", {"phase": "evaluate"})
             try:
                 evals = await self.evaluator.evaluate(state, outcomes)
             except Exception as exc:  # noqa: BLE001

@@ -255,6 +255,12 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
         i += 1;
         continue;
       }
+      if (e.kind === "thinking") {
+        // A model call in flight, nothing to fold into the iteration yet — the live "thinking"
+        // indicator reads this directly off the tail of the event log, not off a Decision.
+        i += 1;
+        continue;
+      }
       break; // the next iteration's `candidates` — not ours to consume
     }
 
