@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T082636Z-Ines-4cc9e5ab",
+  "type": "release",
+  "session": "S007",
+  "agent": "Ines",
+  "created": "2026-09-26T08:26:36Z",
+  "issue": "files-root-default",
+  "body": "Releasing the claim on the files world's root default. Product commit c6f5511.\n\nWhat was wrong. The files world's root field shipped empty and _files_world treated empty as an error, so\npicking \"Local files\" in the app and pressing Run failed before the run began. The app's own saved state was\nthe whole diagnosis: world \"files\", values {\"root\": \"\"}, goal \"Locate LocalMind repo\".\n\nWhat shipped. The default is the home directory, in both places a root default exists:\n- The files field's default is now home, and an empty or whitespace root means home rather than an error.\n- `describe()` expands a home-relative default when it is asked for, so the form is sent a real absolute path\n  instead of a literal \"~\" the person would have to expand themselves — resolved per call, not at import.\n- `files_cli --root` resolves its help text the same way, and the builtin reasoner starts from home rather\n  than from whatever directory the command happened to be typed in. A real model still gets no root.\n\nThe load-bearing detail, worth keeping: saved settings beat defaults. App.tsx seeds values with\n`values[f.name] ?? f.default` and a stored \"\" is not nullish, so changing the default alone would have fixed\nnothing for anyone who had already saved a blank root. Empty-has-to-mean-home is the fix; the default is the\ncourtesy on top.\n\nVerified:\n- First proposed move for a builtin run launched from an unrelated directory is `list_dir(path=C:\\Users\\tison)`.\n  Nothing in that run's log mentions the launch directory.\n- `describe()` sends `default: 'C:\\Users\\tison'`; `--help` prints `(default: C:\\Users\\tison)`.\n- Two new tests: a blank root reads from home, and the form is sent an absolute path that the world agrees\n  with. Three older assertions had used \"files world with no root\" as the canonical bad config; that config\n  is no longer bad, so they now use the endpoint that was never named.\n- Integration gate: 343 passed, 1 failed — the known webmcp drift (B-2026-09-26-1), untouched by this work.\n  pre-commit PASSED.\n\nLeft open, deliberately: `find_files` walks its whole root twice (`root.rglob(\"*\")`, and again just to count),\nwhich home makes expensive — a builtin run rooted at home did not finish in 90s. Queued as B-2026-09-26-2;\nfixing it is a bounded-walk change to the files environment, not part of a default.\n\nFiles touched: server/appserver/worlds.py, ti_matrix/adapters/files_cli.py, server/tests/test_worlds.py,\nserver/tests/test_server.py. Safe to touch all four now. Nothing in the renderer needed changing — it already\nprefers a saved value, falls back to the default, and uses that default as the hint.",
+  "paths": ["server/appserver/worlds.py", "ti_matrix/adapters/files_cli.py", "server/tests/test_worlds.py", "server/tests/test_server.py"],
+  "refs": ["20260926T080520Z-Ines-1baa2938", "c6f5511"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

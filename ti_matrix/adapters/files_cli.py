@@ -7,7 +7,8 @@ A hosted model needs its key; pass it by NAME, never by value:  --api-key-env OP
 
     --model builtin   the world's own rule-based reasoner — no endpoint, no key, no network at all. Unlike a
                       real model, it cannot invent a starting path from the goal's own words, so it needs
-                      --root (default: the current directory) to know where to make its first move.
+                      --root to know where to make its first move; --help prints the directory it defaults
+                      to on this machine.
 """
 import argparse
 import asyncio
@@ -38,9 +39,11 @@ class _RootedFiles(FilesEnvironment):
 async def _main(goal_text: str, base_url: str, model: str, api_key_env: str, as_json: bool, max_calls: int,
                 timeout_s: float = 120.0, remember: str = "", record: str = "", balance: bool = False,
                 root: str = "") -> None:
-    # The builtin reasoner cannot infer a root from the goal text the way a real model can, so it gets
-    # the current directory when nobody named one; a real model's behavior is unchanged either way.
-    root = root or (str(Path.cwd()) if is_builtin(model) else "")
+    # The builtin reasoner cannot infer a root from the goal text the way a real model can, so it gets the
+    # home directory when nobody named one — the same default the app's files world uses, and a directory
+    # that exists on every machine, unlike the one the command happened to be typed in. A real model's
+    # behavior is unchanged either way.
+    root = root or (str(Path.home()) if is_builtin(model) else "")
     session = Session(remember=remember, record=record)
     env = session.environment(_RootedFiles(root) if root else FilesEnvironment())
     seats = session.seats("files", env, model,
@@ -79,7 +82,7 @@ def _args(argv=None):
     ap.add_argument("--balance", action="store_true",
                     help="after the run, print what the account has left (DeepSeek endpoints only)")
     ap.add_argument("--root", default="",
-                    help="give the builtin reasoner somewhere to start (default: the current directory); "
+                    help=f"give the builtin reasoner somewhere to start (default: {Path.home()}); "
                          "a real model ignores this and reads wherever the goal points it")
     return ap.parse_args(argv)
 
