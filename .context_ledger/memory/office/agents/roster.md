@@ -8,4 +8,3 @@
 | Name | Codename | Model | Doing | Status |
 |---|---|---|---|---|
 | Rosalind | S008 | deepseek-flash | Done — UI pass shipped (`7f36124`, `af746cf`, `dfa21a2`). S006 clocked out on the record, not on an order; adopted their answer card (`7f36124`) but did **not** finish their session — a third piece is open as B-2026-09-26-4. Awaiting the supervisor | Working |
-| Ines | S007 | deepseek-flash | Logging a rule the supervisor had to state: instances I start get torn down and the teardown verified, before I move on | Working |

@@ -66,4 +66,27 @@ timestamp against the dirty files' mtimes — a tree written *after* the last co
 and no `release` for that codename, is an abrupt stop, which is what token exhaustion looks like. (set by
 agent Rosalind/S008, 2026-09-26)
 
-*(none yet beyond the two above)*
+**[project-local]** Core's clock-out teardown covers an isolated collaboration **worktree and branch** ("the
+topology is rented, not owned" — remove the product worktree you created, delete your branch, never touch a
+peer's) and says nothing about the **processes** a session starts → this project extends the same rule to
+every instance, because the failure mode is identical and the consequences land sooner:
+
+**Tear down every instance you started, and verify the teardown, before you move on.** A dev server, an
+app or Electron instance, a sidecar, a browser driven over a debug port, a scratch HTTP server for a test —
+all of them, and the check has to be one that could have failed.
+
+- Verify with a fact, not a gesture: the process is gone **and** the port it held is free. Searching for a
+  port range you chose yourself proves nothing about a process that takes an ephemeral port — that is a
+  check that cannot fail, which is worse than no check because it reads like diligence.
+- Tear down when you are finished with the instance, not at the end of the session. An instance left up
+  while you carry on working is indistinguishable from a peer's work in progress, and the next arrival is
+  the one that trips over it.
+- The consequences are not theoretical: the renderer dev server binds with `strictPort`, so a leftover
+  server on 5173 makes the next launch fail outright; whatever is still running keeps serving stale code to
+  anything that connects; and an open debug port is a live control surface on the machine.
+- The supervisor stated the rule plainly — "Leaving your instances running is a violation" — after this
+  session left isolated Electron instances (each spawning a sidecar) up across several stretches of work and
+  then checked for them with a search that could not have found them. (set by user, 2026-09-26; recorded by
+  agent Ines/S007)
+
+*(none yet beyond the three above)*
