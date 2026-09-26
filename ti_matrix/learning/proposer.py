@@ -24,7 +24,7 @@ a plausible idea for has made the engine worse, not smarter.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from ti_matrix.learning.statistics import HOPELESS_TRIES, Statistics
 from ti_matrix.protocols import Action, Proposer
@@ -61,6 +61,23 @@ class LearningProposer:
             kept = [max(moves, key=lambda m: stats.prior(m.tool))]
         # sorted() is stable, so candidates the experience cannot separate stay in the model's own order.
         return sorted(kept, key=lambda m: stats.prior(m.tool), reverse=True)[:n]
+
+    def considered(self, state: Any) -> Optional[int]:
+        """Pass through how many actions the inner proposer was choosing from.
+
+        A wrapper that swallowed this would quietly cost the record a number nobody could recover: the
+        engine asks the proposer it holds, and the proposer it holds is this. The symptom was exactly
+        that — chess reported "4 of 35" with learning off and nothing at all with it on, because the
+        app turns learning on by default. An optional capability has to survive being wrapped, or it is
+        only optional in the sense that it usually disappears.
+        """
+        inner = getattr(self.inner, "considered", None)
+        if not callable(inner):
+            return None
+        try:
+            return inner(state)
+        except Exception:  # noqa: BLE001 — bookkeeping must never end a run
+            return None
 
     def __repr__(self) -> str:
         return (f"LearningProposer(inner={type(self.inner).__name__}, "

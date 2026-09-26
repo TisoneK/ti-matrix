@@ -68,6 +68,14 @@ export interface Decision {
   headline: string;
   flags: Flag[];
   options: Candidate[];
+  /**
+   * How many actions this decision was chosen from, when the proposer could say.
+   *
+   * Weighing four of thirty-five legal moves and four of four are different decisions, and without
+   * this the record cannot tell them apart. Undefined where the question has no answer — a filesystem
+   * admits any path — and undefined is shown as nothing rather than as a guess.
+   */
+  available?: number;
   /** Actions the search proposed and could not run (refused, or a tool this world does not have). */
   refused: string[];
   /** Everything the state knows after the decision — the engine's own fact text. */
@@ -95,6 +103,15 @@ export interface RunArtifact {
   seed: string | null;
   startedAt: string;
   endedAt: string;
+  /**
+   * Whether this run carried what earlier runs in the same world had established.
+   *
+   * Recorded because Compare exists to hold two runs against each other, and a run that started with
+   * a record is not comparable to one that started cold — the benchmark has the warm pass settling the
+   * same goals in half the rounds. Without this the view would show the difference and attribute it to
+   * the model.
+   */
+  remembered?: boolean;
   events: EngineEventFrame[];
   outcome: {
     settled: boolean;

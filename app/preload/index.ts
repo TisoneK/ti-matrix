@@ -53,6 +53,8 @@ const api = {
   runsLoad: (id: string) => ipcRenderer.invoke("tm:run-load", id),
   runsDelete: (id: string) => ipcRenderer.invoke("tm:run-delete", id),
   runsDir: (): Promise<string> => ipcRenderer.invoke("tm:runs-dir"),
+  // Where a world's accumulated experience is kept, so a run can carry what earlier ones learned.
+  memoryPath: (world: string): Promise<string | null> => ipcRenderer.invoke("tm:memory-path", world),
   // Settings that outlive the window. The value of an API key is not a setting and never travels here:
   // the renderer sends the env-var *name* and the run-time key only ever goes through the goal config.
   settingsLoad: (): Promise<unknown> => ipcRenderer.invoke("tm:settings-load"),

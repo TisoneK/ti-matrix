@@ -10,7 +10,7 @@ import { boundsOf, cellKey, readKnowledge, statsOf } from "./knowledge";
 import { layoutTree, pathTo, readTree, siblingContext } from "./tree";
 import { readTrust, flagCounts } from "./trust";
 import { artifactOf, newRunId, summarise } from "./library";
-import { outcomeLabel, outcomeTone } from "./format";
+import { outcomeLabel, outcomeTone, splitTruncation } from "./format";
 
 let pass = 0;
 const failures: string[] = [];
@@ -314,6 +314,22 @@ eq("an unknown reason survives", outcomeLabel(false, "meteor"), "meteor");
 eq("it answered, it gave up, it broke",
    [outcomeTone(true, null), outcomeTone(false, "budget"), outcomeTone(false, "error: boom")],
    ["ok", "warn", "bad"]);
+
+/* ── the cut the world made ───────────────────────────────────────────────
+ * Every prose world truncates a long read and leaves its own tail note. `splitTruncation` existed to
+ * catch that from the day it was written and nothing called it, so the ledger showed a fragment as
+ * though it were the whole answer — in an app whose question is whether to believe the run. */
+
+eq("an untouched answer is untouched",
+   splitTruncation("cell 1,2 — open: north"), { body: "cell 1,2 — open: north", truncated: false });
+eq("the world's tail note is a marker, not part of what it said",
+   splitTruncation("the first part of a long file\n… (truncated)"),
+   { body: "the first part of a long file", truncated: true });
+eq("the note is caught without the newline too",
+   splitTruncation("a long line… (truncated)"), { body: "a long line", truncated: true });
+// The phrase only counts at the end — a file that discusses truncation is not itself truncated.
+eq("a mention in the middle is not a cut",
+   splitTruncation("… (truncated) appears in this text somewhere").truncated, false);
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) throw new Error("core checks failed:\n" + failures.map((f) => "  ✗ " + f).join("\n"));

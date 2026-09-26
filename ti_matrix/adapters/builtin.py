@@ -127,6 +127,13 @@ class MazeReasoner:
 
     # ── the proposer's seat ──
 
+    def considered(self, state: AgentState) -> Optional[int]:
+        """Every unexplored opening the run could have taken from what it knows."""
+        known = MazeKnowledge(state)
+        if not known.open:
+            return None            # nothing entered yet: the opening moves are not a frontier
+        return len(known.frontier())
+
     async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
         known = MazeKnowledge(state)
         wanted: list[Action] = []
@@ -408,13 +415,11 @@ class BrowserReasoner:
         # Then follow a link whose text or href carries a word from the goal — never an arbitrary one,
         # because "click the first link" is how a run wanders off a site forever.
         #
-        # ONE navigation per fan, and it is a stopgap rather than a fix. The engine probes a fan
-        # concurrently (`asyncio.gather`) and this world holds a single page, so two `goto` candidates
-        # in one fan race: probing example.com and iana.org together returns "loaded iana.org" for
-        # *both*, and the fact recorded against the first names a page it never visited. ADR-4 rule 1
-        # is what actually fixes this — a navigation action carrying the URL it acts on — and until the
-        # world is changed, any other proposer (a model, say) can still produce the same fan. Logged as
-        # B-2026-09-23-10; do not delete this guard without doing that.
+        # ONE navigation per fan. The world no longer *lies* when two share one — each goto reports the
+        # page it actually landed on, and every read names the page it read — but the waste is real:
+        # there is a single page behind the whole fan, so the second navigation throws away the first,
+        # and the engine may then apply the one whose page is gone. Proposing navigation on its own is
+        # what the design asked for; this is the seat honouring it rather than a comment hoping for it.
         for word in words:
             for href, text in sorted(links.items()):
                 if href in loaded:
@@ -445,6 +450,147 @@ class BrowserReasoner:
             share = min(0.9, (standing + gain) / 40)
             out.append(Evaluation(round(share, 4), False, "",
                                   f"{standing + gain} thing(s) known" if gain else "nothing new here"))
+        return out
+
+
+# `describe` leads every chess observation with "FEN <fen> | ... | N legal: a b c" so both survive the
+# 320-character cut that turns an observation into a fact.
+_FEN = re.compile(r"FEN (\S+ [wb] \S+ \S+ \d+ \d+)")
+_LEGAL = re.compile(r"(\d+) legal: ([a-h1-8qrbn ]+)")
+_PLAYED = re.compile(r"play\(fen=(.+?), move=(\w+)\)")
+
+
+class ChessReasoner:
+    """Both seats for chess: weigh a handful of the legal moves, take the one that costs least.
+
+    The point of this seat is not to play well — it plays badly on purpose, one ply deep, and the world
+    it drives says why that is correct. The point is that chess is the first shipped world where a fan
+    is a real choice. The maze offers 1.35 candidates per decision; here there are about thirty-five,
+    and `max_branches` decides how many of them get looked at. So this reasoner does what no maze
+    reasoner ever had to: **it selects**, and the ones it passes over are a genuine road not taken.
+    """
+
+    def __init__(self, specs: Optional[dict[str, ActionSpec]] = None, env: Any = None) -> None:
+        self._specs = specs or {}
+
+    @staticmethod
+    def _here(state: AgentState) -> Optional[str]:
+        """The position the run actually stands in — from the move it applied, not from any probe.
+
+        Facts hold every probe's result, including the candidates the engine discarded, so reading "the
+        last FEN mentioned" would pick up a position the run considered and rejected. The trail holds
+        only what was applied, so it is the one honest source for where the game now is.
+        """
+        for label in reversed(state.trail):
+            played = _PLAYED.search(label)
+            if played:
+                for fact in reversed(state.facts):
+                    if fact.startswith(label):
+                        found = _FEN.search(fact)
+                        if found:
+                            return found.group(1)
+                return None
+        for fact in state.facts:            # nothing applied yet: the opening position
+            found = _FEN.search(fact)
+            if found:
+                return found.group(1)
+        return None
+
+    def considered(self, state: AgentState) -> Optional[int]:
+        """How many legal moves this position offered. The denominator a chess decision needs."""
+        from ti_matrix.adapters.chess.rules import Position, legal_moves
+
+        fen = self._here(state)
+        if fen is None:
+            return None
+        try:
+            return len(legal_moves(Position.from_fen(fen)))
+        except ValueError:
+            return None
+
+    async def propose(self, state: AgentState, n: int, avoid: set[str]) -> list[Action]:
+        wanted: list[Action] = []
+
+        def offer(action: Action) -> None:
+            fp = action.fingerprint()
+            if fp in avoid or fp in state.failed or any(fp == a.fingerprint() for a in wanted):
+                return
+            wanted.append(action)
+
+        fen = self._here(state)
+        if fen is None:
+            offer(Action("position", {}, "the position this game starts from"))
+            return wanted[:n]
+
+        from ti_matrix.adapters.chess.rules import Position, legal_moves, make_move, material, outcome
+
+        try:
+            position = Position.from_fen(fen)
+        except ValueError:
+            return []
+        if outcome(position) is not None:
+            return []
+
+        # Rank every legal move by what the position is worth after it, from the mover's side. One ply,
+        # deliberately: a seat that searched would be doing the engine's job, and the engine is the thing
+        # on display here.
+        #
+        # Material ties constantly in a quiet opening, and with an alphabetical tiebreak the first run
+        # shuffled a rook between a1 and a2 for eighteen moves — correct by its own rule and useless to
+        # watch. Mobility breaks the tie: how many replies the position offers afterwards. It is one
+        # more line, it is a measure people already use, and it produces a recognisable game without
+        # anything resembling a search.
+        mine = 1 if position.white_to_move else -1
+
+        def worth(move):
+            after = make_move(position, move)
+            return (-mine * material(after), -len(legal_moves(after)), move.uci())
+
+        ranked = sorted(legal_moves(position), key=worth)
+        for move in ranked:
+            offer(Action("play", {"fen": fen, "move": move.uci()}, f"weighed {move.uci()}"))
+            if len(wanted) >= n:
+                break
+        return wanted[:n]
+
+    async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:
+        from ti_matrix.adapters.chess.rules import Position, material, outcome
+
+        out: list[Evaluation] = []
+        for obs in outcomes:
+            if not obs.ok:
+                out.append(Evaluation(0.0, False, "", "not a legal move here"))
+                continue
+            found = _FEN.search(obs.text)
+            if found is None:
+                out.append(Evaluation(0.05, False, "", "read the position"))
+                continue
+            after = Position.from_fen(found.group(1))
+            # `after` is the position the *opponent* now faces, so the mover is the other side.
+            mover_is_white = not after.white_to_move
+            ended = outcome(after)
+            if ended and "checkmate" in ended and not obs.predicted:
+                won = ("White wins" in ended) == mover_is_white
+                if won:
+                    out.append(Evaluation(1.0, True, ended, "mate"))
+                    continue
+                out.append(Evaluation(0.0, False, "", "this move is mated"))
+                continue
+            if ended:
+                out.append(Evaluation(0.4, False, "", ended))
+                continue
+            edge = material(after) * (1 if mover_is_white else -1)
+            # Material, plus a small monotone term for the game having advanced.
+            #
+            # Material alone is flat in a quiet opening, and the engine retreats from a move that does
+            # not beat where it stands (`best_progress <= state.progress`) — so a level game stalled on
+            # its second decision and backtracked out. Saying a played move is worth slightly more than
+            # not having played it is honest here: this world's goal is reached by playing the game out,
+            # and a position twenty moves deep is further along than the opening whatever the material.
+            # Never 1.0: only mate settles, which is the evaluator's own rule, not a nudge.
+            played = min(0.4, 0.02 * after.fullmove)
+            out.append(Evaluation(round(min(0.95, max(0.0, 0.3 + edge / 20 + played)), 4), False, "",
+                                  f"material {edge:+d} at move {after.fullmove}"))
         return out
 
 
@@ -499,6 +645,8 @@ def reasoner_for(world: str, specs: Optional[dict[str, ActionSpec]] = None,
         return FilesReasoner(specs, env)
     if world == "browser":
         return BrowserReasoner(specs, env)
+    if world == "chess":
+        return ChessReasoner(specs, env)
     return SurveyReasoner(specs)
 
 
@@ -507,5 +655,5 @@ def is_builtin(model_name: str) -> bool:
     return str(model_name).strip().lower() == BUILTIN
 
 
-__all__ = ["BUILTIN", "BrowserReasoner", "FilesReasoner", "MazeKnowledge", "MazeReasoner", "SurveyReasoner",
+__all__ = ["BUILTIN", "BrowserReasoner", "ChessReasoner", "FilesReasoner", "MazeKnowledge", "MazeReasoner", "SurveyReasoner",
            "goal_words", "is_builtin", "is_noise", "reasoner_for"]

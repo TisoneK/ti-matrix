@@ -864,3 +864,63 @@ svg { display: block; }
 }
 .seatpick button[aria-pressed="true"] small { color: var(--fg-2); }
 @media (max-width: 720px) { .seatpick { grid-template-columns: 1fr; } }
+
+/* "the world said more than the run was shown" — a marker, never more text. The engine truncates a long
+   read and leaves its own tail note; showing that note verbatim would read as part of the world's answer,
+   and hiding it entirely is what the ledger did until now, which let a fragment pass for the whole thing. */
+.row-evidence .cut {
+  display: inline-block;
+  margin-left: var(--s2);
+  padding: 0 5px;
+  border: 1px solid var(--amber);
+  border-radius: 99px;
+  font: 500 9.5px/1.5 var(--mono);
+  font-style: normal;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+/* ── what the run passed over ────────────────────────────────────────────
+   Every candidate in a fan is probed and scored; one is applied. The rest were
+   folded into `Decision.options` from the start and nothing drew them, so the
+   ledger said what happened and never what else was on the table. Quiet by
+   default — the decision is the headline, these are the evidence for it. */
+.row-alts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  margin-top: 5px;
+}
+.alts-label {
+  font: 500 9.5px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--fg-4); margin-right: 1px;
+}
+.alt {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 2px 6px; border-radius: var(--r-1);
+  border: 1px solid var(--line); background: var(--plate);
+  font: 10.5px/1.4 var(--mono); color: var(--fg-3);
+}
+.alt b { color: var(--fg-2); font-weight: 600; }
+/* The world pushed back on this one — the same red a surprise gets in the gutter. */
+.alt.refused { border-color: rgba(255, 106, 106, 0.32); }
+.alt.refused b { color: var(--red); }
+.row.cold .row-alts { opacity: 0.55; }
+
+/* ── the roads not taken, in the tree ─────────────────────────────────────
+   A stub is a candidate that was probed against the real world, scored, and not
+   applied. It is a leaf with no subtree — it was looked at exactly once — so it
+   is drawn shorter, thinner and dimmer than a real edge. Anything heavier would
+   claim a search that did not happen. */
+.stub-edge {
+  stroke: var(--line-2); stroke-width: 1; fill: none; opacity: 0.75;
+}
+.stub-dot {
+  fill: var(--bg); stroke: var(--fg-4); stroke-width: 1;
+}
+/* Weighed and passed over: the amber the ledger already uses for a move taken on a hunch. */
+.stub:hover .stub-edge { stroke: var(--amber); opacity: 1; }
+.stub:hover .stub-dot { stroke: var(--amber); }
+/* The world pushed back on this one — the same red a surprise gets in the gutter. */
+.stub.refused .stub-dot { stroke: var(--red); opacity: 0.85; }
+.stub.refused .stub-edge { stroke: rgba(255, 106, 106, 0.4); stroke-dasharray: 2 2; }
+.stubs.cold { opacity: 0.35; }

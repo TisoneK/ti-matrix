@@ -6,9 +6,7 @@ you find a stale in-progress entry here, a prior session died mid-task —
 its roster row (if left behind) says who was here; check the session
 entry and backlog before starting.
 
-- **Session:** 2026-09-23 — Mara / claude-opus-5 (S004)
-- **Task:** made the window actually run something (rule-based seats, socket reconnect, engine restart), fixed the rail's config button, rebuilt the welcome around a preview of the product, one-word TiMatrix wordmark — done, committed, pushed to `app-ui-rebuild`
-- **Status:** idle — `origin/main` fast-forwarded; nothing outstanding from S004's own work
-- **Next up (user's direction, 2026-09-23):** move off the maze and point the files world at a real job — finding duplicate files of any kind by their content rather than their names (songs are the motivating case, not the scope). Brief: `.context_ledger/memory/office/plans/duplicate-files-brief.md` (B-2026-09-23-6). Read it before designing; it carries a hard constraint (ADR-2) that rules out the obvious libraries, and four questions to put to the user first.
-- **Also queued (user, same conversation):** B-2026-09-23-8 — draw the search's branch points. The engine scores every candidate and applies one; the fold already keeps the rejected ones with their scores, and no panel renders them, so the tree reads as a list. Cheapest of the three and closest to the product's pitch. Brief: `.context_ledger/memory/office/plans/the-roads-not-taken-brief.md`.
-- **Also queued:** B-2026-09-23-7 — show the page the browser world is driving, and what the run actually saw of it. Smaller and mostly wiring; the engine already writes the screenshots. Brief: `.context_ledger/memory/office/plans/browser-what-it-sees-brief.md`.
+- **Session:** 2026-09-25 — Marlowe / claude-sonnet-5 (S005)
+- **Task:** shipped step 1 of B-2026-09-24-2 — the moving-world staleness contract. `AgentState` gains a fact clock (`fact_times`), staleness surfaces in `to_dict()`, the engine's honest-stop events, and `RunMemory.recall()`. Purely additive/diagnostic — no re-probing, no new stop reason.
+- **Status:** done and pushed (`6cb8e73`) — pre-commit, integration and exit gates all green (321 tests, typecheck, app build)
+- **Next up:** step 2 (re-check the one fact a decision rests on, at the moment of acting) is the natural follow-on, per the brief's build order — not started. See B-2026-09-24-2 for the full open-questions list.

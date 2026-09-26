@@ -47,6 +47,18 @@ in the app where you can catch the agent missing something that is plainly visib
 a cookie banner it never read, a button it never found, a price rendered in an image.
 The maze map shows fog. This shows the gap between what was on screen and what was read.
 
+## The page that makes the argument
+
+A live trading page (the user's, 2026-09-24) is the sharpest case this panel will get. The digit
+percentages are DOM text and the agent reads them; **the price chart is a drawing** — canvas or SVG —
+and `page_text` returns nothing for it. So a person glancing at the screen sees a sustained downtrend
+and the run sees a list of numbers. That gap, side by side, is this whole feature in one screenshot,
+and no invented example would make it as well.
+
+It is also the best case the confirmer will ever get: `page_text` is free and clicking **Over** spends
+money, so a run that reaches `needs_confirmation` and stops is the safety argument made visible at no
+cost. See also B-2026-09-24-2 — the same page moves every second, which is a different problem.
+
 ## Design
 
 **One frame per applied decision, not one per probe.** A fan probes several candidates;

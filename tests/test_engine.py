@@ -1,6 +1,8 @@
 """The engine's search behavior, with scripted stubs — no environment, no host, no model."""
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from ti_matrix import ActionSpec, AgentState, EngineBudget, Evaluation, Goal, Move, Observation, StateEngine
@@ -149,12 +151,88 @@ async def test_unselected_probes_still_teach_facts():
     assert st.data["facts"] == 2  # the winner's fact + the runner-up's real observation
 
 
-def test_state_is_immutable_and_render_is_bounded():
+def test_state_is_immutable_and_render_is_bounded_per_fact_not_by_count():
+    """The bound is `_FACT_CHARS` on each observation, not a cap on how many the model may see.
+
+    `render` used to show only the last eight facts, which cost 60% of a maze run's probes to
+    re-learning places it already knew (see `AgentState.render`). The truncation that matters is this
+    one: a 5,000-character read enters the state at 320, so every fact can be shown without the prompt
+    growing without limit.
+    """
     s0 = AgentState(GOAL)
     s1 = s0.apply(Observation(mv(), True, "x" * 5000), Evaluation(0.5))
     assert s0.depth == 0 and s1.depth == 1 and s0.facts == ()
     assert len(s1.render()) < 900 and s1.progress == 0.5
     assert mv(path="/a").fingerprint() == mv(path="/a").fingerprint() != mv(path="/b").fingerprint()
+
+
+def test_the_model_is_shown_every_fact_the_run_has_established():
+    state = AgentState(GOAL)
+    for i in range(30):
+        state = state.apply(Observation(mv(path=f"/f{i}"), True, f"fact {i}"), Evaluation(0.1))
+    shown = [line for line in state.render().splitlines() if line.startswith("  - ")]
+    assert len(shown) == 30, f"the run holds 30 facts and showed {len(shown)}"
+    assert "fact 0" in state.render(), "the earliest fact was dropped"
+    # A caller that wants a narrower view can still ask for one.
+    assert len([l for l in state.render(5).splitlines() if l.startswith("  - ")]) == 5
+
+
+def test_every_fact_carries_the_moment_it_was_observed():
+    """A fact and its time are appended together, so the two tuples are always the same length — the
+    contract a UI or a reasoner relies on when it zips `fact_list` with `fact_ages_ms`."""
+    s0 = AgentState(GOAL)
+    s1 = s0.apply(Observation(mv(path="/a"), True, "a"), Evaluation(0.1))
+    s2 = s1.learn(Observation(mv(path="/b"), True, "b"))
+    assert s0.fact_times == ()
+    assert len(s1.fact_times) == len(s1.facts) == 1
+    assert len(s2.fact_times) == len(s2.facts) == 2
+    # No timestamp was supplied, so both default to "now" — close together, both sane.
+    now = time.monotonic()
+    assert all(0 <= now - t < 1.0 for t in s2.fact_times)
+
+
+def test_a_failed_or_predicted_observation_never_gets_a_fact_time_either():
+    """`facts` and `fact_times` grow on exactly the same conditions — a failed probe or a prediction
+    is not a fact, so it must not leave a dangling timestamp with nothing to pair it to."""
+    s0 = AgentState(GOAL)
+    failed = s0.apply(Observation(mv(path="/a"), False, "nope"), Evaluation(0.0))
+    predicted = s0.apply(Observation(mv(path="/b"), True, "maybe", predicted=True), Evaluation(0.0))
+    assert failed.facts == () and failed.fact_times == ()
+    assert predicted.facts == () and predicted.fact_times == ()
+
+
+def test_observed_at_can_be_supplied_explicitly_and_to_dict_reports_the_age():
+    """A caller that knows precisely when a probe returned (the engine, mid-fan) can say so, and
+    `to_dict` turns that into an age in milliseconds a reader does not have to compute by hand."""
+    ten_seconds_ago = time.monotonic() - 10.0
+    s = AgentState(GOAL).apply(Observation(mv(), True, "old news"), Evaluation(0.1), observed_at=ten_seconds_ago)
+    ages = s.to_dict()["fact_ages_ms"]
+    assert len(ages) == 1
+    assert 9_500 <= ages[0] <= 10_500, f"expected roughly 10000ms, got {ages[0]}"
+
+
+def test_retreat_keeps_fact_times_aligned_with_the_facts_it_restores():
+    parent = AgentState(GOAL)
+    child = parent.apply(Observation(mv(path="/a"), True, "a"), Evaluation(0.2))
+    child = child.learn(Observation(mv(path="/b"), True, "b"))
+    restored = child.retreat_to(parent)
+    assert restored.facts == child.facts
+    assert restored.fact_times == child.fact_times
+
+
+@pytest.mark.asyncio
+async def test_a_stop_reports_how_old_every_known_fact_is():
+    """The engine's own honest-stop event, not just `AgentState.to_dict`'s bounded UI window: a reader
+    deciding whether to believe a stopped run's facts needs an age for every one of them, not just the
+    last twelve."""
+    a, b = mv(path="/a"), mv(path="/b")
+    prop = ScriptedProposer([a], [b])
+    evalr = ScriptedEvaluator({a.label(): Evaluation(0.4), b.label(): Evaluation(0.1)})
+    ev = await collect(engine(prop, FakeExecutor({}), evalr, max_backtracks=0))
+    stopped = ev[-1]
+    assert stopped.kind == "stopped"
+    assert len(stopped.data["fact_ages_ms"]) == len(stopped.data["facts"])
+    assert all(isinstance(a, int) and a >= 0 for a in stopped.data["fact_ages_ms"])
 
 
 def test_parse_json_survives_fences_and_prose():

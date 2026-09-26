@@ -35,9 +35,10 @@ The renderer is a **run inspector**: the visualization is the product, and every
 one side of it. Three views, one run:
 
 - **Run** — the map (what the run believes about the world, filled in as it observes it), the search tree
-  (the states it stood on, with cold branches folded away), and the ledger (every decision with the
-  belief behind it and the world's answer underneath). A transport under all of it scrubs, plays, steps
-  and bookmarks the run.
+  (the states it stood on, the candidates it weighed and passed over drawn as stubs off the node they
+  were weighed at, with cold branches folded away), and **Decisions** — every decision with the belief
+  behind it, the world's answer underneath, and what else was on the table with its score. A transport
+  under all of it scrubs, plays, steps and bookmarks the run.
 - **Library** — every finished run, kept as an artifact: sortable by seed, model, steps, retreats,
   surprises, mean belief and duration.
 - **Compare** — two saved runs under one cursor, overlaid on one grid when they read the same world.
@@ -86,7 +87,7 @@ Two choices, and the setup sheet leads with them because the second one only mat
 **Built-in rules** (the default) fill the engine's proposer and evaluator seats from
 `ti_matrix.adapters.builtin` — no endpoint, no key, no network. A maze run finishes in well under a
 second and produces a full search: real probes against the real world, a map drawn from what the run
-actually saw, retreats out of dead ends, and a ledger of every decision. This is the default for a
+actually saw, retreats out of dead ends, and a record of every decision. This is the default for a
 blunt reason: the app used to open pointing at `qwen2.5:7b` on a local Ollama, so on any machine
 without that exact model pulled every run ended on its second event with `proposer_error: 404` and
 every panel in the window drew an empty state — correctly, because there was nothing to draw. A first
@@ -108,6 +109,41 @@ The socket reconnects on its own — eight attempts, backing off 400ms to 6s —
 the command bar's Run button becomes **Reconnect**, which spawns a fresh sidecar under the same window:
 the run on screen, the library and the config all survive it. Only a boot that never got off the ground
 sends you back to the splash's full relaunch.
+
+## The worlds the window offers
+
+**The maze** — a hidden maze the run learns by walking it. The world that made the engine search.
+
+**Local files** — a read-only filesystem, rooted at one directory; a path that escapes it is refused
+rather than an error.
+
+**Chess** — a game against a simple seeded opponent. The world with a fan worth the name: a position
+offers about thirty-five legal moves where a maze corridor offers one, so the search has something real
+to choose between, and every score it gives is checkable against the position itself.
+
+**Real browser** — a real Chrome at a URL you name. Reads are free; clicking, typing and running script
+are asked before they happen.
+
+The engine also ships a **Context Ledger** world that this window deliberately does not offer. It reads
+one project's engineering protocol, so every label it needed was insider vocabulary, and a world picker
+is the product's front door. `ti_matrix.adapters.context_ledger` still ships and
+`python -m ti_matrix.adapters.ledger_cli` still drives it.
+
+## What a run remembers
+
+Two records, and `recall` answers over both while saying which is which.
+
+**This run.** Built from the observations passing through the engine's tool wrapper, so it needs no
+storage and no setting. It is how a seat asks for the part of what it has learned that it needs instead
+of re-reading everything — and because it is an action, what the run chose to look up is in the record
+like any other move.
+
+**Earlier runs.** Off by default is *not* the case any more: the setup sheet has a **Memory** toggle,
+on, and a run carries what earlier runs in the same world established. One file per world under the
+app's user-data directory, because what the maze taught has nothing to say about a filesystem. It is
+shown rather than silent because it makes two runs of one goal non-identical, and Compare exists to
+hold two runs against each other — the saved artifact records whether a run carried memory, so that
+view cannot show the difference and attribute it to the model.
 
 ## Endless scenarios
 

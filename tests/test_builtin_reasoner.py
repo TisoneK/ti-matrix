@@ -295,10 +295,11 @@ def test_the_page_s_own_words_are_the_answer_when_they_carry_the_goal():
 
 
 def test_never_two_navigations_in_one_fan():
-    """A fan is probed concurrently against one page, so two gotos race and both report the last URL.
+    """A fan is probed concurrently against one page, so a second navigation throws away the first.
 
-    Demonstrated on the real world: probing example.com and iana.org together returned "loaded
-    iana.org" for both, which writes a false fact. This is a guard, not the fix — see ADR-4 rule 1.
+    The world no longer reports falsely when it happens (see `tests/test_browser.py`), but the waste is
+    real and the engine may apply the goto whose page is already gone. The design asked for navigation
+    to be proposed on its own; this is the seat honouring it.
     """
     state = AgentState(GoalType("find the pricing and the plans"), facts=(
         "goto(url=https://shop.test) -> ok: loaded https://shop.test/ — Shop",
@@ -310,3 +311,108 @@ def test_never_two_navigations_in_one_fan():
     tried = {Action(t, {}, "").fingerprint() for t in ("title_and_url", "page_text", "links")}
     moves = asyncio.run(BrowserReasoner({}, _Started("https://shop.test")).propose(state, 5, tried))
     assert len([m for m in moves if m.tool == "goto"]) <= 1, [m.label() for m in moves]
+
+
+# ── the run's own memory ────────────────────────────────────────────────────
+#
+# A proposer is handed one flat AgentState — no node id, no parent, no structure — so it cannot select
+# from what the run has learned. Showing everything is the floor, not selection, and it stops working
+# the moment a world is large. `recall` is how a seat asks for the part it needs, and because it is an
+# action, what it chose to look up is in the record like any other move.
+
+
+def test_the_run_remembers_what_passed_through_it_and_nothing_else():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    m.observe(Observation(Action("grid", {}, ""), True, "a 9x8 grid holding 27 cells"))
+    m.observe(Observation(Action("look", {"cell": "9,9"}, ""), False, "not a cell of this maze"))
+    m.observe(Observation(Action("step", {"cell": "1,1"}, ""), True, "predicted!", predicted=True))
+    assert len(m) == 1, "a failed probe or a prediction is not a fact"
+
+
+def test_the_same_fact_twice_is_remembered_once():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for _ in range(3):
+        m.observe(Observation(Action("grid", {}, ""), True, "a 9x8 grid"))
+    assert len(m) == 1
+
+
+def test_recall_selects_on_the_words_asked_for():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for cell in ("1,1", "4,7", "9,2"):
+        m.observe(Observation(Action("step", {"cell": cell}, ""), True, f"cell {cell} — open: north"))
+    hit = m.recall("4,7")
+    assert "4,7" in hit and "1,1" not in hit and "9,2" not in hit, hit
+
+
+def test_recall_with_no_words_gives_the_most_recent():
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    m = RunMemory()
+    for i in range(10):
+        m.observe(Observation(Action("step", {"i": i}, ""), True, f"fact {i}"))
+    hit = m.recall(limit=3)
+    assert "fact 9" in hit and "fact 0" not in hit and len(hit.splitlines()) == 3
+
+
+def test_recall_marks_every_line_with_how_long_ago_it_was_observed(monkeypatch):
+    """A reading handed back through `recall` must never carry the confidence of a fresh one when it
+    is not — the model asked for its own memory, and the age is the one thing it cannot infer itself."""
+    from ti_matrix.tools import engine_tools
+    from ti_matrix.tools.engine_tools import RunMemory
+
+    ticks = iter([100.0, 105.0])  # observed at t=100s, recalled at t=105s
+    monkeypatch.setattr(engine_tools.time, "monotonic", lambda: next(ticks))
+    m = RunMemory()
+    m.observe(Observation(Action("step", {}, ""), True, "cell 1,1 — open: north"))
+    hit = m.recall()
+    assert "cell 1,1" in hit and "(5.0s ago)" in hit, hit
+
+
+def test_a_run_gets_recall_with_no_stored_memory_at_all():
+    """The within-run half needs no storage and no setting — that is what makes it always available."""
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    env = EngineTools(MazeEnvironment())        # no `memory=`
+    assert "recall" in env.tools()
+
+    async def go():
+        await env.probe(Action("grid", {}, ""))
+        return await env.probe(Action("recall", {"text": "grid"}, ""))
+
+    out = asyncio.run(go())
+    assert out.ok and "this run:" in out.text and "9x8" in out.text, out.text
+
+
+def test_recall_says_which_record_a_fact_came_from():
+    """This run's facts are about the world now; earlier runs' are a weaker claim about how it behaved."""
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    class Remembered:
+        def recall(self, text: str = "", limit: int = 8) -> str:
+            return "- step(...) -> ok: worked last time"
+
+    env = EngineTools(MazeEnvironment(), memory=Remembered())
+
+    async def go():
+        await env.probe(Action("grid", {}, ""))
+        return await env.probe(Action("recall", {"text": "grid"}, ""))
+
+    out = asyncio.run(go())
+    assert "this run:" in out.text and "earlier runs:" in out.text, out.text
+
+
+def test_recall_is_honest_when_it_knows_nothing():
+    from ti_matrix.adapters.maze import MazeEnvironment
+    from ti_matrix.tools import EngineTools
+
+    env = EngineTools(MazeEnvironment())
+    out = asyncio.run(env.probe(Action("recall", {"text": "the exit"}, "")))
+    assert out.ok and "nothing established" in out.text, out.text

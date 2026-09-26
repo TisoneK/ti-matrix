@@ -155,6 +155,13 @@ spike does the audio half already. Build the three cases above per family, plus 
 only rung 4 can settle, and skip that one when no decoder is on PATH so the suite stays
 green on a bare machine.
 
+## Decide retrieval before writing this world
+
+A library of 50,000 files produces a fact set that cannot be shown whole, and "the last N facts" is the
+axis that was just measured as wrong (`597b12d`). B-2026-09-23-12 covers the two options — a `Retriever`
+port, or `recall` as an action the model proposes. Pick one before this world is written; retrofitting
+produces a world shaped around whatever was convenient at the time.
+
 ## Questions for the user — ask before building, they change the design
 
 1. **What happens when it finds duplicates?** A report, or does the app offer to move or

@@ -1,107 +1,94 @@
-# Brief — "we are back where we were": the one sameness worth detecting, and the two that are not
+# Brief — the engine forgetting where it has been is mostly a prompt bug, not a design gap
 
-**Raised by the user, 2026-09-23** — *"this is a matrix, endless possibilities, and what may seem they
-look alike in multiple worlds or the same world could have different states."* Written by Mara (S004).
+**Raised by the user, 2026-09-23.** Rewritten by Mara (S004) after the user corrected the first
+version, which leaned on `DESIGN.md` as though it were a specification. It is not, and the measurement
+below points somewhere much cheaper than the first draft did.
 
-The design already agrees with that sentence, in more detail than I expected. What is missing is not
-the thinking — it is that nothing in any queue points at it, so it would never have been done.
+## The correction that started this
 
-## What the project already decided
+The first draft opened with *"what the project already decided"* and quoted `DESIGN.md`'s three
+samenesses as settled design. The user's objection: **it is not actionable, it is not tested, and the
+design was written after the actions had already been implemented.** Checked, and that is exactly right:
 
-`DESIGN.md` separates three kinds of sameness and rules on each:
-
-> *The same answer is not the same state.* Two methods reach one answer; two routes reach one
-> destination; neither route is invalidated by the other. **That is not a property to collapse.**
->
-> *The same knowledge is the honest form of confluence.* … Sameness of what is **known** — not of what
-> was answered, not of how it was reached — is the version worth detecting, **and it is not detected
-> today.** Every fingerprint in the engine belongs to an action, never to a state, so the engine knows
-> "this move was already tried" and cannot know "we are back where we were."
->
-> *The same action is what the search can actually act on.*
-
-And a passing test measures the cost —
-`tests/test_maze_adapter.py::test_the_engine_cannot_tell_it_has_been_somewhere_before`:
-
-> "the engine knows an *action* was tried, never that a *place* is known … the same place was learned
-> twice."
-
-So: reasoned about in the design, asserted in the suite, **in no backlog and no ADR.** That is the state
-a known limitation goes to die in.
-
-## Both halves of the user's sentence are real, and they pull opposite ways
-
-**Different-looking, same place.** Two routes meet at a junction. The engine pays a fresh probe to
-re-learn a cell it already holds, and the tree grows two subtrees for one location. Wasted budget, and
-a picture of the search that overstates how much ground was covered.
-
-**Same-looking, different state.** Two states can hold the same facts and still differ in what they can
-do next, because `AgentState` also carries `failed` and `tried` — the pruning history. Collapsing on
-appearance would throw away exactly the record of what has been ruled out, which is the thing that makes
-a dead end cost one probe instead of one per turn.
-
-Which is why the rule is *sameness of what is known*, and why the merge is a **union of the pruning
-histories** rather than a replacement. Two states that know the same world cannot usefully disagree
-about what to do next; the only difference left unions cleanly.
-
-## The obstacle nobody has hit yet: a fact is not just knowledge
-
-`Observation.fact()` builds `f"{move.label()} -> {'ok'}: {text}"`. **The action that produced an
-observation is baked into the fact string.** So the same cell learned by `step(cell=1,1,
-direction=south)` and by `look(cell=1,2)` produces two different facts for one piece of knowledge.
-
-A naive hash over `state.facts` therefore does **not** detect confluence — it detects identical
-histories, which is nearly the thing that never happens. This is the trap waiting for whoever picks
-this up, and it is why the obvious one-line implementation will appear to work and do nothing.
-
-## The design that follows from ADR-4
-
-The engine must not guess what "the same place" means — it is host-neutral and a place is a world's
-concept, not the loop's. So the world declares it:
-
-```python
-class Environment(Protocol):
-    def state_key(self, state) -> Optional[str]: ...   # optional; None means "I cannot say"
+```
+2026-09-21  48d06fe  the engine ships — Action.fingerprint() already implemented
+2026-09-22  a065027  the maze arrives, with a test asserting the engine CANNOT tell
+2026-09-22  4faf966  "What this began as, and the three things 'the same' can mean"
 ```
 
-- The maze returns the set of cells it has entered, canonically ordered. Two routes to one junction
-  collide correctly, and the fact strings never enter into it.
-- Chess would return the position, side to move, castling rights and en passant — the same fields a
-  transposition table hashes, and for exactly the same reason: two boards that look alike differ in
-  what is legal next.
-- A world that cannot answer returns `None` and simply gets today's behaviour. Nothing regresses.
+The reasoning came **after** the implementation and after the gap was exposed. Its own commit title —
+"What this began as" — says it is a look back. So "sameness of what is known is the version worth
+detecting" was never a decision anybody validated; it is a post-hoc account of why action-level
+fingerprints are the thing that exists. And the only test asserts the *limitation*, deliberately
+("asserted rather than fixed"). Nothing measured what the limitation costs.
 
-On a collision the engine unions `failed`, keeps the cheaper trail, and does not re-probe. That is the
-payoff and it is measurable: the maze test above becomes an assertion that the place is learned **once**.
+## What it costs, measured
 
-## What this does to the picture, and why it pairs with B-2026-09-23-8
+Re-probing a cell whose openings the run already holds as a fact, across the saved maze runs:
 
-`DESIGN.md` again, and this is the line that answers "endless possibilities" most directly:
+| model | probes | re-learned a known place | |
+|---|---|---|---|
+| `deepseek-flash` | 12 | 5 | **42%** |
+| `deepseek-flash` | 21 | 10 | **48%** |
+| `builtin` × 8 runs | 320 | 0 | **0%** |
 
-> The engine emits a tree with parent links and **never searches it** — the beam of one walks a line
-> while the log describes a graph, which is why a game-tree explorer is something anyone can build on top.
+Nearly half of a real model's probes re-learned something it already knew — at twenty to forty-five
+seconds and real money each. The rule-based reasoner did it zero times in 320 probes.
 
-Confluence detection makes the log an honest **DAG**: a node reachable two ways has two parents. The
-tree panel currently draws a spine and hides the rejected siblings (B-2026-09-23-8); it would then also
-need to draw a join. That is a better picture than either fix alone — the branch points show what was
-weighed, and the joins show where the possibilities were never as many as they looked.
+## Why the rules never do it, and what that reveals
 
-**But the merge is in the engine's bookkeeping, not on the screen.** Per `DESIGN.md`, two routes to one
-destination are both real and neither invalidates the other; the run took one of them. The trail stays
-a trail. Collapsing the drawing would destroy the comparison the Compare view exists for.
+`MazeReasoner` rebuilds what the run has seen from the run's own facts and proposes only steps into
+cells it has *not* entered. It cannot re-probe a known place because it knows which places are known.
 
-## Scope warning
+`LLMMoveProposer` calls `state.render()` — and the default is **`max_facts=8`**. At probe 30 of 40 the
+model is shown the last eight facts and has no record of the first twenty-two cells it learned.
 
-This is `ti_matrix/search.py` and `ti_matrix/state.py` — engine core, the most conservative code in the
-repo, under `test_boundary` and 236 tests. It is also the first change that would add a member to the
-`Environment` protocol, which every world and every user-written world then inherits. Optional with a
-`None` default is what keeps that from being a breaking change, and it should land **before**
-B-2026-09-23-11 opens worlds to users, not after — adding a protocol member once people have written
-against it is a different and worse job.
+So the obvious question: is the re-probing an engine identity failure, or is the proposer simply
+blindfolded? Testable without spending an API call — hold the reasoner constant and vary only how many
+facts it is allowed to see:
 
-## Question for the user
+| shown to the proposer | probes | re-learned | share |
+|---|---|---|---|
+| last 8 facts — *what the model gets today* | 266 | 160 | **60%** |
+| last 16 | 226 | 106 | 47% |
+| last 32 | 140 | 20 | 14% |
+| every fact — *what the rules get* | 120 | 0 | **0%** |
 
-Is the payoff you want the **saved budget** (stop re-probing what is known) or the **truer picture**
-(the tree showing where possibilities converge)? Both fall out of the same detection, but they argue for
-different next steps: the first is engine-only and invisible; the second needs the tree panel to learn
-to draw a join, and is the one that speaks to "this is a matrix."
+Same logic throughout; only the window changed. The observed model runs at 42–48% land between the
+8-fact and 16-fact rows. And the forgetting more than **doubles the total work**: 120 probes becomes 266.
+
+**The engine's lack of state identity is not what causes the observed re-probing.** The proposer being
+shown eight facts is. That is a default argument, not a protocol change.
+
+## So what is actually actionable
+
+1. **Raise what the proposer is shown, and measure it against a real model.** The cheap experiment
+   first. Not free: facts are bounded at 320 characters, so a long files or browser run cannot simply
+   pass all of them — this needs a sensible cap, or the world's own summary, not an unbounded prompt.
+2. **This predicts an improvement; it does not prove one.** The rules *parse* facts; a model *reads*
+   them. Showing forty facts does not guarantee a model uses them. One real run settles it, which is
+   B-2026-09-23-3 (still open — no run against a large hosted model this session).
+3. **Only if that fails does engine-level state identity earn its cost.** It is `search.py` and
+   `state.py`, the most conservative code here, plus a new `Environment` member every world inherits.
+   Nothing measured so far justifies it.
+
+## What stays true from the first draft
+
+Two things survive, and they are the user's own point:
+
+- **Merging on appearance would be wrong.** Two states can hold the same facts and differ in `failed`
+  and `tried` — the pruning history that makes a dead end cost one probe instead of one per turn.
+- **The fact string bakes in the action that produced it.** `Observation.fact()` is
+  `"{move.label()} -> ok: {text}"`, so the same cell learned by `step(...)` and by `look(...)` yields
+  two different strings for one piece of knowledge. Any future attempt to hash `state.facts` for
+  identity detects identical *histories*, not identical knowledge, and will appear to work while doing
+  nothing.
+
+Both are worth knowing. Neither makes state identity the next thing to build.
+
+## Parked, with the reason
+
+Engine-level confluence detection (`Environment.state_key`, union the pruning histories on a collision)
+is **not queued as work**. It is a real idea with no evidence behind it yet, and the measurement above
+moved the likely cause elsewhere. Revisit only if a real model, shown everything it has learned, still
+re-probes what it knows.

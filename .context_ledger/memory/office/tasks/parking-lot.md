@@ -86,6 +86,7 @@ becomes a backlog row or an ADR in `plans/decisions.md`).
 
 | ID | Summary |
 |----|---------|
+| P-2026-09-25-1 | **Should we build a "civilization" world (Civ-style: cities, tech trees, diplomacy, long time horizons)?** Raised by the user, discussed with Marlowe (S005). Lean: not yet as a fifth first-party shipped world (`worlds.py`) — it's a different order of scope than maze/chess/files/browser (long-horizon, heavily stateful, arguably multi-agent) and would stress every open architecture question at once (the moving-world staleness contract in `plans/a-world-that-moves-brief.md` / ADR-5, the state-identity gap, structural recall in `plans/recall-what-is-relevant-brief.md`) rather than let any one of them get settled first. It's a strong fit as the flagship example world for **bring-your-own-world** (B-2026-09-23-11, `plans/worlds-users-can-bring-brief.md`) once that plugin loader ships — exactly the kind of world a third party would want to plug in rather than have hardcoded. No owner, no next step yet; promote to backlog once bring-your-own-world lands and someone wants to build the example. |
 
 ## Deferred work
 

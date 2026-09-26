@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from "react";
 import { Decision, Flag } from "../core/types";
+import { pct, splitTruncation } from "../core/format";
 import { FLAG_ORDER, flagSpec } from "../core/flags";
 import { TrustCurve, flagCounts } from "../core/trust";
 import { Confidence, Empty, Flags, FlagMark, PaneBody, PaneHead, Sparkline } from "../ui/atoms";
@@ -110,6 +111,9 @@ function Row({ decision, current, future, booked, onSeek, onBookmark, onHover, p
   peek: boolean;
 }) {
   const confidence = decision.confidence;
+  // The candidates this decision weighed and did not take. They were probed against the real world and
+  // scored like the winner; the only thing that makes them different is that one move gets applied.
+  const passedOver = decision.options.filter((o) => !o.chosen);
   // The strongest flag becomes the row's tone: the gutter tells the run's story before any word is read.
   const tone = decision.flags.find((f) => f !== "confirmed") ?? (decision.flags[0] as Decision["flags"][number] | undefined);
   return (
@@ -137,9 +141,45 @@ function Row({ decision, current, future, booked, onSeek, onBookmark, onHover, p
           {decision.kind === "stopped" && decision.reason ? <span className="dim"> · {decision.reason}</span> : null}
         </span>
         {decision.evidence ? (
-          <span className="row-evidence">{decision.evidence}</span>
+          // The world cuts a long read off and leaves "… (truncated)"; `splitTruncation` has existed to
+          // catch that and nothing called it, so the ledger showed a fragment as though it were the whole
+          // answer. In an app whose question is whether to believe the run, "it only saw this much" is
+          // not a detail — it is the difference between a fact and a sample.
+          <span className="row-evidence">
+            {splitTruncation(decision.evidence).body}
+            {splitTruncation(decision.evidence).truncated ? (
+              <em className="cut" title="the world returned more than the run was shown — it decided on this much">
+                cut off here
+              </em>
+            ) : null}
+          </span>
         ) : decision.refused.length > 0 ? (
           <span className="row-evidence">refused: {decision.refused.join(", ")}</span>
+        ) : null}
+
+        {/* What else was on the table. Every candidate in a fan is probed against the real world and
+            scored, and only one is applied — `foldDecisions` has always kept the rest in `options`, with
+            the world's answer and the evaluator's number on each, and nothing in the app rendered it.
+            "It went east" and "it went east at 41% over north at 38%, and the world refused west" are
+            different claims, and only the second is a decision you can check. */}
+        {passedOver.length > 0 ? (
+          <span className="row-alts">
+            {/* "4 of 35" is the number that makes this a decision rather than a list. Shown only
+                when the proposer could say — a filesystem has no denominator, and inventing one
+                would be worse than the silence. */}
+            <span className="alts-label">
+              {decision.available !== undefined
+                ? `weighed ${decision.options.length} of ${decision.available}`
+                : "passed over"}
+            </span>
+            {passedOver.map((o) => (
+              <span key={o.fp} className={`alt ${o.ok === false ? "refused" : ""}`}
+                    title={o.ok === false ? `the world refused this: ${o.excerpt ?? ""}` : o.excerpt ?? o.why}>
+                {o.label}
+                <b>{o.ok === false ? "refused" : o.progress === undefined ? "—" : pct(o.progress)}</b>
+              </span>
+            ))}
+          </span>
         ) : null}
       </span>
 

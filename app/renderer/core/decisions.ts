@@ -88,6 +88,8 @@ function headlineFor(kind: DecisionKind, move: string | null, reason: string | u
 interface Iteration {
   from: number;
   options: Candidate[];
+  /** How many actions the proposer chose from, when it could say. */
+  available?: number;
   refused: string[];
   kind: DecisionKind | null;
   chosenFp: string | null;
@@ -146,6 +148,7 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
         headline: headlineFor(kind, text(head["needs"]) || null, reason, 0),
         flags: [kind === "done" ? "confirmed" : "forced"],
         options: [],
+        available: undefined,
         refused: [],
         facts: current.facts,
         modelCalls: current.modelCalls,
@@ -162,6 +165,9 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
     const it: Iteration = {
       from: i,
       options: candidatesOf(head),
+      // How many actions the proposer was choosing from, when it could say. Absent for a world where
+      // the question has no answer — a filesystem admits any path.
+      available: typeof head["available"] === "number" ? (head["available"] as number) : undefined,
       refused: [],
       kind: null,
       chosenFp: null,
@@ -273,6 +279,7 @@ export function foldDecisions(events: EngineEventFrame[]): Decision[] {
       headline: headlineFor(it.kind, chosen?.label ?? null, it.reason, confidence),
       flags: flagsFor(it.kind, it.options, chosen, confidence, priorProgress),
       options: it.options,
+      available: it.available,
       refused: it.refused,
       facts: current.facts,
       modelCalls: current.modelCalls,
