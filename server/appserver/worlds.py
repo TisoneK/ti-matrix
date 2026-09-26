@@ -15,9 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ti_matrix.protocols import Action, Observation
+from ti_matrix.protocols import Action, ActionSpec, Observation
 
-from ti_matrix.adapters.files import FilesEnvironment
+from ti_matrix.adapters.files import FILES_ACTIONS, FilesEnvironment
 from ti_matrix.adapters.maze import MazeEnvironment
 
 
@@ -41,8 +41,20 @@ class RootedFiles(FilesEnvironment):
     name = "files"
 
     def __init__(self, root: str) -> None:
-        super().__init__()
-        self.root = Path(root).expanduser().resolve()
+        root_path = Path(root).expanduser().resolve()
+        # A proposer told only "path: <dir>" reaches for what it has seen most — "/", "/workspace",
+        # "/home" — and every one of those is refused the moment it lands outside this root. Naming
+        # the actual boundary, and "." as the way to start at it, is the difference between a run that
+        # settles in one probe and one that burns its whole backtrack budget on paths that were never
+        # going to work (live, deepseek-flash, 2026-09-26: three refused guesses, zero progress).
+        note = (f" Paths resolve under {root_path}; use '.' for that root itself, or a name/relative "
+                f"path under it — anything outside it is refused.")
+        rooted_actions = {
+            tool_name: ActionSpec(spec.name, spec.description + note, spec.args_hint, spec.read_only, spec.supersedes)
+            for tool_name, spec in FILES_ACTIONS.items()
+        }
+        super().__init__(rooted_actions)
+        self.root = root_path
 
     def _inside(self, raw: Any) -> Optional[Path]:
         if not isinstance(raw, str) or not raw.strip():

@@ -44,6 +44,17 @@ async def test_the_files_world_is_read_only_and_confined_to_its_root(tmp_path):
     assert (await env.probe(Action("read_file", {"path": str(tmp_path / "inside.txt")}))).ok
 
 
+def test_the_files_world_tells_the_proposer_its_own_root(tmp_path):
+    """A proposer told only 'path: <dir>' reaches for what it has seen most in training — '/',
+    '/workspace', '/home' — and every one of those is refused the moment it lands outside the root
+    (live, deepseek-flash, 2026-09-26: three refused guesses in one fan, zero progress). The tool
+    descriptions now name the actual boundary and '.' as the way to start at it."""
+    env: RootedFiles = build("files", {"root": str(tmp_path)})
+    for spec in env.tools().values():
+        assert str(tmp_path) in spec.description
+        assert "'.'" in spec.description
+
+
 def test_a_files_world_that_names_no_root_reads_from_home(monkeypatch, tmp_path):
     """An unnamed root is the home directory, not an error — a blank field still has to run.
 
