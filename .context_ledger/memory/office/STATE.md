@@ -5,10 +5,10 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T07:00:11Z_
+_Regenerated: 2026-09-26T07:17:44Z_
 
 ## Standing params
-- **Core:** 2.0.4 (locked, verified 2026-09-25)
+- **Core:** 2.0.4 (locked, verified 2026-09-26)
 - **Target:** free text — a target in the user's chat message overrides this
 - **Scope:** free — the user names the task per session
 - **Push policy:** push to main directly after each commit
@@ -37,5 +37,5 @@ _2 medium, 0 low priority row(s) — see tasks/backlog.md_
 - plans/decisions.md (ADRs in force — respected, not relitigated): 5 entries, last added 2026-09-24
 
 ## Collaboration
-- 9 event(s) on file; most recent: `20260926T060320Z-Sable-ed8d04a7.json`
+- 10 event(s) on file; most recent: `20260926T065725Z-Ines-69e73e7b.json`
 - Full trail + rules: `memory/collaboration/README.md`; live status: `ledger-collab status --session <S> --issue <slug>`
