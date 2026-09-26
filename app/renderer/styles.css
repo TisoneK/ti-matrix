@@ -989,8 +989,17 @@ svg { display: block; }
 /* ── responsive: the window is resizable, and so is the layout ─────────── */
 
 @media (max-width: 1180px) {
+  /* Stacked, the tree is still the taller half — it was the shorter one here, which is the opposite of the
+     order the panes are read in and left a two-node search clipped by its own pane's edge. */
+  .pane.right { grid-template-rows: minmax(230px, 1.15fr) minmax(160px, 0.85fr); }
+}
+
+/* The two panes need 781px between them, so the composition used to be given up at 1180 — an ordinary
+   window, and the one the supervisor reads this app in. What replaced it was three stacked rows at equal
+   weight with no focal point, which is the whole of the "it reads like a dashboard of equal boxes" note
+   this pass was answering. The arrangement holds down to where the panes genuinely run out of room. */
+@media (max-width: 900px) {
   .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) minmax(0, 1.2fr); overflow: auto; }
-  .pane.right { grid-template-rows: minmax(140px, 0.7fr) minmax(180px, 1fr); }
 }
 
 @media (max-width: 820px) {

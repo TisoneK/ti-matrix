@@ -24,7 +24,9 @@ import { Empty, PaneBody, PaneHead } from "../ui/atoms";
 // on the few leaves that happened to get one.
 const COL = 136;
 const ROW = 62;
-const NODE_W = 92;
+// Wide enough for the tool names this app actually has — `find_files`, `stat_path`, `read_file` — because a
+// plate that reads `find_fi` looks like a bug rather than an abbreviation.
+const NODE_W = 108;
 const NODE_H = 28;
 
 export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
@@ -122,9 +124,9 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
                             {option.excerpt ? `\n${option.excerpt.slice(0, 160)}` : ""}
                           </title>
                           <path className="stub-edge" d={`M${x0} ${node.y} L${x1} ${y}`} />
-                          <rect className="stub-plate" x={x1} y={y - 9} width={100} height={18} rx={4} />
+                          <rect className="stub-plate" x={x1} y={y - 9} width={112} height={18} rx={4} />
                           <text className="stub-move" x={x1 + 6} y={y + 3.5}>{shortMove(option.label)}</text>
-                          <text className="stub-score" x={x1 + 94} y={y + 3.5} textAnchor="end">
+                          <text className="stub-score" x={x1 + 106} y={y + 3.5} textAnchor="end">
                             {refused ? "refused" : option.progress === undefined ? "—" : `${Math.round(option.progress * 100)}%`}
                           </text>
                         </g>
@@ -202,12 +204,12 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek }: {
   );
 }
 
-/** `step(cell=1,3, direction=east)` is a mouthful on a 7px node; the last line of it is not. */
+/** `step(cell=1,3, direction=east)` is a mouthful on a node; the last line of it is not. */
 function shortMove(label: string): string {
   const dir = /direction=([a-z]+)/.exec(label);
   if (dir) return dir[1].slice(0, 4);
   const tool = /^(\w+)/.exec(label.trim());
-  return (tool?.[1] ?? label).slice(0, 7);
+  return (tool?.[1] ?? label).slice(0, 11);
 }
 
 function nodeTitle(id: string, depth: number, progress: number, dead: boolean, current: boolean, why: ReturnType<typeof siblingContext>): string {
