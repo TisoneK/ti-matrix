@@ -112,7 +112,7 @@ def _build_engine(env: Any, config: dict[str, Any], budget_in: dict[str, int],
         # `recall`, which is the one tool that lets a model ask what earlier runs established here
         # instead of re-deriving it. The rules above keep the raw world: they read every fact directly
         # and would only propose `recall()` with no arguments.
-        seats = (LLMMoveProposer(model, environment.tools()), LLMEvaluator(model))
+        seats = (LLMMoveProposer(model, environment.tools()), LLMEvaluator(model, environment.tools()))
         # Every CLI built on `session.py` wires this for a real model; the sidecar never did, so a
         # hosted run that gathered real, useful facts but never hit the evaluator's `done` stopped with
         # nothing to show for the tokens it spent — `stopped: no_progress` and a bare fact list, where

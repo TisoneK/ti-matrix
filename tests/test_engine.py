@@ -337,6 +337,31 @@ async def test_llm_evaluator_guards_failed_probes_and_answerless_done():
 
 
 @pytest.mark.asyncio
+async def test_llm_evaluator_refuses_done_on_a_surface_only_hit_alone():
+    """B-2026-09-26-7's live repro: find_files(contains=".git") and find_files(contains="package") both
+    scored done=True at 100% purely because a name matched — neither ever looked at the folder itself.
+    A search/recall finds a candidate; it does not verify one, so `done` needs a direct look too."""
+    specs = {"find_files": ActionSpec("find_files", "search", surface_only=True),
+             "list_dir": ActionSpec("list_dir", "look")}
+    hit = Observation(mv(tool="find_files", path="/x"), True, "found: /Users/bao/LocalMind")
+    looked = Observation(mv(tool="list_dir", path="/y"), True, "src/ tests/ setup.py")
+    text = ('{"evals": [{"i": 0, "progress": 1.0, "done": true, "answer": "/Users/bao/LocalMind"},'
+            ' {"i": 1, "progress": 1.0, "done": true, "answer": "/Users/bao/LocalMind"}]}')
+    e = await LLMEvaluator(_Port(text), specs).evaluate(AgentState(GOAL), [hit, looked])
+    assert e[0].done is False and "direct look" in e[0].reason
+    assert e[1].done is True  # the same claim, backed by an action that actually looked, is untouched
+
+
+@pytest.mark.asyncio
+async def test_llm_evaluator_with_no_specs_behaves_exactly_as_before():
+    """Every existing caller that never passes `specs` must see no behaviour change at all."""
+    hit = Observation(mv(tool="find_files", path="/x"), True, "found: /Users/bao/LocalMind")
+    text = '{"evals": [{"i": 0, "progress": 1.0, "done": true, "answer": "/Users/bao/LocalMind"}]}'
+    e = await LLMEvaluator(_Port(text)).evaluate(AgentState(GOAL), [hit])
+    assert e[0].done is True
+
+
+@pytest.mark.asyncio
 async def test_registry_executor_reports_unknown_tool_as_a_failed_observation():
     prop = ScriptedProposer([mv(tool="teleport", path="/x")])
     ev = await collect(engine(prop, FakeExecutor({}), ScriptedEvaluator({})))

@@ -92,8 +92,9 @@ class LLMMoveProposer:
 class LLMEvaluator:
     """Scores a whole fan of outcomes in ONE call, with the deterministic guards the search relies on."""
 
-    def __init__(self, model: ModelPort) -> None:
+    def __init__(self, model: ModelPort, specs: Optional[dict[str, ActionSpec]] = None) -> None:
         self._model = model
+        self._specs = specs or {}
 
     async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:
         blocks = []
@@ -121,12 +122,15 @@ class LLMEvaluator:
         out = []
         for i, o in enumerate(outcomes):
             ev = by_i.get(i, Evaluation())
-            # Deterministic guards: a failed probe never counts; "done" needs a grounded answer and a real
-            # (not predicted) outcome.
+            # Deterministic guards: a failed probe never counts; "done" needs a grounded answer, a real
+            # (not predicted) outcome, and — when the tool table says so — a direct look rather than
+            # only a search hit: finding a candidate is not the same as having examined it.
             if not o.ok:
                 ev = Evaluation(0.0, False, "", ev.reason or "probe failed")
             elif ev.done and (not ev.answer.strip() or o.predicted):
                 ev = Evaluation(ev.progress, False, "", "done without a grounded answer")
+            elif ev.done and self._specs.get(o.move.tool, ActionSpec("", "")).surface_only:
+                ev = Evaluation(ev.progress, False, "", "done needs a direct look, not just a search hit")
             out.append(ev)
         return out
 

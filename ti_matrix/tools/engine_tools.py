@@ -132,7 +132,7 @@ class EngineTools:
                 "Look back at what has already been established here, instead of probing for it again. "
                 "Give the words you care about and it answers with the matching facts — from this run, "
                 "and from earlier runs where there are any.",
-                '{"text": "<what to look for>", "limit": 8}', read_only=True),
+                '{"text": "<what to look for>", "limit": 8}', read_only=True, surface_only=True),
         }
 
     def is_read_only(self, action: Action) -> Optional[bool]:

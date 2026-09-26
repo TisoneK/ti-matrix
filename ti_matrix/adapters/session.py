@@ -118,7 +118,7 @@ class Session:
         if want_simulator:
             from ti_matrix.simulator import LLMSimulator
             simulator = LLMSimulator(model)
-        return Seats(self.proposer(model, tools), LLMEvaluator(model), simulator, self.synthesizer(model), model)
+        return Seats(self.proposer(model, tools), LLMEvaluator(model, tools), simulator, self.synthesizer(model), model)
 
     def confirmer(self, available: dict[str, ActionSpec]) -> Optional[Confirmer]:
         """The confirmer, having checked its names against the actions that exist.

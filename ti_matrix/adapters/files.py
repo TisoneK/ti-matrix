@@ -34,8 +34,10 @@ FILES_ACTIONS: dict[str, ActionSpec] = {
         ActionSpec("read_file", "Read the text of one file.", '{"path": "<file>"}'),
         ActionSpec("stat_path", "Facts about a path: exists, kind, size, modified.", '{"path": "<path>"}'),
         ActionSpec("find_files", "Find files or directories whose NAME contains a substring, under a "
-                                 "directory. Bounded: it reports when it stopped before searching everything.",
-                   '{"path": "<dir>", "contains": "<substring>"}'),
+                                 "directory. Bounded: it reports when it stopped before searching everything. "
+                                 "A match is a candidate, not a verified answer — look at what it finds "
+                                 "(list_dir/read_file/stat_path) before treating it as the goal.",
+                   '{"path": "<dir>", "contains": "<substring>"}', surface_only=True),
     )
 }
 

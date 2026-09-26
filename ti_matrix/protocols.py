@@ -48,6 +48,11 @@ class ActionSpec:
     replacement does not have to be named identically to what it replaces. It never reaches the model's
     prompt — it is a resolution input, not a description. The source that supplies a tool is the
     ``ToolSource`` holding it, which is the one place that fact is stated.
+
+    ``surface_only`` marks an action that finds or recalls CANDIDATES — a name search, a memory lookup —
+    rather than examining one directly. ``LLMEvaluator`` refuses a ``done`` claim resting only on a
+    surface_only outcome: it found something that matches, but never looked at what it found — the
+    difference between "a folder named LocalMind exists" and "this is the LocalMind checkout".
     """
 
     name: str
@@ -55,6 +60,7 @@ class ActionSpec:
     args_hint: str = ""
     read_only: bool = True
     supersedes: str = ""
+    surface_only: bool = False
 
 
 def render_action_specs(specs: Sequence[ActionSpec] | dict[str, ActionSpec]) -> str:
