@@ -12,6 +12,7 @@ of TerminalConditions. Every step is an ``EngineEvent`` — states, actions, out
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional, Sequence
@@ -89,6 +90,22 @@ def _fact_ages_ms(state: AgentState) -> list[int]:
     exactly the moment a reader most wants to know whether the answer rests on something stale."""
     now = time.monotonic()
     return [int((now - t) * 1000) for t in state.fact_times]
+
+
+_RETRY_VIEW_CHARS = 1000  # the retry's shorter view of each outcome, when the seat can take one
+
+
+def _retry_view_chars(evaluator: Evaluator) -> Optional[int]:
+    """Whether a failed scoring call may be retried with a shorter view: ``view_chars`` is a capability
+    the engine OFFERS seats that declare it — ``LLMEvaluator`` — not a protocol change every seat must
+    take. The rule-based evaluators keep their plain ``evaluate(state, outcomes)`` signatures, and a
+    keyword they never declared would be exactly the kind of TypeError that ends a run — so the
+    capability is read from the signature instead of hoped for."""
+    try:
+        sig = inspect.signature(evaluator.evaluate)
+    except (TypeError, ValueError):  # builtins and some wrappers have no readable signature
+        return None
+    return _RETRY_VIEW_CHARS if "view_chars" in sig.parameters else None
 
 
 # ─── Terminal conditions: the ways a search can be over ─────────────────────
@@ -331,16 +348,33 @@ class StateEngine:
             yield EngineEvent("thinking", {"phase": "evaluate"})
             try:
                 evals = await self.evaluator.evaluate(state, outcomes)
-            except Exception as exc:  # noqa: BLE001
-                # The probes in this fan already ran, against the real world, and their results are real
-                # observations. Losing them because the *scoring* call failed throws away everything the run
-                # paid for — a timeout, a provider returning nothing but reasoning, a rate limit — and leaves
-                # a window showing zero facts beside panels that visibly hold data. So they are learned
-                # first: the stop below then reports them, and says what they amount to, unverified.
-                for o in outcomes:
-                    state = state.learn(o, observed_at.get(o.move.fingerprint()))
-                yield await self._stopped(f"evaluator_error: {exc}", state, calls)
-                return
+            except Exception:  # noqa: BLE001 — the retry policy below owns the first failure
+                # An empty answer — a hosted model that spent its whole output allowance reasoning and
+                # never wrote its JSON — or any other scoring failure costs the fan a RETRY before it
+                # costs the run: one more call with a shorter view of each outcome, because the prompt
+                # is what the reasoning choked on. `view_chars` is offered to seats that declare it,
+                # never forced on those that do not; a seat with the plain signature gets a fresh call
+                # instead, which a transient failure often needs no more than. The marker below is a
+                # `thinking` event like the one above — the one kind with nothing to report yet — with
+                # the attempt number for the record; readers take the phase, never the attempt.
+                yield EngineEvent("thinking", {"phase": "evaluate", "attempt": 2})
+                view = _retry_view_chars(self.evaluator)
+                try:
+                    if view is None:
+                        evals = await self.evaluator.evaluate(state, outcomes)
+                    else:
+                        evals = await self.evaluator.evaluate(state, outcomes, view_chars=view)
+                except Exception as exc:  # noqa: BLE001
+                    # The second failure is the honest stop — and the probes in this fan already ran,
+                    # against the real world, and their results are real observations. Losing them
+                    # because the *scoring* call failed throws away everything the run paid for — a
+                    # timeout, a provider returning nothing but reasoning, a rate limit — and leaves a
+                    # window showing zero facts beside panels that visibly hold data. So they are
+                    # learned first: the stop below reports them, and says what they amount to, unverified.
+                    for o in outcomes:
+                        state = state.learn(o, observed_at.get(o.move.fingerprint()))
+                    yield await self._stopped(f"evaluator_error: {exc}", state, calls)
+                    return
             calls += 1
             for o, e in zip(outcomes, evals):
                 yield EngineEvent(
@@ -545,9 +579,20 @@ class StateEngine:
         return _ChallengeResult(events, 2, True, ranked, outcomes, observed_at)
 
     async def _probe(self, action: Action, predicted: Optional[Observation]) -> tuple[Observation, int]:
-        """One probe, timed. A predicted outcome never touches the environment."""
+        """One probe, timed. A predicted outcome never touches the environment.
+
+        The probe contract says an environment returns an Observation rather than raise — but a world
+        that violates it (a sandbox that times out, a driver that disconnects) used to kill the whole
+        fan through `asyncio.gather`, discarding every other candidate's real result. The violation
+        becomes here what the contract wanted it to be: a failed observation, carrying what went wrong.
+        """
         t0 = time.monotonic()
-        obs = predicted if predicted is not None else await self.environment.probe(action)
+        if predicted is not None:
+            return predicted, int((time.monotonic() - t0) * 1000)
+        try:
+            obs = await self.environment.probe(action)
+        except Exception as exc:  # noqa: BLE001 — a world that raises still owes the fan an answer
+            obs = Observation(action, False, f"the probe raised {type(exc).__name__}: {exc}")
         return obs, int((time.monotonic() - t0) * 1000)
 
     def _backtrack(

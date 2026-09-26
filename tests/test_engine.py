@@ -67,6 +67,16 @@ class ScriptedEnvironment:
         return await self._executor.run(action)
 
 
+class RaisingEnvironment(ScriptedEnvironment):
+    """A world that violates the probe contract for one path: it raises instead of returning
+    a failed observation — the shape of a sandbox that times out, a driver that disconnects."""
+
+    async def probe(self, action):
+        if action.args.get("path") == "/boom":
+            raise TimeoutError("the world took too long")
+        return await super().probe(action)
+
+
 class ScriptedEvaluator:
     def __init__(self, table):  # {label: Evaluation}
         self.table = table
@@ -75,13 +85,50 @@ class ScriptedEvaluator:
         return [self.table.get(o.move.label(), Evaluation()) if o.ok else Evaluation() for o in outcomes]
 
 
+class RetryEvaluator:
+    """Raises on its first call, then scores from the table — recording every call it received,
+    so a test can pin what the engine asked for on the retry. Its signature takes `view_chars`,
+    so the engine is allowed to shorten the view on the retry."""
+
+    def __init__(self, table):
+        self.table, self.calls = table, []
+
+    async def evaluate(self, state, outcomes, *, view_chars=None):
+        self.calls.append(view_chars)
+        if len(self.calls) == 1:
+            raise RuntimeError("empty answer from the model: it spent all its output tokens reasoning")
+        return [self.table.get(o.move.label(), Evaluation()) if o.ok else Evaluation() for o in outcomes]
+
+
+class PlainRetryEvaluator:
+    """The rule-based seats' plain signature — no `view_chars` keyword at all. Same script:
+    raises once, then scores. If the engine ever sent one a `view_chars` keyword anyway, Python
+    would raise the same TypeError a real plain seat would — which is exactly what the engine
+    must never do; discovering the capability from the signature, not hoping, is what protects them."""
+
+    def __init__(self, table):
+        self.table, self.calls = table, []
+
+    async def evaluate(self, state, outcomes):
+        self.calls.append(None)
+        if len(self.calls) == 1:
+            raise RuntimeError("empty answer from the model: it spent all its output tokens reasoning")
+        return [self.table.get(o.move.label(), Evaluation()) if o.ok else Evaluation() for o in outcomes]
+
+
+class AlwaysFailingEvaluator(RetryEvaluator):
+    async def evaluate(self, state, outcomes, *, view_chars=None):
+        self.calls.append(view_chars)
+        raise RuntimeError("empty answer from the model: it spent all its output tokens reasoning")
+
+
 async def collect(engine, goal=GOAL):
     return [e async for e in engine.run(goal)]
 
 
-def engine(proposer, executor, evaluator, catalog=None, simulator=None, **budget):
+def engine(proposer, executor, evaluator, catalog=None, simulator=None, environment=None, **budget):
     return StateEngine(
-        ScriptedEnvironment(executor, catalog), proposer=proposer,
+        environment or ScriptedEnvironment(executor, catalog), proposer=proposer,
         evaluator=evaluator, simulator=simulator, budget=EngineBudget(**budget) if budget else None,
     )
 
@@ -200,6 +247,79 @@ async def test_no_progress_backtracks_and_never_repeats_a_failed_move():
     kinds = [e.kind for e in ev]
     assert "backtrack" in kinds and kinds[-1] == "done"
     assert a.fingerprint() in prop.seen_avoid[-1]  # the move that led nowhere is remembered
+
+
+# ── An empty evaluator answer costs a retry, not the run ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_failed_evaluation_is_retried_once_and_the_run_settles():
+    """A hosted model that spends its whole output allowance reasoning and returns nothing used to
+    end the run at step one — `evaluator_error`, the probes already paid for discarded from the
+    window even though the stop re-learned them. The scoring call gets one more chance first."""
+    a = mv(path="/a")
+    evalr = RetryEvaluator({a.label(): Evaluation(1.0, True, "ans", "found")})
+    ev = await collect(engine(ScriptedProposer([a]), FakeExecutor({}), evalr))
+    assert evalr.calls == [None, 1000]  # first call plain, the retry with a shorter view
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "ans"
+    assert ev[-1].data["model_calls"] == 3  # propose + the failed evaluate + the retry that settled
+    retry_marks = [e for e in ev if e.kind == "thinking" and e.data.get("attempt") == 2]
+    assert len(retry_marks) == 1 and retry_marks[0].data["phase"] == "evaluate"
+
+
+@pytest.mark.asyncio
+async def test_the_retry_uses_a_shorter_view_and_it_reaches_the_seat():
+    """What the retry actually changes is the prompt's view of each outcome — the thinking is about
+    the text. A seat that accepts `view_chars` must receive it on the retry and only on the retry."""
+    a = mv(path="/a")
+    evalr = RetryEvaluator({a.label(): Evaluation(0.4)})
+    ev = await collect(engine(ScriptedProposer([a]), FakeExecutor({a.label(): (True, "result text")}), evalr))
+    assert evalr.calls == [None, 1000]
+    assert ev[-1].kind == "stopped"  # progress did not beat the root, so the run backs up and stops
+
+
+@pytest.mark.asyncio
+async def test_a_second_failure_stops_honestly_with_the_fans_facts_learned():
+    """One retry, not a loop: a second empty answer ends the run — but the fan's real observations
+    are learned first, so the stop reports what the probes found instead of an empty window."""
+    a = mv(path="/a")
+    evalr = AlwaysFailingEvaluator({})
+    ev = await collect(engine(ScriptedProposer([a]), FakeExecutor({a.label(): (True, "useful listing")}), evalr))
+    assert evalr.calls == [None, 1000]  # exactly one retry was attempted
+    assert ev[-1].kind == "stopped" and "evaluator_error" in ev[-1].data["reason"]
+    assert len(ev[-1].data["facts"]) == 1 and "useful listing" in ev[-1].data["facts"][0]
+
+
+@pytest.mark.asyncio
+async def test_an_evaluator_without_a_view_keyword_still_gets_its_retry():
+    """`view_chars` is a capability the engine offers, not a protocol change: the rule-based seats
+    keep their plain signatures, and a failure in one of them retries the same way — a fresh call,
+    which for a flaky endpoint or a transient parse is often the fix on its own."""
+    a = mv(path="/a")
+    evalr = PlainRetryEvaluator({a.label(): Evaluation(1.0, True, "ans", "found")})
+    ev = await collect(engine(ScriptedProposer([a]), FakeExecutor({}), evalr))
+    assert evalr.calls == [None, None]
+    assert ev[-1].kind == "done" and ev[-1].data["answer"] == "ans"
+
+
+@pytest.mark.asyncio
+async def test_a_raising_probe_becomes_a_failed_observation_and_the_fan_survives():
+    """The probe contract says an environment returns an Observation rather than raise — but one
+    raising call (a sandbox that times out, a driver that disconnects) used to kill the whole fan
+    through `asyncio.gather`, ending the run with an error string for a reason and the other
+    candidates' real results discarded. The engine now survives the violation: the raiser is a
+    failed probe, the rest of the fan proceeds, and the record says what actually happened."""
+    boom, good = mv(path="/boom"), mv(path="/good")
+    prop = ScriptedProposer([boom, good])
+    evalr = ScriptedEvaluator({good.label(): Evaluation(0.6)})
+    ev = await collect(engine(prop, FakeExecutor({good.label(): (True, "the good listing")}), evalr,
+                              environment=RaisingEnvironment(FakeExecutor({good.label(): (True, "the good listing")}))))
+    probe = next(e for e in ev if e.kind == "probe" and e.data.get("move") == boom.label())
+    assert probe.data["ok"] is False and "took too long" in probe.data["excerpt"]
+    assert any(e.kind == "probe" and e.data.get("move") == good.label() and e.data["ok"] for e in ev)
+    states = [e for e in ev if e.kind == "state"]
+    assert states[-1].data["failed"] == 1 and states[-1].data["facts"] == 1  # the raiser remembered, the reader learned
+    assert any(e.kind == "evaluation" and e.data.get("move") == good.label() for e in ev)
 
 
 @pytest.mark.asyncio

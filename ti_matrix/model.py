@@ -90,17 +90,27 @@ class LLMMoveProposer:
 
 
 class LLMEvaluator:
-    """Scores a whole fan of outcomes in ONE call, with the deterministic guards the search relies on."""
+    """Scores a whole fan of outcomes in ONE call, with the deterministic guards the search relies on.
+
+    ``view_chars`` — keyword-only, defaulting to the full view — is the engine's retry hook: when a
+    scoring call fails (a reasoning model that spent its whole output allowance thinking and never
+    wrote its JSON), the engine retries ONCE with a shorter view of each outcome, because the prompt
+    is what the thinking choked on. Declared as a real parameter rather than duck-typed so the engine
+    can discover it from the signature; a caller that never passes it sees exactly the old behaviour.
+    """
 
     def __init__(self, model: ModelPort, specs: Optional[dict[str, ActionSpec]] = None) -> None:
         self._model = model
         self._specs = specs or {}
 
-    async def evaluate(self, state: AgentState, outcomes: Sequence[Observation]) -> list[Evaluation]:
+    async def evaluate(
+        self, state: AgentState, outcomes: Sequence[Observation], *, view_chars: Optional[int] = None
+    ) -> list[Evaluation]:
+        limit = view_chars if isinstance(view_chars, int) and view_chars > 0 else _EVAL_VIEW_CHARS
         blocks = []
         for i, o in enumerate(outcomes):
             mark = " (PREDICTED, not real)" if o.predicted else ""
-            blocks.append(f"[{i}] {o.move.label()} -> {'ok' if o.ok else 'FAILED'}{mark}\n{o.text[:_EVAL_VIEW_CHARS]}")
+            blocks.append(f"[{i}] {o.move.label()} -> {'ok' if o.ok else 'FAILED'}{mark}\n{o.text[:limit]}")
         prompt = (
             f"{state.render()}\n\nCandidate outcomes (real tool results):\n" + "\n\n".join(blocks) + "\n\n"
             "For EACH outcome give progress 0..1 = the share of what the goal needs that is known once this outcome "
