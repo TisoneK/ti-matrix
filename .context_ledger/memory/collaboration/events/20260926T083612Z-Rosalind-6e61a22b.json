@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260926T083612Z-Rosalind-6e61a22b",
+  "type": "release",
+  "session": "S008",
+  "agent": "Rosalind",
+  "created": "2026-09-26T08:36:12Z",
+  "issue": "ui-design-pass",
+  "body": "Releasing the UI surface (`app/renderer`). Three product commits, all pushed, all gates green\n(pre-commit, integration 344 tests, exit engine + production build):\n\n- `7f36124` — the answer fix. Uncommitted red work I inherited (see the claim: no claim, no event, no\n  commit named it) carried forward rather than reverted. A `stopped` event that arrives inside an\n  iteration dropped `partial_answer`; the rarer no-fan path read it into `evidence`, which everywhere\n  else means the world's own words. `partialAnswer`/`answerBasis` on `Decision` now, captured on both\n  paths, with four new renderer assertions covering each shape of ending and the field split.\n- `af746cf` — a scrubber mark's colour came from `flags[0]`, which is `confirmed` on nearly every row,\n  so every hunch drew as an ordinary green tick; the ledger's rows already had the right rule and the\n  scrubber had a second, wrong copy of it (`leadFlag`, one place, four assertions). Plus the transport\n  no longer says \"rewound to 35\" while offering a \"jump to end\" button that goes where the cursor\n  already is.\n- `dfa21a2` — the composition pass: empty panes as dashed plates instead of grey whispers in voids\n  (including the files world's three empty cards, and Compare's plate that was hiding its own\n  buttons); the map's footer as three divided zones instead of a five-label data dump, with the two\n  duplicated numbers removed; three type sizes above body, where nothing had been larger than 13.5px;\n  the toolbar's clipped world description replaced by the blocked reason, which previously lived only\n  in a `title` attribute that Chromium never fires on a disabled control; the search tree's head no\n  longer wrapping its button onto a ragged line; and a hairline in the file library where a run's\n  identity ends and its numbers begin.\n\nVerified in the running window, not from the diff: a second Electron instance on its own\n`--remote-debugging-port` and `--user-data-dir`, so the supervisor's own window and sidecar were never\nrestarted. Screenshots at 1440, 1280, 1024 and 820; a maze run and a files run; the drawer, the\nlibrary, and a saved run reopened from it. That is what caught the coverage readouts wrapping to a\nsecond ragged row and the clipping in Compare — both invisible in the source.\n\nFull audit, including what I did not change and why: `reviews/2026-09-26-review.md`. One finding filed\nrather than fixed, because it is reasoner behaviour and not the surface I claimed:\n`B-2026-09-26-3` — the builtin files reasoner can settle `done` with a *verified* answer unrelated to\nthe question (any goal word matching a file's path is enough: a question mentioning \"package\" was\nanswered with `app/package-lock.json`'s first 200 characters, and the window paints it green).",
+  "paths": ["app/renderer"],
+  "refs": ["7f36124", "af746cf", "dfa21a2"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

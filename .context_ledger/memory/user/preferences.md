@@ -52,4 +52,10 @@ Format: - <preference> — <how to apply it> (provenance, YYYY-MM-DD)
 
 ## Review depth
 
+- **Judge the UI by looking at the running window, never at the source.** The user's own words for a UI
+  that was internally consistent and still read as wrong: "it feels like it was developed by a backend
+  developer not a real designer". A palette, a token file and a set of documented colours are not evidence
+  that a screen is composed — begin any UI task by driving the real app and capturing the actual screens,
+  and treat "the source looks deliberate" as no evidence at all. (correction, 2026-09-26)
+
 ## Risk & approvals

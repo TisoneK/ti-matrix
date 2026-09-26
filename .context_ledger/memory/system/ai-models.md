@@ -24,6 +24,7 @@ its work accordingly).
 |---|---|---|---|---|
 | Buffy (Freebuff host agent) | unknown | 2026-09-23 | 2026-09-23 | 1 |
 | Nadia (ZCode) | deepseek-flash | 2026-09-23 | 2026-09-23 | 1 |
+| Rosalind (ZCode) | deepseek-flash | 2026-09-26 | 2026-09-26 | 1 |
 
 ## Observations
 
@@ -32,6 +33,13 @@ its work accordingly).
   swallowing its hint into the accessible name) were all invisible in the source and obvious on screen.
   Wrote the folds first and the panels second, which is why four panels could be rewritten in one session
   without breaking the others. (2026-09-23)
+- **Rosalind / deepseek-flash:** the same lesson from the other direction. It read `styles.css` first and
+  came away thinking the app was well designed — that file documents a real visual grammar — and only
+  found the actual complaint (composition: empty panes as voids, a stat-block footer under the map, no
+  type above 13.5px, meaning encoded in unlabelled glyphs) after driving the running window and measuring
+  the layout. Re-verifying every change in the live window at four widths, rather than trusting the diff,
+  is what caught the coverage readouts wrapping to a second ragged row and the Compare pane's clipped
+  buttons. Needs the window, not the source, as its evidence. (2026-09-26)
 
 Concrete, evidence-based capabilities and limits — things demonstrated
 in this repo's sessions, not marketing claims or self-assessment.

@@ -19,24 +19,41 @@ block (and its "last verified" date) every time you run on it again.
    preferences in `user/`; project-wide decisions in `plans/`.
 
 ---
-## bao's Mac — where the app was rebuilt (last verified 2026-09-23)
+## bao's Mac — where the app was rebuilt (last verified 2026-09-26)
 - **Identify by:** macOS (darwin 24.6.0, x86_64), project checkout at `/Users/bao/Code/ti-matrix`
 - **OS:** macOS; bash; no Windows tooling — the `.cmd`/`.ps1` launchers do not apply here
 - **Runtimes:** Python 3.10.20 in the repo's `.venv/` (`python3` on PATH is 3.9.6 and too old for the
   package's `requires-python = ">=3.10"` — always use `.venv/bin/python`); Node 24.17.0, npm 11.13.0
-- **Verified commands:** `.venv/bin/python -m pytest tests` (engine, 207 passed) ·
-  `cd server && ../.venv/bin/python -m pytest tests` (sidecar, 34 passed) ·
-  `cd app && npm run typecheck && npm run test && npm run build` (129 renderer assertions, Vite build) ·
+- **Verified commands (2026-09-26):** `.venv/bin/python -m pytest tests` (engine) ·
+  `.venv/bin/python -m pytest tests server/tests -q` (344 passed in 61s) · `npm --prefix app run typecheck`
+  · `npm --prefix app run test` (172 renderer assertions) · `npm --prefix app run build` (Vite, green) ·
+  `sh .context_ledger/core/bin/ledger-gates run pre-commit|integration|exit` — all three PASSED ·
   `node -e` / `npx esbuild` are both on PATH and usable for scratch work
 - **Quirks:** no `ws` package in `app/node_modules`, so a WebSocket test harness must go through the real
   sidecar rather than a stub server; `pkill -f` on a backgrounded node/python script is needed to stop test
   servers between runs
-- **The window CAN be launched and read here** (found later, 2026-09-23): `cd app && npm run dev:vite` in one
+- **The window CAN be launched and read here** (found 2026-09-23): `cd app && npm run dev:vite` in one
   shell, `VITE_DEV=1 npx electron . --remote-debugging-port=9222` in another, then drive it over CDP —
   `curl 127.0.0.1:9222/json` for the page target and `Runtime.evaluate` / `Page.captureScreenshot` for the
   DOM and a picture of the window's own content. `screencapture` on the desktop shows nothing (this session's
   WindowServer does not composite the app window), but the CDP capture renders the page regardless, which is
   what the layout checks actually need. Node 24's built-in WebSocket is enough — no dependency needed.
+- **Second-instance recipe — how to inspect the app without disturbing the supervisor's own window**
+  (verified 2026-09-26; this is what makes a UI pass possible while they are using the app). A dev server
+  is usually already up on 5173 by the supervisor; against it, launch
+  `VITE_DEV=1 npx electron . --remote-debugging-port=9333 --user-data-dir=/tmp/tm-<name>`.
+  **The single-instance lock is per `--user-data-dir`** (`app/main/index.ts` calls
+  `requestSingleInstanceLock()`), so a second instance without its own profile exits silently and looks
+  like a broken launch. Each instance spawns its own `appserver`; `--user-data-dir` also isolates the saved
+  settings and library, which is why a fresh instance starts with no runs and no saved API key.
+- **CDP gotchas, found the hard way:** `Input.dispatchMouseEvent` takes CSS pixels, so call
+  `Emulation.setDeviceMetricsOverride` first and re-measure element rects rather than reusing coordinates
+  from an earlier screenshot. A click dispatched while Vite is applying an HMR update can be lost — if an
+  expected state change does not appear, re-check that the element you targeted is still the live one
+  (its `title`/`disabled`) before concluding the app is broken, and be aware that a real mouse event and a
+  `button.click()` inside `Runtime.evaluate` are different experiments. Vite serves the renderer at
+  `http://127.0.0.1:5173/`, so renderer edits hot-reload with no reload step (a reload is still worth it
+  after structural changes).
 
 ---
 ## Lameck — the user's Windows desktop (last verified 2026-09-23)
