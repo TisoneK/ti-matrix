@@ -71,6 +71,20 @@
   --t-tap: 150ms;      /* a control answering the hand */
   --t-move: 420ms;     /* something arriving or changing */
   --t-live: 1.9s;      /* the pulse of anything currently happening */
+
+  /* ── the HUD layer ───────────────────────────────────────────────────────
+     Advanced sci-fi is a *treatment*, not a second meaning: ice/amber/red/green keep the four claims
+     they already make (live, belief, refused, agreed). What this adds is depth and instrumentation — a
+     holographic floor, notched plate corners, a brighter holo accent for chrome, and glow spent only on
+     things that are genuinely live. Everything here is additive: delete the --holo/--glow tokens and the
+     "HUD layer" block at the foot of this file and the app is exactly the instrument it was. */
+  --holo: #5fe3ff;
+  --holo-dim: rgba(95, 227, 255, 0.14);
+  --holo-line: rgba(95, 227, 255, 0.46);
+  --glow: rgba(88, 182, 255, 0.55);
+  --glow-soft: rgba(88, 182, 255, 0.14);
+  --glass: rgba(12, 17, 24, 0.74);
+  --grid-line: rgba(88, 182, 255, 0.055);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -79,11 +93,19 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--void);
   color: var(--fg);
   font: 400 13px/1.45 var(--ui);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+/* Scanlines, held at the very edge of visibility: the texture that says "screen" without charging
+   legibility for it. Pointer-events off and above everything, so it is pure atmosphere. */
+body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px);
 }
 
 h1, h2, h3, h4, p, pre, figure { margin: 0; }
@@ -129,10 +151,17 @@ svg { display: block; }
   display: flex;
   flex-direction: column;
   height: 100%;
-  background:
-    radial-gradient(1200px 600px at 22% -8%, rgba(88, 182, 255, 0.05), transparent 60%),
-    radial-gradient(900px 500px at 100% 110%, rgba(185, 140, 245, 0.045), transparent 60%),
-    var(--bg);
+  /* The holographic floor: a two-axis grid over the void, plus the two corner glows that lift the
+     top-left and bottom-right into a reading light. The panes sit translucent on top of it, so they read
+     as glass plates floating over a surface rather than rectangles pasted on a flat. */
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    radial-gradient(1200px 600px at 22% -8%, rgba(88, 182, 255, 0.09), transparent 60%),
+    radial-gradient(900px 500px at 100% 110%, rgba(185, 140, 245, 0.07), transparent 60%);
+  background-size: 42px 42px, 42px 42px, auto, auto;
+  background-color: var(--void);
+  background-attachment: fixed, fixed, fixed, fixed;
 }
 
 /* ── the top rail: identity, state, and the way to the secondary surfaces ── */
@@ -373,7 +402,18 @@ svg { display: block; }
   .stage:has(.pane.world) { grid-template-columns: minmax(320px, 0.78fr) minmax(440px, 1.22fr); }
 }
 
-.pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--plate); }
+.pane {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(9px) saturate(1.15);
+  backdrop-filter: blur(9px) saturate(1.15);
+}
+/* Notched corners — the one shape that reads as a HUD plate rather than a web panel. Applied to the
+   leaves, never to `.pane.right` (which is only a grid holding two of them), so the cuts land once per
+   surface. */
+.pane:not(.right) {
+  clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+}
 /* The two halves of the audit column are not equals: the tree is the shape of the search — how wide it
    went and what it gave up — and the ledger is the list of the same steps in order. The ledger had the
    larger share, which put the picture in the smaller half of its own column. */
@@ -393,18 +433,27 @@ svg { display: block; }
 .pane:has(.row[aria-current="true"]) { box-shadow: inset 0 0 0 1px rgba(88, 182, 255, 0.18); }
 
 .pane-head {
+  position: relative;
   display: flex; align-items: center; gap: var(--s2);
   padding: 9px var(--s3);
   border-bottom: 1px solid var(--line);
-  background: var(--plate-2);
+  background: linear-gradient(180deg, rgba(26, 34, 48, 0.72), rgba(16, 21, 30, 0.72));
   min-height: 40px;
   flex-wrap: wrap;
 }
-.pane-title {
-  font: italic 600 var(--t-title)/1.2 var(--display);
-  letter-spacing: 0.02em; color: var(--fg);
+/* A holo accent that fades out along the head's own underline — the instrument's "this channel is
+   live" rule, present on every pane without shouting on any. */
+.pane-head::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, var(--holo-line), transparent 44%);
 }
-.pane-title::before { content: "§ "; color: var(--fg-4); font-style: normal; }
+/* Uppercase and tracked: a readout label, not a chapter title. The serif stays for the run's own prose
+   (headlines, the final answer) where it is a voice; chrome is instrument lettering. */
+.pane-title {
+  font: 600 11px/1 var(--ui);
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--fg);
+}
+.pane-title::before { content: "// "; color: var(--holo); font-style: normal; letter-spacing: 0; }
 .pane-sub { font: 400 11px/1 var(--mono); color: var(--fg-3); }
 .pane-head .spacer { flex: 1; }
 
@@ -448,6 +497,7 @@ svg { display: block; }
 .dial-track { fill: none; stroke: var(--line-2); stroke-width: 2.5; }
 .dial-fill {
   fill: none; stroke: var(--ice); stroke-width: 2.5; stroke-linecap: round;
+  filter: drop-shadow(0 0 3px var(--glow-soft));
   transition: stroke-dasharray var(--t-move) cubic-bezier(0.3, 0.7, 0.3, 1), stroke var(--t-move) ease;
 }
 .dial.green .dial-fill { stroke: var(--green); }
@@ -638,9 +688,9 @@ svg { display: block; }
    the pane instead of a pulse in place. Applies to the plates and the halos that scale with them. */
 .node-body { stroke-width: 1.5; transform-box: fill-box; transform-origin: center; }
 .node-body.alive { fill: var(--plate-2); stroke: var(--ice-line); }
-.node-body.live { fill: var(--ice-dim); stroke: var(--ice); animation: node-born 900ms ease-out; }
+.node-body.live { fill: var(--ice-dim); stroke: var(--ice); animation: node-born 900ms ease-out; filter: drop-shadow(0 0 7px var(--glow)); }
 .node-body.cold { fill: #131922; stroke: var(--line-2); stroke-dasharray: 3 3; }
-.node-body.settled { fill: var(--green-dim); stroke: var(--green); }
+.node-body.settled { fill: var(--green-dim); stroke: var(--green); filter: drop-shadow(0 0 6px rgba(63, 208, 138, 0.45)); }
 .node-group:hover .node-body, .node-group:focus-within .node-body { stroke: var(--fg-2); }
 /* The whole plate answers the pointer, not just its outline: a hair of scale is the difference between
    a diagram you read and a surface you can touch. Anchored at the centre like every other transform on
@@ -664,7 +714,7 @@ svg { display: block; }
 .node-edge { transition: stroke 140ms ease, opacity 140ms ease; }
 .node-hit { fill: transparent; cursor: pointer; }
 .node-peek { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-dasharray: 2 2; pointer-events: none; }
-.node-selected { fill: none; stroke: var(--ice); stroke-width: 2; pointer-events: none; }
+.node-selected { fill: none; stroke: var(--ice); stroke-width: 2; pointer-events: none; filter: drop-shadow(0 0 5px var(--glow)); }
 /* The node the run is standing on while an iteration is open: the cursor's `here` ring answers "which
    step am I looking at" and this one answers "where is the run right now", which while a fan is open are
    two different nodes. Ice, like every other live thing in the app, drawn as a ring that creeps around the
@@ -681,7 +731,7 @@ svg { display: block; }
 /* The branch the run is still standing on carries a current: a slow dash travelling toward the live
    node. It is the one motion that says *direction* — where the search came from and where it is now —
    rather than merely that something is happening, so it is the only edge that moves. */
-.node-edge.flowing { stroke-dasharray: 5 8; animation: flow 1.5s linear infinite; }
+.node-edge.flowing { stroke-dasharray: 5 8; animation: flow 1.5s linear infinite; filter: drop-shadow(0 0 3px var(--glow-soft)); }
 @keyframes flow { to { stroke-dashoffset: -13; } }
 
 .fold-chip { fill: var(--plate-2); stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 2; cursor: pointer; }
@@ -1303,3 +1353,54 @@ svg { display: block; }
   50% { stroke: var(--ice); stroke-opacity: 0.35; }
 }
 .stubs.live .stub-edge { stroke: var(--ice-line); opacity: 0.7; }
+
+/* ═══ the HUD layer ═══════════════════════════════════════════════════════════
+   Everything above is the instrument's semantics; this is its costume. Kept in one place so it can be
+   lifted out whole, and deliberately additive — nothing here changes what a colour or a shape means.
+
+   The rules it holds itself to, so it reads as advanced instrumentation and not as an arcade cabinet:
+     · glow marks only things that are LIVE — the standing node, the flowing branch, the focused row.
+       Spend it on resting surfaces and the whole screen turns to noise;
+     · cyan is chrome: letters, hairlines, a lit edge. Never a data encoding (that is amber's job);
+     · the grid and the scanlines live at the edge of visibility — if you can read them without looking
+       for them, they are too loud.
+*/
+
+/* Cards become frosted readout slabs with a lit top edge. */
+.card {
+  border-color: var(--line-2);
+  background: linear-gradient(180deg, rgba(24, 31, 44, 0.78), rgba(13, 17, 24, 0.78));
+  box-shadow: inset 0 1px 0 rgba(95, 227, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.card h4 { color: #8fd8ee; text-shadow: 0 0 12px rgba(95, 227, 255, 0.22); }
+
+/* The ledger's current row already carried an ice edge; on the HUD it carries the glow too, and a
+   hovered row lights rather than merely tinting. */
+.row[aria-current="true"] { box-shadow: inset 0 0 26px rgba(88, 182, 255, 0.07); }
+.row:hover { background: rgba(88, 182, 255, 0.055); }
+
+/* Every pane's empty plate takes the holo hairline, so "waiting" looks powered rather than broken. */
+.empty-plate { border-color: var(--holo-line); }
+
+/* The frame's two fixed bars get a lit edge, tying the top rail and the transport to the panes between. */
+.rail { box-shadow: 0 1px 0 rgba(95, 227, 255, 0.12); }
+.transport { box-shadow: 0 -1px 0 rgba(95, 227, 255, 0.12); }
+
+/* A live stamp: while the engine streams, the tree pane blinks a holo dot in its own head, so "this is
+   live" is legible from across the room and not only from the standing node's pulse. */
+.pane:has(.live-run) .pane-head::before {
+  content: ""; position: absolute; right: 12px; top: 12px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--holo); box-shadow: 0 0 9px var(--holo);
+  animation: breathe 1.8s ease-in-out infinite;
+}
+
+/* One slow scan travelling down the window — the cheapest possible "this thing is on" cue, and the one
+   piece of pure atmosphere. alpha is deliberately below the threshold where it competes with text. */
+@keyframes scan-down { from { transform: translateY(-55vh); } to { transform: translateY(115vh); } }
+body::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; height: 55vh;
+  z-index: 9997; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(95, 227, 255, 0.045), transparent);
+  animation: scan-down 11s linear infinite;
+}
