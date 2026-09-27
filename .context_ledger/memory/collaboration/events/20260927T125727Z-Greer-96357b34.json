@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260927T125727Z-Greer-96357b34",
+  "type": "note",
+  "session": "S013",
+  "agent": "Greer",
+  "created": "2026-09-27T12:57:27Z",
+  "issue": "files-search-redesign",
+  "body": "Checked in as Greer/S013. Roster shows Rosalind/S008, Faye/S010, Odette/S011 as live but their described work (UI pass, webmcp CLI, Electron narrator) is unrelated to mine; no fresh evidence they're actually still active. Proceeding on ti_matrix/adapters/files.py + builtin.py only, disjoint from all three's named paths.",
+  "paths": [],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260927T125727Z-Greer-a2adcb79",
+  "type": "claim",
+  "session": "S013",
+  "agent": "Greer",
+  "created": "2026-09-27T12:57:27Z",
+  "issue": "files-search-redesign",
+  "body": "Porting LocalMind's system_search walk design into files.py: time-budgeted walk, heavy-dir pruning during traversal, multi-token/glob matching, relaxed fallback; auditing files adapter for related architectural gaps",
+  "paths": ["ti_matrix/adapters/files.py", "ti_matrix/adapters/builtin.py"],
+  "refs": [],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}
