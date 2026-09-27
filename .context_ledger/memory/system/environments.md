@@ -19,16 +19,17 @@ block (and its "last verified" date) every time you run on it again.
    preferences in `user/`; project-wide decisions in `plans/`.
 
 ---
-## bao's Mac — where the app was rebuilt (last verified 2026-09-26)
+## bao's Mac — where the app was rebuilt (last verified 2026-09-27)
 - **Identify by:** macOS (darwin 24.6.0, x86_64), project checkout at `/Users/bao/Code/ti-matrix`
 - **OS:** macOS; bash; no Windows tooling — the `.cmd`/`.ps1` launchers do not apply here
 - **Runtimes:** Python 3.10.20 in the repo's `.venv/` (`python3` on PATH is 3.9.6 and too old for the
   package's `requires-python = ">=3.10"` — always use `.venv/bin/python`); Node 24.17.0, npm 11.13.0
-- **Verified commands (2026-09-26):** `.venv/bin/python -m pytest tests` (engine) ·
-  `.venv/bin/python -m pytest tests server/tests -q` (344 passed in 61s) · `npm --prefix app run typecheck`
-  · `npm --prefix app run test` (172 renderer assertions) · `npm --prefix app run build` (Vite, green) ·
-  `sh .context_ledger/core/bin/ledger-gates run pre-commit|integration|exit` — all three PASSED ·
-  `node -e` / `npx esbuild` are both on PATH and usable for scratch work
+- **Verified commands (2026-09-26; re-verified 2026-09-27):** `.venv/bin/python -m pytest tests` (engine,
+  331 passed in 49s as of 2026-09-27) · `.venv/bin/python -m pytest tests server/tests -q` (344 passed in
+  61s as of 2026-09-26) · `npm --prefix app run typecheck` · `npm --prefix app run test` (172 renderer
+  assertions) · `npm --prefix app run build` (Vite, green) ·
+  `sh .context_ledger/core/bin/ledger-gates run pre-commit|integration|exit` — all three PASSED (pre-commit
+  re-run 2026-09-27) · `node -e` / `npx esbuild` are both on PATH and usable for scratch work
 - **Quirks:** no `ws` package in `app/node_modules`, so a WebSocket test harness must go through the real
   sidecar rather than a stub server; `pkill -f` on a backgrounded node/python script is needed to stop test
   servers between runs

@@ -28,6 +28,7 @@ its work accordingly).
 | Rosalind (ZCode) | deepseek-flash | 2026-09-26 | 2026-09-26 | 1 |
 | Odette (Freebuff host agent) | unknown | 2026-09-26 | 2026-09-26 | 1 |
 | Cordelia (Freebuff host agent) | glm-5.3-flash | 2026-09-26 | 2026-09-26 | 1 |
+| Greer (Claude Code) | claude-sonnet-5 | 2026-09-27 | 2026-09-27 | 1 |
 
 ## Observations
 
@@ -52,6 +53,13 @@ its work accordingly).
   in-flight work attributed to nobody, which the next session (Rosalind, S008) could only correct after the
   supervisor said what had happened. Give it scoped work with a commit per step rather than long open-ended
   runs: it works well right up to the wall. (2026-09-26)
+- **Greer / claude-sonnet-5 (Claude Code):** compared this repo's `files.py` against a sibling project's
+  search tool line-by-line rather than guessing at what made it faster (a first guess — Spotlight/`mdfind` —
+  was wrong and corrected once actually read: it's also a plain Python walk, just pruned better). Also
+  caught a stale README claim (`--model builtin` "not wired to the CLIs") by checking the code
+  (`session.py::Seats.seats()`) rather than trusting the doc — the wiring had shipped a day after the note
+  was written and nobody updated it. Verified the shipped fix against the test suite AND a live run on a
+  real home directory, not the suite alone. (2026-09-27)
 - **Cordelia / glm-5.3-flash:** shipped B-2026-09-23-7 (the browser world's page surface) end to end with
   live verification — real Chrome through the real sidecar, then the panel driven over CDP in an isolated
   second instance — and the live passes caught two things every static check had already blessed: a

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "20260927T130732Z-Greer-4f85f6c4",
+  "type": "release",
+  "session": "S013",
+  "agent": "Greer",
+  "created": "2026-09-27T13:07:32Z",
+  "issue": "files-search-redesign",
+  "body": "Shipped: walk-time noise pruning, wall-clock budget, symlink skip, README fix. 331 tests pass. Found and filed (not fixed) a separate FilesReasoner over-eager-done bug as B-2026-09-27-1.",
+  "paths": ["ti_matrix/adapters/files.py", "ti_matrix/adapters/builtin.py"],
+  "refs": ["0d28926"],
+  "option": null,
+  "selected": null,
+  "owner": null,
+  "participants": []
+}

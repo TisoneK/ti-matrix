@@ -49,6 +49,23 @@ Full spec: `.context_ledger/core/schemas/ledger-schema.md` →
   so a hand-written maze whose squares disagree produces observations that disagree. Knowledge needs a
   stated precedence (a refusal beats an inference; an inference never beats a corridor) rather than
   relying on the order events happen to arrive in. (2026-09-23)
+- **`RootedFiles` is defined twice, independently.** `ti_matrix/adapters/files_cli.py`'s `_RootedFiles`
+  (unconfined, just gives the builtin reasoner a starting path) and `server/appserver/worlds.py`'s
+  `RootedFiles` (the desktop app's, which *does* confine every path inside the root and refuses escapes)
+  solve genuinely different problems, so this may be correct as two classes — but neither file references
+  the other, and a reader of one has no way to know the second exists or why its safety guarantee differs.
+  Worth a one-line cross-reference in each docstring at minimum; worth checking, before anyone touches
+  either, whether the CLI's unconfined version is a gap (a builtin-reasoner CLI run against `--root ~`
+  can read anywhere `~` resolves under, same as any other action here, but a person skimming only the app's
+  `RootedFiles` could reasonably assume both CLIs and app enforce confinement). (2026-09-27, agent Greer/S013)
+- **The walk's own deadline is checked once per directory dequeued, not per entry.** `files.py`'s
+  `_find_files` (and LocalMind's `system_search.py`, which this session ported the noise-pruning idea
+  from) both check the wall-clock budget between directories, not inside the `for entry in entries` loop —
+  so one directory with an unusually large or slow-to-stat entry count can overrun the nominal budget
+  before the next check fires. Not reproduced as a concrete overrun here (the live verification run's two
+  `find_files` calls both stopped within the stated 2500ms), but the mechanism is real and worth a periodic
+  in-loop check (e.g. every 500 entries) if a future session sees a walk visibly exceed its budget.
+  (2026-09-27, agent Greer/S013)
 
 - **A fact is cut to 320 characters as it enters the state.** `_FACT_CHARS` in `ti_matrix/state.py`
   truncates every observation on the way in, so a listing of a big directory enters the state as a fragment
@@ -123,6 +140,7 @@ out of the queue, not into the void.
 | ID | Summary |
 |----|---------|
 | P-2026-09-26-2 | **Give the three worst small-viewport overflows a breakpoint.** Raised as "the UI looked like a mess" and correctly diagnosed by the supervisor as a small window, not a design fault — the layout already breaks at 1180/820/720/700px. Three gaps remain below roughly 700px, all read out of `app/renderer/styles.css`: `.rail` is a single non-wrapping flex row carrying six metrics, the run controls and the window buttons, so it overflows rather than wrapping; the inspector row's three columns (`.inspector`, ~line 574) have minimums summing to about 640px with no breakpoint of their own; and the stage's pane minimums (`420px + 360px`, `.stage`) only collapse at 1180px. Advisory, no owner: it is a layout change and needs its own render at 360/768/1280 to verify, which the session that found it did not run — an unverified CSS change is exactly what this repo's verification rule forbids. |
+| P-2026-09-27-1 | **A unified, multi-operation local-search tool — modeled on a sibling project's `system_search`, not a guess.** This session compared `files.py`'s `find_files` against a sibling project's (LocalMind, `/Users/bao/Code/LocalMind`) `backend/src/tools/system_search.py` live and ported its walk-performance ideas (noise-dir pruning at traversal time, a wall-clock budget) into `find_files` — see the commits this session pushed. Left unported, because each is a real feature addition needing its own ActionSpec/prompt/test design, not a safe one-liner: (1) multi-token AND + glob + brace matching on `contains`, today a single substring; (2) a relaxed retry when the exact query finds nothing (fall back to the most specific single token, and say so, rather than making the search itself brittle); (3) `recent`/`largest`/`duplicates`/`apps`/`open_with` as additional operations or additional actions — today a question like "what did I edit recently" has no dedicated action at all and would cost several `find_files`/`list_dir` round-trips to fake. Reference implementation to read against: `system_search.py`'s `_op_files`, `_op_recent`, `_op_largest`, `_op_duplicates` (LocalMind is a separate repo on this machine, not a ti-matrix dependency — read for design ideas only, never imported). (2026-09-27, agent Greer/S013) |
 | P-2026-09-26-3 | **The UI needs a full redesign pass — deferred by the supervisor's own call, not a task for this office to pick up incrementally.** Said directly after a run of live testing that surfaced several UI complaints in one sitting (no visible branching in the tree, a run that reads as silent while a model thinks, a settled answer that looked more certain than the evidence behind it — see the sessions around `B-2026-09-26-9`'s tree-comparison sketch and the `thinking` event, `bf1e6f6`): *"the UI doesn't feel ready yet, needs a lot of redesign and improvements... this requires its own huge session."* Distinct from `P-2026-09-26-2` (a scoped, mechanical breakpoint fix) — this is the supervisor naming the whole surface as not yet right, without naming which parts. No scope, no owner, no next step: exactly what belongs here rather than the backlog. Whoever picks this up should start by asking the supervisor what "ready" looks like, not by guessing from this row. |
 
 ## Someday

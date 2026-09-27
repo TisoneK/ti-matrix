@@ -216,3 +216,52 @@ relitigating them. To reverse one, append a new ADR that supersedes it.
     same shape: say what the observation is about, including when.
   - A world that moves also makes the **maze and chess the unrepresentative cases**. Any future claim
     that the engine "handles a world" should say which kind.
+
+## ADR-6: The files walk owns "what is noise," and bounds itself by clock as well as by count (2026-09-27)
+
+- **Context:** The supervisor compared `files_cli`'s `find_files` against a sibling project's
+  (LocalMind) `system_search` tool on the identical live goal ("locate the LocalMind repo" / "locate the
+  ti-matrix repo") and found TiMatrix 8x slower and 3.5x more tokens for a shorter answer. Reading both
+  implementations side by side, the gap was not model quality (both used real endpoints elsewhere in the
+  session) or algorithm cleverness — it was that `_find_files` walked straight into `node_modules`,
+  `.git`, `.venv`, and similar directories on every call, spending its entire 20,000-entry budget inside
+  them before ever reaching a shallow real match, while LocalMind's walker prunes those directories the
+  moment it sees their name, before ever entering them. The filtering TiMatrix *did* have
+  (`FilesReasoner.is_noise`/`is_generated_artifact` in `builtin.py`) ran only *after* a full walk, as a
+  post-hoc filter over already-collected results — it saved the rule-based reasoner from choosing a bad
+  answer, but never saved the walk itself from paying for the bad subtree, and did nothing at all for an
+  LLM-driven run (the proposer/evaluator seats that actually generated the compared run never touch
+  `FilesReasoner`).
+- **Decision:** Move `_NOISE`, `is_noise`, `_GENERATED_BASENAMES`/`_GENERATED_SUFFIXES`, and
+  `is_generated_artifact` from `ti_matrix/adapters/builtin.py` into `ti_matrix/adapters/files.py`, and
+  have `_find_files` skip a noise-named entry — and never queue it for descent — at the moment it is
+  seen, rather than filtering matches after the fact. `builtin.py` now imports these from `files.py`
+  instead of keeping its own copy. Also added: a wall-clock budget (`_WALK_MAX_MS`, default 2500ms)
+  alongside the existing entry-count cap (`_WALK_MAX_ENTRIES`) — the count cap alone does not bound
+  *time* when one slow-to-stat subtree burns real seconds without ever tripping a count — and symlinks
+  are now skipped rather than followed, closing a cycle risk the walk had no guard against. All three
+  report themselves through the same `", stopped at/after ... — more may exist unseen"` sentence the
+  entry cap already used, so "found nothing" and "gave up looking" stay distinguishable answers
+  regardless of which bound fired.
+- **Consequences:**
+  - **The walk, not just the reasoner, is now noise-aware.** Every caller of `find_files` — the
+    rule-based seats and any LLM-driven proposer alike — gets the pruning; before, only `FilesReasoner`'s
+    own candidate ranking benefited, and it benefited *after* paying the walk's full cost.
+  - **One definition of "noise," not two.** `builtin.py` and `files.py` cannot drift apart on what counts
+    as somebody else's code or this machine's bookkeeping — a real risk given they were independently
+    maintained lists with identical content up to this session.
+  - **Existing tests were preserved exactly** (`_WALK_MAX_ENTRIES`'s message format, breadth-first
+    order, directory-vs-file distinction via the trailing separator) — three new tests cover noise
+    pruning, symlink skipping, and the new time bound. 331 tests pass.
+  - **Verified live, not just in the test suite:** `python -m ti_matrix.adapters.files_cli --model
+    builtin --root ~ "locate the ti-matrix repo"` against this machine's real, large home directory —
+    the new "stopped after 2500ms" message fired exactly as designed on both `find_files` calls the
+    reasoner made. That same run surfaced a *separate*, pre-existing bug — `FilesReasoner.evaluate()`
+    settled `done=True` on a coincidentally-named file in an unrelated directory rather than the real
+    repo `find_files` had already surfaced — filed as `B-2026-09-27-1`, not fixed here: it is an
+    answer-grounding judgment call, not a walk-performance fix, and mixing the two in one change was
+    avoidable scope creep.
+  - **Not ported, and deliberately left for a future session:** LocalMind's multi-token/glob matching,
+    relaxed-fallback retry, and multi-operation tool shape (`recent`/`largest`/`duplicates`/`apps`).
+    Each is a real feature addition needing its own design, not a bound that was simply missing. Recorded
+    at `P-2026-09-27-1`.

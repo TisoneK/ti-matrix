@@ -57,5 +57,11 @@ Format: - <preference> — <how to apply it> (provenance, YYYY-MM-DD)
   developer not a real designer". A palette, a token file and a set of documented colours are not evidence
   that a screen is composed — begin any UI task by driving the real app and capturing the actual screens,
   and treat "the source looks deliberate" as no evidence at all. (correction, 2026-09-26)
+- **When comparing this project against another one, read the other project's actual code before naming a
+  cause.** Guessed once that a sibling project's speed came from macOS Spotlight (`mdfind`) rather than
+  checking; the user pushed back ("Maybe look at localmind's tools first????") and the real answer was
+  different (a plain Python walk, just pruned better) — the guess would have led to porting the wrong fix.
+  A named external product's mechanism is a claim to verify against its source, on this machine when it's
+  available, not an inference to reason toward from its observed behavior. (correction, 2026-09-27)
 
 ## Risk & approvals
