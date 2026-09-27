@@ -5,10 +5,10 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-26T20:29:43Z_
+_Regenerated: 2026-09-27T12:55:43Z_
 
 ## Standing params
-- **Core:** 2.0.4 (locked, verified 2026-09-26)
+- **Core:** 2.0.4 (locked, verified 2026-09-27)
 - **Target:** free text — a target in the user's chat message overrides this
 - **Scope:** free — the user names the task per session
 - **Push policy:** push to main directly after each commit
@@ -19,6 +19,7 @@ _Regenerated: 2026-09-26T20:29:43Z_
 - **Faye** (S010) — Working — Checked back in after clocking out — the supervisor picked B-2026-09-26-1 (the webmcp C…
 - **Odette** (S011) — Working — Live-testing on the real window with the supervisor: shipped the narrator + motion (`b1c7…
 - **Cordelia** (S012) — Done — Done — B-2026-09-23-7 shipped (`66b5f36`, `2dcd3c1`): the browser world's page captured…
+- **Marlowe** (S013) — Working — Checked in — the supervisor compared TiMatrix's files adapter against a sibling project…
 
 ## Current task
 (idle — no task recorded)
