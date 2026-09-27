@@ -40,6 +40,9 @@ from ti_matrix.state import AgentState
 
 # north is up, as the maze writes itself; imported rather than re-guessed.
 from ti_matrix.adapters.maze import STEPS
+# What counts as noise or a generated artifact is a files-adapter fact, not a reasoning-seat opinion —
+# imported from there rather than kept as a second copy that could drift from what the walk itself skips.
+from ti_matrix.adapters.files import is_generated_artifact, is_noise
 
 BUILTIN = "builtin"
 """The model name that selects these seats. Not a model id — the absence of one."""
@@ -224,36 +227,12 @@ _LISTED = re.compile(r"Contents of ([^\s—]+)")
 _STOPWORDS = frozenset("""a an and are as at be by do does find for from get give how i in is it its
 me my of on or say tell that the then there this to what when where which who why with you your""".split())
 
-# Directories that are somebody else's code or this machine's bookkeeping. A filesystem goal is almost
-# never answered inside one, and they dwarf the real tree — searching this repo for "project" returns
-# 412 files, nearly all of them under node_modules. Without this the first rule-based files run settled
-# on `node_modules/iconv-lite/.idea/inspectionProfiles/Project_Default.xml`, which is a correct match
-# and a useless answer.
-_NOISE = frozenset("""node_modules .venv venv .git .hg .svn __pycache__ .pytest_cache .mypy_cache
-dist build target out .next .cache .idea .vscode .tox site-packages vendor Pods .gradle""".split())
-
-
-def is_noise(path: str) -> bool:
-    """Whether a path runs through a directory whose contents are not this project's answer."""
-    parts = path.split("/")
-    return any(p in _NOISE or p.endswith(".egg-info") for p in parts)
-
-
-# A file named by convention, not by intent: a lockfile pins dependency versions, a manifest restates
-# what the package manager already knows, a minified bundle is generated. Reading one is still fine as
-# ordinary evidence, but it must never be mistaken for "the file the goal named" and settle a run on its
-# own — a goal containing the word "package" is not, coincidentally, answered by `package-lock.json`.
-_GENERATED_BASENAMES = frozenset("""
-package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
-Cargo.lock poetry.lock Pipfile.lock composer.lock Gemfile.lock
-""".split())
-_GENERATED_SUFFIXES = (".min.js", ".min.css", ".lock", ".map")
-
-
-def is_generated_artifact(path: str) -> bool:
-    """Whether this path is a lockfile, manifest, or build artifact — named by convention, not intent."""
-    name = path.rsplit("/", 1)[-1]
-    return name in _GENERATED_BASENAMES or name.endswith(_GENERATED_SUFFIXES)
+# `is_noise` and `is_generated_artifact` now live in `ti_matrix.adapters.files` (imported above) — the
+# walk itself skips noise directories at traversal time for the same reason this reasoner always
+# filtered them out of its candidates: a filesystem goal is almost never answered inside `node_modules`
+# or a lockfile. Without that filter the first rule-based files run settled on
+# `node_modules/iconv-lite/.idea/inspectionProfiles/Project_Default.xml`, which is a correct match and a
+# useless answer.
 
 
 def goal_words(text: str) -> list[str]:

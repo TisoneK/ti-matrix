@@ -150,6 +150,45 @@ async def test_a_bounded_search_reaches_a_shallow_sibling_before_a_deep_irreleva
 
 
 @pytest.mark.asyncio
+async def test_a_name_search_never_enters_a_noise_directory(env):
+    """`node_modules`, `.git`, and friends are never the answer and dwarf the real tree — the walk must
+    skip them at traversal time, not just filter them out of an already-expensive result."""
+    env_, d = env
+    noisy = d / "node_modules" / "acme-widget"
+    noisy.mkdir(parents=True)
+    (noisy / "index.js").write_text("x")
+
+    found = await env_.probe(Action("find_files", {"path": str(d), "contains": "acme"}))
+    assert found.ok
+    assert "no file or directory under" in found.text, found.text
+    assert "acme-widget" not in found.text
+
+
+@pytest.mark.asyncio
+async def test_a_name_search_does_not_follow_symlinks(env):
+    """A symlink back into an already-walked tree must not be followed — a cycle would starve the
+    walk's own budget without ever finishing."""
+    env_, d = env
+    (d / "loop").symlink_to(d, target_is_directory=True)
+
+    found = await env_.probe(Action("find_files", {"path": str(d), "contains": "a.txt"}))
+    assert found.ok
+    assert str(d / "a.txt") in found.text, found.text
+    assert "stopped" not in found.text, found.text
+
+
+@pytest.mark.asyncio
+async def test_a_name_search_is_bounded_by_wall_clock_time_too(env, monkeypatch):
+    """The entry-count bound alone is not enough: one slow-to-stat subtree can burn real time without
+    ever tripping a count. A zero-budget walk must stop immediately and say why."""
+    env_, d = env
+    monkeypatch.setattr(files_adapter, "_WALK_MAX_MS", 0)
+    stopped = await env_.probe(Action("find_files", {"path": str(d), "contains": "a.txt"}))
+    assert stopped.ok
+    assert "stopped after 0ms" in stopped.text, stopped.text
+
+
+@pytest.mark.asyncio
 async def test_a_slow_probe_does_not_freeze_the_callers_event_loop(env, monkeypatch):
     """The reason this matters is not tidiness: the host awaits a probe on the loop it serves the run's
     own control channel from, so a probe that blocks it stops a run being reported on — or stopped."""

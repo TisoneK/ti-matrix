@@ -56,8 +56,11 @@ rules, so the engine searches a world with nothing configured and no network —
 the desktop app defaults to it. What the rules are not is a model: they do not read a goal's words and cannot
 generalise past the world they know. See [The model is a seat, not an ingredient](#the-model-is-a-seat-not-an-ingredient).
 
-> **The CLIs below still require an endpoint.** The rule-based seats reached the app and the sidecar first; the
-> shell commands have not been wired to them yet, so `--model` names a real model or the command cannot run.
+`--model builtin` runs any of the CLIs below on the rule-based seats too — no endpoint, no key, no network:
+
+```bash
+python -m ti_matrix.adapters.files_cli --model builtin --root ~ "locate the ti-matrix repo"
+```
 
 ```bash
 # a local model, no API key, no other program installed

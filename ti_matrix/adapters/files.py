@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import time
 from collections import deque
 from pathlib import Path
 from typing import Optional
@@ -20,13 +21,55 @@ _OBS_MAX_CHARS = 3000
 _MAX_ENTRIES = 200
 # A name search is the one action here that can run for minutes: it walks whatever tree it was pointed
 # at, and the files world now begins at the home directory, so the tree is somebody's whole profile —
-# caches, `AppData`, every `node_modules` they own. Two bounds, both reported rather than silent: how
-# many entries may be looked at, and how deep the walk goes. They exist so that "nothing matched" and
-# "I stopped looking" are different answers, which is the difference between an empty result a run can
-# trust and one it cannot. Measured: unbounded, a search of a real home directory on Windows did not
-# finish inside five minutes and left the window showing a run at 0% that had not stopped.
+# caches, `AppData`, every `node_modules` they own. Three bounds, all reported rather than silent: how
+# many entries may be looked at, how deep the walk goes, and how long it may run. They exist so that
+# "nothing matched" and "I stopped looking" are different answers, which is the difference between an
+# empty result a run can trust and one it cannot. Measured: unbounded, a search of a real home directory
+# on Windows did not finish inside five minutes and left the window showing a run at 0% that had not
+# stopped. The entry cap alone was not enough on its own: one large, slow-to-stat subtree can burn real
+# wall-clock time without ever tripping a count, so the walk also carries its own clock.
 _WALK_MAX_ENTRIES = 20_000
 _WALK_MAX_DEPTH = 6
+_WALK_MAX_MS = 2_500
+
+# Directories that are somebody else's code or this machine's bookkeeping. A filesystem goal is almost
+# never answered inside one, and they dwarf the real tree — searching this repo for "project" returns
+# 412 files, nearly all of them under node_modules. Skipped at walk time, not just after: entering one
+# is where the walk's own budget used to go to die — a search that dove into `~/Library` or
+# `node_modules` could burn its entire entry cap there and never reach a real, shallow match sitting
+# right beside it. `FilesReasoner` (ti_matrix.adapters.builtin) imports this rather than keeping its own
+# copy — the walk and the reasoner agreeing on what "noise" means is the property that matters, and two
+# separately-maintained lists is how that agreement quietly drifts.
+_NOISE = frozenset("""node_modules .venv venv .git .hg .svn __pycache__ .pytest_cache .mypy_cache
+dist build target out .next .cache .idea .vscode .tox site-packages vendor Pods .gradle""".split())
+
+
+def is_noise(path: str) -> bool:
+    """Whether a path runs through a directory whose contents are not this project's answer."""
+    parts = path.split("/")
+    return any(p in _NOISE or p.endswith(".egg-info") for p in parts)
+
+
+def _is_noise_name(name: str) -> bool:
+    """Whether one path component, on its own, names a directory the walk should never enter."""
+    return name in _NOISE or name.endswith(".egg-info")
+
+
+# A file named by convention, not by intent: a lockfile pins dependency versions, a manifest restates
+# what the package manager already knows, a minified bundle is generated. Reading one is still fine as
+# ordinary evidence, but it must never be mistaken for "the file the goal named" and settle a run on its
+# own — a goal containing the word "package" is not, coincidentally, answered by `package-lock.json`.
+_GENERATED_BASENAMES = frozenset("""
+package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
+Cargo.lock poetry.lock Pipfile.lock composer.lock Gemfile.lock
+""".split())
+_GENERATED_SUFFIXES = (".min.js", ".min.css", ".lock", ".map")
+
+
+def is_generated_artifact(path: str) -> bool:
+    """Whether this path is a lockfile, manifest, or build artifact — named by convention, not intent."""
+    name = path.rsplit("/", 1)[-1]
+    return name in _GENERATED_BASENAMES or name.endswith(_GENERATED_SUFFIXES)
 
 FILES_ACTIONS: dict[str, ActionSpec] = {
     s.name: s
@@ -119,8 +162,8 @@ class FilesEnvironment:
             return False, f"not a directory: {_display(root)}"
         needle = contains.lower()
         hits: list[Path] = []
-        # One walk, not two, and bounded on both axes. The count this reports is the number of entries
-        # actually looked at — which, when the bound bit, is *not* the size of the tree, and the line says
+        # One walk, not two, and bounded on three axes. The count this reports is the number of entries
+        # actually looked at — which, when a bound bit, is *not* the size of the tree, and the line says
         # so rather than leaving a run to read a truncated answer as a whole one.
         #
         # Breadth-first, not depth-first: a stack-based walk fully explores whichever sibling sorts last
@@ -130,20 +173,30 @@ class FilesEnvironment:
         # to locate something wants the near candidates weighed first, not whichever the alphabet visits
         # deepest soonest; a queue does that for free, level by level.
         seen = 0
-        stopped = False
+        stop_reason = ""  # "" | "entries" | "time"
+        deadline = time.monotonic() + _WALK_MAX_MS / 1000.0
         queue: deque[tuple[Path, int]] = deque([(root, 0)])
-        while queue and not stopped:
+        while queue:
+            if time.monotonic() >= deadline:
+                stop_reason = "time"
+                break
             here, depth = queue.popleft()
             try:
                 entries = sorted(here.iterdir(), key=lambda e: e.name.lower())
             except OSError:
                 continue  # a directory that cannot be read is not a failed search
             for entry in entries:
+                if _is_noise_name(entry.name):
+                    # Somebody else's code or this machine's bookkeeping — never the answer, and never
+                    # worth entering: this is where an unbounded walk used to spend its whole budget.
+                    continue
                 seen += 1
                 if seen > _WALK_MAX_ENTRIES:
-                    stopped = True
+                    stop_reason = "entries"
                     break
                 try:
+                    if entry.is_symlink():
+                        continue  # never followed — a cycle would starve the budget without ever finishing
                     named = needle in entry.name.lower()
                     if entry.is_dir():
                         # A directory can match, and until now it could not. The walk kept only files, so a
@@ -160,11 +213,18 @@ class FilesEnvironment:
                         hits.append(entry)
                 except OSError:
                     continue  # vanished, or unreadable: it cannot be reported either way
+            if stop_reason:
+                break
         # The stop is reported whether or not anything was found — a truncated search that happened to
         # find something is still a truncated search, and a reader who cannot tell the two apart reads a
         # partial answer as an exhaustive one. Measured: this is exactly the difference between "found 2"
         # and "found 2, but the walk gave up before it could look everywhere" for the same goal.
-        limit_note = f", stopped at the {_WALK_MAX_ENTRIES}-path limit — more may exist unseen" if stopped else ""
+        if stop_reason == "entries":
+            limit_note = f", stopped at the {_WALK_MAX_ENTRIES}-path limit — more may exist unseen"
+        elif stop_reason == "time":
+            limit_note = f", stopped after {_WALK_MAX_MS}ms — more may exist unseen"
+        else:
+            limit_note = ""
         if not hits:
             return True, f"no file or directory under {_display(root)} has {contains!r} in its name ({seen} paths searched{limit_note})"
         dirs = sum(1 for p in hits if p.is_dir())
