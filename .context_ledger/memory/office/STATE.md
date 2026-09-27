@@ -5,7 +5,7 @@ at check-in and at exit. This is a DERIVED VIEW for fast orientation;
 open the file a line points at when your task needs more than the
 line gives you. Full reading order: ledger-schema.md. -->
 
-_Regenerated: 2026-09-27T13:10:24Z_
+_Regenerated: 2026-09-27T13:18:19Z_
 
 ## Standing params
 - **Core:** 2.0.4 (locked, verified 2026-09-27)
@@ -19,6 +19,7 @@ _Regenerated: 2026-09-27T13:10:24Z_
 - **Faye** (S010) — Working — Checked back in after clocking out — the supervisor picked B-2026-09-26-1 (the webmcp C…
 - **Odette** (S011) — Working — Live-testing on the real window with the supervisor: shipped the narrator + motion (`b1c7…
 - **Cordelia** (S012) — Done — Done — B-2026-09-23-7 shipped (`66b5f36`, `2dcd3c1`): the browser world's page captured…
+- **Greer** (S013) — Working — Checked back in after clocking out — the supervisor found a second UI gap: the config d…
 
 ## Current task
 (idle — no task recorded)
