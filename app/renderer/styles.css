@@ -603,6 +603,15 @@ svg { display: block; }
 .node-hit { fill: transparent; cursor: pointer; }
 .node-peek { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-dasharray: 2 2; pointer-events: none; }
 .node-selected { fill: none; stroke: var(--ice); stroke-width: 2; pointer-events: none; }
+/* The node the run is standing on while an iteration is open: the cursor's `here` ring answers "which
+   step am I looking at" and this one answers "where is the run right now", which while a fan is open are
+   two different nodes. Ice, like every other live thing in the app, drawn as a ring that creeps around the
+   plate so the longest silence in the tree — a model's propose/evaluate call — is visibly not a hang. */
+.node-thinking-ring {
+  fill: none; stroke: var(--ice); stroke-width: 1.5; stroke-dasharray: 4 3; stroke-opacity: 0.7;
+  pointer-events: none; animation: node-think 2.4s linear infinite;
+}
+@keyframes node-think { to { stroke-dashoffset: -14; } }
 
 .node-edge { stroke: var(--line-2); stroke-width: 1.5; fill: none; }
 .node-edge.live { stroke: var(--ice-line); }
@@ -1212,3 +1221,18 @@ svg { display: block; }
 .stub.refused .stub-move, .stub.refused .stub-score { fill: var(--red); opacity: 0.85; }
 .stub.refused .stub-edge { stroke: rgba(255, 106, 106, 0.4); stroke-dasharray: 2 2; }
 .stubs.cold { opacity: 0.35; }
+
+/* The same plate, but read live. A candidate moves through three honest phases and the plate says which
+   one it is in without any state kept beside it: proposed-not-probed keeps the dashed resting look above,
+   probed-not-scored goes solid and pulses while the world has answered but the score has not, and scored
+   settles solid — its score already printed at the right edge. */
+.stub.probed .stub-plate { stroke-dasharray: none; }
+.stub.probed:not(.refused) .stub-plate { stroke: var(--ice-line); }
+.stub.probed .stub-move { fill: var(--fg-3); }
+.stub.probed .stub-edge { stroke: var(--ice-line); opacity: 0.9; }
+.stub.weighing .stub-plate { animation: stub-weigh 1.4s ease-in-out infinite; }
+@keyframes stub-weigh {
+  0%, 100% { stroke: var(--ice); stroke-opacity: 1; }
+  50% { stroke: var(--ice); stroke-opacity: 0.35; }
+}
+.stubs.live .stub-edge { stroke: var(--ice-line); opacity: 0.7; }

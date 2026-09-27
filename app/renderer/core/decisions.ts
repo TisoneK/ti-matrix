@@ -342,6 +342,24 @@ export function finalAnswerOf(decisions: Decision[]): FinalAnswer | null {
 }
 
 /**
+ * The decision the run is weighing right now — proposed, maybe partway probed or scored, but not yet
+ * resolved into a move, a retreat, or a stop. `null` once it resolves (an option is `chosen`) or before
+ * `candidates` has fired for it at all; also `null` when `cursor` is not following the live edge, since a
+ * scrubbed-back view is reading history, not the run's present moment.
+ *
+ * This is what makes a run's dead time — a model's propose/evaluate calls, 15-45s each with no data of
+ * their own — showable as it happens: `candidates` already carries every option's label before a single
+ * probe returns, so a fan can be drawn (unscored) the instant it exists, then filled in option by option
+ * as `probe`/`evaluation` events land on the same prefix `foldDecisions` already reads.
+ */
+export function openFan(decisions: Decision[], cursor: number): Decision | null {
+  const last = decisions[decisions.length - 1];
+  if (!last || cursor !== decisions.length - 1) return null;
+  if (last.kind !== "move" || last.options.length === 0) return null;
+  return last.options.some((o) => o.chosen) ? null : last;
+}
+
+/**
  * The flags a decision earns — each a distinct claim about the run, each with its own test. More than one
  * can apply to the same decision, which is information rather than a conflict.
  *

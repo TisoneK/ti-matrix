@@ -15,7 +15,8 @@
 
 import { useMemo, useState } from "react";
 import { SearchTree, layoutTree, pathTo, siblingContext, ROOT } from "../core/tree";
-import { Decision } from "../core/types";
+import { Decision, Candidate } from "../core/types";
+import { openFan } from "../core/decisions";
 import { Chip } from "../ui/controls";
 import { Empty, PaneBody, PaneHead } from "../ui/atoms";
 
@@ -63,6 +64,12 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
   // walk that weighed none read identically before this — both were "N states".
   const weighed = decisions.reduce((n, d) => n + d.options.filter((o) => !o.chosen).length, 0);
 
+  // The fan being weighed right now, and where it hangs — only while live and only at the live edge; a
+  // scrubbed-back view is reading history, and history has no "right now" to show.
+  const fan = live ? openFan(decisions, cursor) : null;
+  const fanAnchor = fan ? view.visible.find((n) => n.id === tree.current) : undefined;
+  const thinkingNow = live && cursor === decisions.length - 1;
+
   return (
     <>
       {/* The aggregate "it looked at 38 of 38 it could have" used to be here and forced the head to wrap its
@@ -71,7 +78,8 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
       <PaneHead title="Search tree"
                 sub={`${tree.states} state${tree.states === 1 ? "" : "s"} · ${tree.backtracks} retreat${tree.backtracks === 1 ? "" : "s"}`
                   + (weighed > 0 ? ` · ${weighed} passed over` : "")
-                  + (hidden > 0 ? ` · ${hidden} folded` : "")}>
+                  + (hidden > 0 ? ` · ${hidden} folded` : "")
+                  + (fan ? ` · weighing ${fan.options.length} now` : thinkingNow ? " · thinking…" : "")}>
         <Chip label="fold cold branches" pressed={foldDead} onClick={() => setFoldDead((v) => !v)}
               title="fold a branch the run has already given up" />
       </PaneHead>
@@ -104,39 +112,16 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
               {view.visible.map((node) => {
                 if (node.decision === null) return null;
                 const passed = (decisions[node.decision]?.options ?? []).filter((o) => !o.chosen);
-                if (passed.length === 0) return null;
-                return (
-                  <g key={`stubs-${node.id}`} className={node.dead ? "stubs cold" : "stubs"}>
-                    {passed.map((option, i) => {
-                      // A lane out of the node's right edge, one per candidate, stacked so their names
-                      // can be read. These were 2.6px dots on a fan: the shape was honest and the
-                      // information was invisible — which option was weighed, and what it scored,
-                      // existed only in a tooltip.
-                      const refused = option.ok === false;
-                      const lane = 23;
-                      const x0 = node.x + NODE_W / 2;
-                      const x1 = x0 + 14;
-                      const y = node.y + (i - (passed.length - 1) / 2) * lane;
-                      return (
-                        <g key={option.fp} className={`stub ${refused ? "refused" : ""}`}>
-                          <title>
-                            {`${option.label} — ${refused ? "the world refused this"
-                              : option.progress === undefined ? "not scored"
-                                : `scored ${Math.round(option.progress * 100)}%`}`}
-                            {option.excerpt ? `\n${option.excerpt.slice(0, 160)}` : ""}
-                          </title>
-                          <path className="stub-edge" d={`M${x0} ${node.y} L${x1} ${y}`} />
-                          <rect className="stub-plate" x={x1} y={y - 9} width={112} height={18} rx={4} />
-                          <text className="stub-move" x={x1 + 6} y={y + 3.5}>{shortMove(option.label)}</text>
-                          <text className="stub-score" x={x1 + 106} y={y + 3.5} textAnchor="end">
-                            {refused ? "refused" : option.progress === undefined ? "—" : `${Math.round(option.progress * 100)}%`}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </g>
-                );
+                return <Stubs key={`stubs-${node.id}`} anchor={node} options={passed} dead={node.dead} live={false} />;
               })}
+
+              {/* What is being weighed right now — the same shape as the roads not taken, drawn before
+                  any of them are decided. `candidates` names every option before the first probe returns,
+                  so a fan appears here the instant it exists and fills in as `probe`/`evaluation` land:
+                  dashed while only proposed, solid once the world answered, a belief bar once scored. The
+                  window this fills was previously the tree's longest silence — a model's propose/evaluate
+                  calls, 15-45s each, during which nothing here moved at all. */}
+              {fan && fanAnchor ? <Stubs anchor={fanAnchor} options={fan.options} dead={false} live /> : null}
 
               {view.visible.map((node) => {
                 const fold = view.folds.find((f) => f.from === node.id);
@@ -156,6 +141,15 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
                     <title>{nodeTitle(node.id, node.depth, node.progress, node.dead, node.current, siblingContext(tree, decisions, node.id))}</title>
                     {here ? <rect className="node-selected" x={node.x - NODE_W / 2 - 3} y={node.y - NODE_H / 2 - 3} width={NODE_W + 6} height={NODE_H + 6} rx={9} /> : null}
                     {seen && !here ? <rect className="node-peek" x={node.x - NODE_W / 2 - 2} y={node.y - NODE_H / 2 - 2} width={NODE_W + 4} height={NODE_H + 4} rx={8} /> : null}
+                    {/* The cursor-driven `here` ring above answers "which step am I looking at"; this one
+                        answers "where is the run standing right now" — and while a fan is open, those are
+                        two different nodes (the cursor already follows the new in-progress decision, but
+                        the node it will land on does not exist yet). Without this, the one thing genuinely
+                        happening — the run choosing, probing, weighing, from this exact node — had no mark
+                        on it at all the moment `here` moved on ahead of it. */}
+                    {thinkingNow && node.id === tree.current && !here ? (
+                      <rect className="node-thinking-ring" x={node.x - NODE_W / 2 - 3} y={node.y - NODE_H / 2 - 3} width={NODE_W + 6} height={NODE_H + 6} rx={9} />
+                    ) : null}
                     {fold ? (
                       <g className="node-fold" onClick={() => toggleFold(node.id)}>
                         <rect className="fold-chip" x={node.x - NODE_W / 2} y={node.y - NODE_H / 2} width={NODE_W} height={NODE_H} rx={6} />
@@ -203,6 +197,58 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * A fan of candidates hanging off the node they were weighed at — the roads not taken (`live=false`,
+ * every option already resolved: `chosen` filtered out before this is called) or the road being weighed
+ * right now (`live=true`, nothing resolved yet). Same shape either way, because it is the same fact at
+ * two different moments: a candidate the search considered, probed, and scored, dead or not yet decided.
+ *
+ * Three honest phases, readable straight from what the option itself carries — no separate state to keep
+ * in sync: `ok === undefined` is proposed-not-probed (the plate stays dashed, its own resting look —
+ * `.stub-plate`'s default), `ok !== undefined && progress === undefined` is probed-not-scored (solid
+ * border, a slow pulse — real news arrived and there is more coming), `progress !== undefined` is scored
+ * (the belief bar this option earned, same as a settled stub's).
+ */
+function Stubs({ anchor, options, dead, live }: {
+  anchor: { x: number; y: number };
+  options: Candidate[];
+  dead: boolean;
+  live: boolean;
+}) {
+  if (options.length === 0) return null;
+  return (
+    <g className={`stubs ${dead ? "cold" : ""} ${live ? "live" : ""}`}>
+      {options.map((option, i) => {
+        const refused = option.ok === false;
+        const probed = option.ok !== undefined;
+        const scored = option.progress !== undefined;
+        const lane = 23;
+        const x0 = anchor.x + NODE_W / 2;
+        const x1 = x0 + 14;
+        const y = anchor.y + (i - (options.length - 1) / 2) * lane;
+        return (
+          <g key={option.fp}
+             className={`stub ${refused ? "refused" : ""} ${probed ? "probed" : ""} ${live && probed && !scored && !refused ? "weighing" : ""}`}>
+            <title>
+              {`${option.label} — ${refused ? "the world refused this"
+                : !probed ? "proposed — not probed yet"
+                  : !scored ? "probed — weighing it now"
+                    : `scored ${Math.round((option.progress ?? 0) * 100)}%`}`}
+              {option.excerpt ? `\n${option.excerpt.slice(0, 160)}` : ""}
+            </title>
+            <path className="stub-edge" d={`M${x0} ${anchor.y} L${x1} ${y}`} />
+            <rect className="stub-plate" x={x1} y={y - 9} width={112} height={18} rx={4} />
+            <text className="stub-move" x={x1 + 6} y={y + 3.5}>{shortMove(option.label)}</text>
+            <text className="stub-score" x={x1 + 106} y={y + 3.5} textAnchor="end">
+              {refused ? "refused" : !scored ? "—" : `${Math.round((option.progress ?? 0) * 100)}%`}
+            </text>
+          </g>
+        );
+      })}
+    </g>
   );
 }
 
