@@ -363,16 +363,14 @@ svg { display: block; }
   overflow: hidden;
 }
 
-/* The split is a negotiation, not a fixed ratio. A prose world reads as a rail — cards stacked in one
-   narrow column — so it cedes width to the audit, which is where the tree and the ledger (the whole story
-   of the search) actually live; and when that world has nothing to draw at all — the run has read nothing
-   yet — it collapses to a sliver, the empty "middle" folded into the right rather than sitting at equal
-   width beside a full tree. `:has` keeps this a property of the content, so no caller has to pass a flag.
-   Guarded above 1180px because these carry two `:has` classes and so outrank the plain `.stage`
-   single-column rule that takes over below it. */
+/* A prose world is a rail beside the audit: its cards read down one column and cede width to the tree and
+   the ledger, which hold the whole story of the search. Both sides carry a real minimum — an earlier cut
+   let an empty world collapse to 14% and squeezed "Nothing read yet" into a sliver, which is a broken
+   panel, not a quiet one. An empty pane stays a pane.
+   Guarded above 1180px because `:has` outranks the plain `.stage` single-column rule that takes over
+   below it. */
 @media (min-width: 1181px) {
-  .stage:has(.pane.world) { grid-template-columns: minmax(300px, 0.8fr) minmax(440px, 1.2fr); }
-  .stage:has(.pane.world .empty) { grid-template-columns: minmax(180px, 0.28fr) minmax(480px, 1.72fr); }
+  .stage:has(.pane.world) { grid-template-columns: minmax(320px, 0.78fr) minmax(440px, 1.22fr); }
 }
 
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--plate); }
