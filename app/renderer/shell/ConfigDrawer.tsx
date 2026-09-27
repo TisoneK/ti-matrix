@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react";
 import { WorldField, WorldInfo } from "../protocol";
 import { escapeDismisses } from "../core/nav";
 import { Button } from "../ui/controls";
-import { Budget, BUDGET, BUILTIN, LLM_SUGGESTION, isBuiltin } from "../core/models";
+import { Budget, BUDGET, BUILTIN, LLM_SUGGESTION, PROVIDER_PRESETS, isBuiltin } from "../core/models";
 import { Field, Fieldset } from "../ui/atoms";
 
 export interface ModelConfig {
@@ -122,6 +122,21 @@ export function ConfigDrawer({ worlds, world, fields, values, set, model, setMod
         <section className="drawer-section">
           <h3 className="drawer-section-title">Endpoint &amp; model</h3>
           <div className="drawer-grid">
+            <Field label="Provider" hint="fills the endpoint and key-env fields below — or pick Custom and set them yourself">
+              {(f) => (
+                <select {...f} value={PROVIDER_PRESETS.find((p) => p.base_url === model.base_url)?.name ?? ""}
+                        onChange={(e) => {
+                          const preset = PROVIDER_PRESETS.find((p) => p.name === e.target.value);
+                          if (!preset) return;
+                          setModel("base_url", preset.base_url);
+                          setModel("api_key_env", preset.api_key_env);
+                          setModel("model", "");
+                        }}>
+                  <option value="">Custom — type the endpoint below</option>
+                  {PROVIDER_PRESETS.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              )}
+            </Field>
             <Field label={modelLabels["base_url"] ?? "Endpoint"} hint="any OpenAI-compatible base URL">
               {(f) => <input {...f} type="text" value={model.base_url} spellCheck={false}
                              onChange={(e) => setModel("base_url", e.target.value)} />}

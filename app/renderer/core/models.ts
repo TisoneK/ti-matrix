@@ -41,6 +41,28 @@ export const LLM_SUGGESTION: ModelDefaults = {
   api_key_env: "OPENAI_API_KEY",
 };
 
+/**
+ * A provider the picker can fill in for you — base URL and the key-env name README documents for it.
+ * `model` is deliberately never suggested here: the app used to open pointing at a fixed model name
+ * (`qwen2.5:7b`) and died on its second event on any machine that hadn't pulled that exact one (see
+ * `BUILTIN`'s own docstring). "Fetch models" (the drawer's own endpoint probe) or a typed name is how a
+ * model gets chosen once the endpoint is; picking a provider only answers "where," never "which."
+ */
+export interface ProviderPreset {
+  name: string;
+  base_url: string;
+  api_key_env: string;
+}
+
+export const PROVIDER_PRESETS: ProviderPreset[] = [
+  { name: "Ollama (local)", base_url: "http://localhost:11434/v1", api_key_env: "OPENAI_API_KEY" },
+  { name: "vLLM (local)", base_url: "http://localhost:8000/v1", api_key_env: "OPENAI_API_KEY" },
+  { name: "OpenAI", base_url: "https://api.openai.com/v1", api_key_env: "OPENAI_API_KEY" },
+  { name: "DeepSeek", base_url: "https://api.deepseek.com/v1", api_key_env: "DEEPSEEK_API_KEY" },
+  { name: "Groq", base_url: "https://api.groq.com/openai/v1", api_key_env: "GROQ_API_KEY" },
+  { name: "OpenRouter", base_url: "https://openrouter.ai/api/v1", api_key_env: "OPENROUTER_API_KEY" },
+];
+
 /** The provider's name, from its host — the readout people actually scan. */
 const PROVIDERS: [RegExp, string][] = [
   [/^api\.deepseek\./, "DeepSeek"],
