@@ -82,6 +82,38 @@ export function Readouts({ items }: { items: Readout[] }) {
   );
 }
 
+/**
+ * A radial gauge: a fraction of a whole drawn as an arc rather than a length.
+ *
+ * The linear bar (`Confidence`) belongs to a *claim* — the model's belief in a move — and is tinted by
+ * how strong that belief is. This is its round counterpart for the instrument's own chrome: coverage, a
+ * budget being spent, how much of the run has settled. It carries no colour claim of its own, so the
+ * caller names the tone; a gauge measures, it does not assert.
+ */
+export function Dial({ value, size = 30, tone = "ice", label, sub }: {
+  value: number;
+  size?: number;
+  tone?: "ice" | "green" | "amber" | "violet";
+  label: string;
+  /** The reading printed beside the arc. Omit it for a bare gauge. */
+  sub?: string;
+}) {
+  const v = Math.max(0, Math.min(1, value));
+  const r = (size - 5) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="dial-group">
+      <svg className={`dial ${tone}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+           role="img" aria-label={`${label}: ${Math.round(v * 100)} percent`}>
+        <circle className="dial-track" cx={size / 2} cy={size / 2} r={r} />
+        <circle className="dial-fill" cx={size / 2} cy={size / 2} r={r}
+                strokeDasharray={`${c * v} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      </svg>
+      {sub ? <span className="dial-sub mono">{sub}</span> : null}
+    </span>
+  );
+}
+
 export function Badge({ children, tone = "", title }: {
   children: ReactNode;
   tone?: "" | "ok" | "fail" | "warn";

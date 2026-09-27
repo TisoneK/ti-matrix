@@ -96,7 +96,7 @@ export function TreePanel({ tree, decisions, cursor, onSeek, onHover, peek, live
               {view.edges.map((edge) => (
                 <path
                   key={`${edge.from.id}->${edge.to.id}`}
-                  className={`node-edge ${edge.to.id === hover ? "live" : ""} ${edge.dead ? "cold" : edge.live ? "live" : ""}`}
+                  className={`node-edge ${edge.to.id === hover ? "live" : ""} ${edge.dead ? "cold" : edge.live ? "live flowing" : ""}`}
                   d={`M${edge.from.x} ${edge.from.y + NODE_H / 2} C${edge.from.x} ${edge.from.y + ROW * 0.55}, ${edge.to.x} ${edge.to.y - ROW * 0.55}, ${edge.to.x} ${edge.to.y - NODE_H / 2}`}
                 />
               ))}

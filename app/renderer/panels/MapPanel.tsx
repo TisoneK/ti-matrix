@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import { MazeKnowledge, KnownCell, boundsOf, cellKey, parseCellKey, statsOf } from "../core/knowledge";
 import { Decision, EngineEventFrame } from "../core/types";
 import { Chip, IconButton } from "../ui/controls";
-import { Empty, PaneBody, PaneHead, Readouts } from "../ui/atoms";
+import { Dial, Empty, PaneBody, PaneHead, Readouts } from "../ui/atoms";
 import { WorldSurface, PageView } from "./WorldSurface";
 
 const PITCH = 20;
@@ -60,7 +60,10 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
 
   return (
     <section className="pane map" aria-label="the map">
-      <PaneHead title="Map" sub={stats.coverage === null ? "reading the grid…" : `${Math.round(stats.coverage * 100)}% of the floor seen`}>
+      <PaneHead title="Map" sub={stats.coverage === null ? "reading the grid…" : undefined}>
+        {stats.coverage !== null
+          ? <Dial value={stats.coverage} tone="ice" label="floor seen" sub={`${Math.round(stats.coverage * 100)}% seen`} />
+          : null}
         <Chip label="heat" pressed={heat} onClick={() => setHeat((v) => !v)}
               title="recolour explored cells by how many times the run stepped on them" />
         <Chip label="ghost" pressed={ghost} onClick={() => setGhost((v) => !v)}

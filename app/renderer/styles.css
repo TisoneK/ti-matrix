@@ -65,6 +65,12 @@
      as a console because the eye had nowhere to land. Three steps, and no more than three. */
   --t-title: 15.5px;   /* a pane's name — the structural label */
   --t-lead: 12.5px;    /* the line a decision or a card leads with */
+
+  /* Motion is part of the instrument, not decoration on top of it. Three durations, so a surface that
+     grows, a value that changes and a thing that is simply alive cannot each invent their own tempo. */
+  --t-tap: 150ms;      /* a control answering the hand */
+  --t-move: 420ms;     /* something arriving or changing */
+  --t-live: 1.9s;      /* the pulse of anything currently happening */
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -435,6 +441,22 @@ svg { display: block; }
 
 /* ── readouts: small labelled numbers, the instrument's dials ───────────── */
 
+/* The round gauge beside the linear confidence bar. The arc is the whole of the reading; the printed
+   number beside it is for the exact value, exactly as the node plates do it. No glow, no tick marks —
+   the dial is one value against one whole, and dressing it up as a cockpit instrument would be the
+   costume this app is deliberately not wearing. */
+.dial-group { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.dial { flex: none; }
+.dial-track { fill: none; stroke: var(--line-2); stroke-width: 2.5; }
+.dial-fill {
+  fill: none; stroke: var(--ice); stroke-width: 2.5; stroke-linecap: round;
+  transition: stroke-dasharray var(--t-move) cubic-bezier(0.3, 0.7, 0.3, 1), stroke var(--t-move) ease;
+}
+.dial.green .dial-fill { stroke: var(--green); }
+.dial.amber .dial-fill { stroke: var(--amber); }
+.dial.violet .dial-fill { stroke: var(--violet); }
+.dial-sub { font-size: 11px; color: var(--fg-3); white-space: nowrap; }
+
 .readouts { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .readout { display: flex; flex-direction: column; gap: 1px; }
 .readout dt { font: 500 9.5px/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-4); }
@@ -444,7 +466,11 @@ svg { display: block; }
 
 /* ── the map ─────────────────────────────────────────────────────────────── */
 
-.mapwrap { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--s3); }
+/* Same surface lift as the tree sheet, so the two halves of the run read as one instrument. */
+.mapwrap {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: var(--s3);
+  background: radial-gradient(120% 90% at 50% 0%, rgba(88, 182, 255, 0.05), transparent 66%);
+}
 .mapwrap svg { width: 100%; height: 100%; }
 
 .cell-unknown { fill: #06080d; }
@@ -596,29 +622,47 @@ svg { display: block; }
 
 /* ── the tree ────────────────────────────────────────────────────────────── */
 
-.treewrap { position: absolute; inset: 0; overflow: auto; padding: var(--s3); }
+/* Depth, not glow: a cool lift from the top-left corner so the sheet the search is drawn on reads as a
+   surface with a light source rather than as flat ink. Kept near the noise floor — this is a room lit for
+   reading, not a hologram. */
+.treewrap {
+  position: absolute; inset: 0; overflow: auto; padding: var(--s3);
+  background: radial-gradient(120% 90% at 18% 0%, rgba(88, 182, 255, 0.055), transparent 62%);
+}
 .treewrap svg { min-width: 100%; }
 
 /* A node is a labelled plate, not a dot: it says which move the run made from this state, and the bar
    under the label is the belief it held here — the bar's length is the number, with the number itself
    small in the corner for the exact value. The branch's state is the plate's own treatment: ice where the
    run stands, green for the branch that settled it, dashed and dim for one it gave up. */
-.node-body { stroke-width: 1.5; }
+/* `transform-box: fill-box` makes an SVG plate grow from its own centre rather than from the drawing's
+   top-left corner — without it the birth of a node scaled it out of (0,0) of the viewBox, a lurch across
+   the pane instead of a pulse in place. Applies to the plates and the halos that scale with them. */
+.node-body { stroke-width: 1.5; transform-box: fill-box; transform-origin: center; }
 .node-body.alive { fill: var(--plate-2); stroke: var(--ice-line); }
 .node-body.live { fill: var(--ice-dim); stroke: var(--ice); animation: node-born 900ms ease-out; }
 .node-body.cold { fill: #131922; stroke: var(--line-2); stroke-dasharray: 3 3; }
 .node-body.settled { fill: var(--green-dim); stroke: var(--green); }
 .node-group:hover .node-body, .node-group:focus-within .node-body { stroke: var(--fg-2); }
+/* The whole plate answers the pointer, not just its outline: a hair of scale is the difference between
+   a diagram you read and a surface you can touch. Anchored at the centre like every other transform on
+   a node, so it leans rather than jumps. */
+.node-group { transition: transform var(--t-tap) ease; transform-box: fill-box; transform-origin: center; }
+.node-group:hover, .node-group:focus-within { transform: scale(1.035); }
 .node-move { font: 500 10.5px/1 var(--mono); fill: var(--fg-2); pointer-events: none; }
 .node-move.cold { fill: var(--fg-4); }
 .node-move.live { fill: var(--fg); }
 .node-move.settled { fill: #a9f0cd; }
 .node-score { font: 500 8.5px/1 var(--mono); fill: var(--fg-4); pointer-events: none; }
 .node-belief-track { fill: rgba(255, 255, 255, 0.08); }
-.node-belief { fill: var(--ice); }
+.node-belief { fill: var(--ice); transition: width var(--t-move) ease; }
 .node-belief.cold { fill: var(--line-2); }
 .node-belief.settled { fill: var(--green); }
-@keyframes node-born { 0% { transform: scale(0.2); opacity: 0; } 45% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes node-born {
+  0% { transform: scale(0.35); opacity: 0; }
+  62% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
 .node-edge { transition: stroke 140ms ease, opacity 140ms ease; }
 .node-hit { fill: transparent; cursor: pointer; }
 .node-peek { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-dasharray: 2 2; pointer-events: none; }
@@ -636,6 +680,11 @@ svg { display: block; }
 .node-edge { stroke: var(--line-2); stroke-width: 1.5; fill: none; }
 .node-edge.live { stroke: var(--ice-line); }
 .node-edge.cold { stroke: #1a212c; stroke-dasharray: 3 3; }
+/* The branch the run is still standing on carries a current: a slow dash travelling toward the live
+   node. It is the one motion that says *direction* — where the search came from and where it is now —
+   rather than merely that something is happening, so it is the only edge that moves. */
+.node-edge.flowing { stroke-dasharray: 5 8; animation: flow 1.5s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -13; } }
 
 .fold-chip { fill: var(--plate-2); stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 2; cursor: pointer; }
 .fold-chip:hover { stroke: var(--fg-3); }
