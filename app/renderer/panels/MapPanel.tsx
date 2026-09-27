@@ -52,14 +52,14 @@ export function MapPanel({ knowledge, decisions, world, events, focus, liveStep,
   // draws squares for the maze draws what the run read for everything else.
   if (world !== "maze") {
     return (
-      <section className="pane" aria-label="the world">
+      <section className="pane world" aria-label="the world">
         <WorldSurface world={world} events={events} decisions={decisions} page={page} />
       </section>
     );
   }
 
   return (
-    <section className="pane" aria-label="the map">
+    <section className="pane map" aria-label="the map">
       <PaneHead title="Map" sub={stats.coverage === null ? "reading the grid…" : `${Math.round(stats.coverage * 100)}% of the floor seen`}>
         <Chip label="heat" pressed={heat} onClick={() => setHeat((v) => !v)}
               title="recolour explored cells by how many times the run stepped on them" />

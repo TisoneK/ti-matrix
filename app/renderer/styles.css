@@ -357,6 +357,18 @@ svg { display: block; }
   overflow: hidden;
 }
 
+/* The split is a negotiation, not a fixed ratio. A prose world reads as a rail — cards stacked in one
+   narrow column — so it cedes width to the audit, which is where the tree and the ledger (the whole story
+   of the search) actually live; and when that world has nothing to draw at all — the run has read nothing
+   yet — it collapses to a sliver, the empty "middle" folded into the right rather than sitting at equal
+   width beside a full tree. `:has` keeps this a property of the content, so no caller has to pass a flag.
+   Guarded above 1180px because these carry two `:has` classes and so outrank the plain `.stage`
+   single-column rule that takes over below it. */
+@media (min-width: 1181px) {
+  .stage:has(.pane.world) { grid-template-columns: minmax(300px, 0.8fr) minmax(440px, 1.2fr); }
+  .stage:has(.pane.world .empty) { grid-template-columns: minmax(180px, 0.28fr) minmax(480px, 1.72fr); }
+}
+
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--plate); }
 /* The two halves of the audit column are not equals: the tree is the shape of the search — how wide it
    went and what it gave up — and the ledger is the list of the same steps in order. The ledger had the
@@ -570,6 +582,14 @@ svg { display: block; }
   font: 400 11.5px/1.5 var(--mono);
   color: var(--fg-4);
 }
+
+/* The world rail: cards down one column rather than tiled in a grid. Each card is bounded so it scrolls
+   within its own share instead of pushing its neighbours off the pane — a 300-row directory listing no
+   longer buries the readings and refusals under it. Bounded by viewport height, not a fixed pixel count,
+   so a tall card grows with the window and never strands the empty space below it. */
+.world-rail { display: flex; flex-direction: column; gap: var(--s3); }
+.world-card { display: flex; flex-direction: column; min-height: 0; }
+.world-rows { max-height: 38vh; overflow-y: auto; }
 .answer-card.verified h4 { color: var(--green); }
 .answer-card.unverified { border-color: var(--amber); background: var(--amber-dim); }
 .answer-card.unverified h4 { color: var(--amber); }

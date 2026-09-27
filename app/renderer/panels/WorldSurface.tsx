@@ -83,12 +83,18 @@ export function WorldSurface({ world, events, decisions, page }: { world: string
           </Empty>
         ) : (
           <>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+            {/* The cards are a rail, not a grid: they run down one column in the order the run met
+                them, and each scrolls on its own once it outgrows its share. A grid tile reflows with
+                the window and puts "Refused" beside "Known under" at the same weight; a rail keeps the
+                reading order fixed, lets a 300-row directory scroll inside its own card instead of
+                pushing every later card off the pane, and frees the width the audit column beside it
+                is always asking for. */}
+            <div className="world-rail">
               {cards.filter((card) => card.rows.length > 0).map((card) => (
-                <section key={card.title} className="card">
+                <section key={card.title} className="card world-card">
                   <h4>{card.title}</h4>
                   {card.hint ? <p className="dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{card.hint}</p> : null}
-                  <ul>
+                  <ul className="world-rows">
                     {card.rows.map((row, i) => (
                       <li key={`${row.left}-${i}`} className={row.tone ?? ""} style={{ paddingLeft: (row.indent ?? 0) * 12 }}>
                         <span className="nowrap" title={row.left}>{row.left}</span>
