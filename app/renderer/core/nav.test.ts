@@ -21,6 +21,11 @@ const compare: Nav = { view: "compare", configOpen: false };
 
 eq("compare cannot draw the setup sheet",
    [canConfigure("run"), canConfigure("library"), canConfigure("compare")], [true, true, false]);
+eq("nor can the console — it reads a run, it does not configure one", canConfigure("console"), false);
+eq("so a move to the console closes the sheet rather than carrying it there",
+   toView(runOpen, "console"), { view: "console", configOpen: false });
+eq("and config from the console goes where the sheet lives, and opens it",
+   toggleConfig({ view: "console", configOpen: false }), { view: "run", configOpen: true });
 
 eq("config on the run view is an ordinary toggle", toggleConfig(run), { view: "run", configOpen: true });
 eq("and toggles back", toggleConfig(runOpen), { view: "run", configOpen: false });
@@ -49,7 +54,7 @@ eq("starting from compare also lands on the run",
 
 /* ── a press is never a no-op ───────────────────────────────────────────── */
 
-for (const from of [run, runOpen, compare, { view: "library", configOpen: true } as Nav]) {
+for (const from of [run, runOpen, compare, { view: "console", configOpen: false } as Nav, { view: "library", configOpen: true } as Nav]) {
   const after = toggleConfig(from);
   const changed = after.view !== from.view || after.configOpen !== from.configOpen;
   eq(`config from ${from.view}/${from.configOpen} changes something`, changed, true);

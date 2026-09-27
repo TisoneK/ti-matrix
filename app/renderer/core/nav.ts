@@ -12,15 +12,20 @@
  * the run view, and any move that cannot show it closes it rather than remembering it.
  */
 
-export type View = "run" | "library" | "compare";
+export type View = "run" | "console" | "library" | "compare";
 
 export interface Nav {
   view: View;
   configOpen: boolean;
 }
 
-/** Views that can actually draw the setup sheet. Compare has no run to configure. */
-export const canConfigure = (view: View): boolean => view !== "compare";
+/**
+ * Views that can actually draw the setup sheet.
+ *
+ * Compare has two runs and no single one to configure; the console reads a run's telemetry and has no
+ * room for a form. Both send `config` to the run view, which is where the sheet lives.
+ */
+export const canConfigure = (view: View): boolean => view !== "compare" && view !== "console";
 
 /** A tab press. The sheet survives only where it can be seen. */
 export function toView(state: Nav, next: View): Nav {

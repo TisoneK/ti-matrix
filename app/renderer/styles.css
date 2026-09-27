@@ -1431,6 +1431,92 @@ svg { display: block; }
   }
 }
 
+/* ── the ops console: the run read as telemetry ─────────────────────────── */
+
+.console {
+  flex: 1; min-height: 0; overflow: hidden;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 1px; background: var(--line);
+}
+.console-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.kpi {
+  display: flex; align-items: center; gap: var(--s3); padding: 10px var(--s3);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(9px) saturate(1.15);
+  backdrop-filter: blur(9px) saturate(1.15);
+}
+.kpi-ring-bg { fill: none; stroke: var(--line-2); stroke-width: 5; }
+.kpi-ring-fg {
+  fill: none; stroke: var(--ice); stroke-width: 5; stroke-linecap: round;
+  transition: stroke-dashoffset .7s ease, stroke .5s ease;
+}
+.kpi-ring-fg.violet { stroke: var(--violet); }
+.kpi-ring-fg.amber { stroke: var(--amber); }
+.kpi-val { font: 600 13px var(--mono); fill: var(--fg); }
+.kpi-lbl { color: var(--fg-4); font: 500 9.5px/1.45 var(--ui); letter-spacing: .12em; text-transform: uppercase; }
+.kpi-lbl b { display: block; color: var(--fg-2); font: 500 11px/1.5 var(--mono); letter-spacing: 0; text-transform: none; }
+
+.console-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.28fr) minmax(0, 0.92fr);
+  gap: 1px; background: var(--line); min-height: 0;
+}
+
+/* The signals column is the only one that scrolls inside itself: three small charts stacked, each one a
+   series the run already carries. */
+.console-body { display: flex; flex-direction: column; gap: var(--s4); padding: var(--s3); overflow-y: auto; }
+.sig-lbl { display: flex; justify-content: space-between; color: var(--fg-4); font-size: 10.5px; margin-bottom: 5px; }
+.sig-lbl b { color: var(--holo); font-weight: 600; }
+.sig-chart { width: 100%; height: 54px; display: block; overflow: visible; }
+.sig-line { fill: none; stroke: var(--ice); stroke-width: 1.4; }
+.sig-area { fill: var(--ice-dim); stroke: none; }
+.sig-none { color: var(--fg-4); font-size: 10.5px; line-height: 1.5; margin: 0; }
+.sig-note { color: var(--fg-4); font: 400 10.5px/1.5 var(--mono); margin: 0; }
+.scan { position: relative; height: 2px; background: var(--line); margin-top: 3px; overflow: hidden; }
+.scan i {
+  position: absolute; top: 0; bottom: 0; width: 26px;
+  background: linear-gradient(90deg, transparent, var(--ice), transparent);
+  animation: scan-x 2.6s linear infinite;
+}
+@keyframes scan-x { from { left: -30px; } to { left: 100%; } }
+
+/* One bar per scored move, height = that move's belief. Colour says how strong it was, the same three
+   bands the confidence bar and the belief bar use. */
+.eq { display: flex; align-items: flex-end; gap: 3px; height: 40px; }
+.eq i { flex: 1; min-width: 2px; background: var(--ice); opacity: .75; border-radius: 1px 1px 0 0; transition: height .5s ease; }
+.eq i.low { background: var(--red); opacity: .6; }
+.eq i.high { background: var(--green); opacity: .9; }
+
+/* The current fan's belief spread: one segment per candidate, width is its share. A fan still unweighted
+   reads as even, dim segments rather than as a false split. */
+.dist { flex: none; padding: 10px var(--s3) 12px; border-top: 1px solid var(--line); }
+.dist-lbl { color: var(--fg-4); font-size: 10.5px; margin-bottom: 6px; }
+.dist-lbl em { font-style: normal; color: var(--fg-4); }
+.dist-bar { display: flex; height: 10px; overflow: hidden; border: 1px solid var(--line); }
+.dist-bar i { display: block; background: var(--line-2); transition: width .6s ease; }
+.dist-bar i.chosen { background: var(--green); }
+.dist-bar i.refused { background: rgba(255, 106, 106, 0.5); }
+
+/* The closing ticker: the run's own headlines in one line. */
+.ticker { overflow: hidden; white-space: nowrap; padding: 7px 0; background: var(--plate-2); border-top: 1px solid var(--line); }
+.ticker-run {
+  display: inline-block; padding-left: 100%;
+  animation: ticker 26s linear infinite;
+  color: var(--fg-3); font: 400 11px/1.4 var(--mono);
+}
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+/* Narrow: the gauges pair up and the three columns stack, the orbit keeping the tallest share because it
+   is the one thing here that needs room to be read. */
+@media (max-width: 1100px) {
+  .console-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console-cols {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 1fr) minmax(280px, 1.4fr) minmax(200px, 1fr);
+    overflow-y: auto;
+  }
+}
+
 /* ═══ the HUD layer ═══════════════════════════════════════════════════════════
    Everything above is the instrument's semantics; this is its costume. Kept in one place so it can be
    lifted out whole, and deliberately additive — nothing here changes what a colour or a shape means.

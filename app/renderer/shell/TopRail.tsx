@@ -60,6 +60,7 @@ export function TopRail({ view, onView, status, running, lamp, readouts, library
         {children}
         <nav className="tabs" role="tablist" aria-label="what to look at">
           <Tab label="Run" selected={view === "run"} onClick={() => onView("run")} />
+          <Tab label="Console" selected={view === "console"} onClick={() => onView("console")} />
           <Tab label="Library" selected={view === "library"} onClick={() => onView("library")} count={libraryCount} />
           <Tab label="Compare" selected={view === "compare"} onClick={() => onView("compare")} />
         </nav>

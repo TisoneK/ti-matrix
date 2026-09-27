@@ -34,6 +34,7 @@ import { ComparePanel } from "./panels/ComparePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { LiveTrace } from "./panels/LiveTrace";
 import { MapPanel } from "./panels/MapPanel";
+import { OpsConsole } from "./panels/OpsConsole";
 import { formatElapsed, formatTokens, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
 import { canRememberKey, forgetKey as forgetStoredKey, loadRememberedKey, rememberKey } from "./core/keyring";
@@ -280,6 +281,7 @@ export function App() {
       if (!shortcutsLive(blocking, { alt: e.altKey, meta: e.metaKey, ctrl: e.ctrlKey })) return;
       if (e.key === "l") { setView((v) => (v === "library" ? "run" : "library")); }
       if (e.key === "c") { setView((v) => (v === "compare" ? "run" : "compare")); }
+      if (e.key === "o") { setView((v) => (v === "console" ? "run" : "console")); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -469,6 +471,11 @@ export function App() {
             </>
           )}
         </main>
+      ) : view === "console" ? (
+        /* The console is a view, not a reskin of the run: the same run, read as telemetry. It owns no
+           config (see nav.ts) and its own ticker and transport, so it stands alone here. */
+        <OpsConsole decisions={shown.decisions} trust={shown.trust} cursor={playback.cursor} live={running}
+                    tokens={session.settled?.usage?.total_tokens ?? null} />
       ) : view === "library" ? (
         <main className="stage" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
           <LibraryPanel
@@ -491,7 +498,7 @@ export function App() {
         </main>
       )}
 
-      {view === "run" ? (
+      {view === "run" || view === "console" ? (
         <Transport
           playback={playback}
           decisions={projection.decisions}
