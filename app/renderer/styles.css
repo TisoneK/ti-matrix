@@ -1354,6 +1354,83 @@ svg { display: block; }
 }
 .stubs.live .stub-edge { stroke: var(--ice-line); opacity: 0.7; }
 
+/* ── the live trace: the candidate radar and the state feed ─────────────── */
+
+/* The audit column, split into the two faces of one run: what it is weighing right now (a radial scan)
+   and what it has already done (a feed). Side by side rather than stacked, because the radar wants to be
+   square and the feed wants to be long. */
+.pane.right.trace {
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* The radar owns the pane's free height and hands what is left to the answer band under it. */
+.trace-body { display: flex; flex-direction: column; }
+.radarwrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: var(--s3); }
+.radar { width: 100%; height: 100%; overflow: visible; }
+.radar .ring { fill: none; stroke: var(--line-2); stroke-width: 1; }
+/* The sweep is a clock, not a claim: it turns at a constant rate whatever the run is doing, so nobody
+   reads meaning into where the beam happens to be. */
+.radar .sweep { transform-box: view-box; transform-origin: 200px 200px; animation: sweep 4.5s linear infinite; }
+@keyframes sweep { to { transform: rotate(360deg); } }
+
+.radar .node circle.core { fill: var(--plate); stroke: #3a4650; stroke-width: 1.5; transition: stroke .5s, fill .5s; }
+.radar .node text { fill: var(--fg-4); font: 500 9.5px var(--mono); transition: fill .5s; pointer-events: none; }
+.radar .node .ping { fill: none; stroke: var(--holo); stroke-width: 1.5; opacity: 0; }
+.radar .node.live circle.core { stroke: var(--holo); }
+.radar .node.live text { fill: var(--fg); }
+.radar .node.live .ping { animation: radar-ping 1.6s ease-out infinite; }
+@keyframes radar-ping { 0% { r: 10; opacity: .9; } 100% { r: 34; opacity: 0; } }
+.radar .node.won circle.core { stroke: var(--green); fill: var(--green-dim); }
+.radar .node.won text { fill: var(--green); }
+/* Ruled out and weighed-and-not-taken read identically here — both are candidates the run did not stand
+   on — and that is on purpose: the radar shows what survives, the feed says why one didn't. */
+.radar .node.dropped circle.core { opacity: .32; }
+.radar .node.dropped text { opacity: .32; }
+.radar .node.dropped .path-line { opacity: .2; }
+
+.radar .path-line { fill: none; stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; transition: stroke .5s, opacity .5s; }
+.radar .path-line.live { stroke: var(--holo); stroke-dasharray: none; opacity: 1; }
+.radar .path-line.won { stroke: var(--green); stroke-dasharray: none; opacity: 1; stroke-width: 2; }
+
+.radar .center-readout { fill: var(--fg-4); font: 600 10px var(--mono); text-anchor: middle; }
+.radar .center-readout.big { font-size: 16px; fill: var(--ice); transition: fill .4s; }
+.radar .center-readout.big.settled { fill: var(--green); }
+
+/* The run's last word, under the radar: green only when the world verified it, amber when it is the best
+   a stopped run could synthesize — never the colour that means the world agreed. */
+.answer-band {
+  flex: none; margin: 0 var(--s3) var(--s3); padding: 9px var(--s3);
+  border: 1px solid var(--line); color: var(--fg-3); font-size: 12px;
+  transition: border-color .5s, color .5s, background .5s;
+}
+.answer-band.on { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+.answer-band.held { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+.answer-band .lbl { display: block; font: 500 9.5px/1 var(--ui); letter-spacing: .13em; text-transform: uppercase; color: var(--fg-4); margin-bottom: 5px; }
+.answer-band .answer-text { white-space: pre-wrap; }
+
+/* The feed: every turn, newest first, each line rising as it lands. */
+.feedwrap { display: flex; flex-direction: column; min-height: 0; }
+.feed { flex: 1; min-height: 0; margin: 0; padding: 6px 10px; list-style: none; overflow-y: auto; display: flex; flex-direction: column; }
+.feed-line {
+  display: flex; gap: 9px; padding: 5px 0; font-size: 11.5px; color: var(--fg-3);
+  border-bottom: 1px dashed var(--line); animation: rise .4s ease both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+.feed-line .t { color: var(--fg-4); min-width: 46px; font: 500 10.5px/1.5 var(--mono); flex: none; }
+.feed-line .body { color: var(--fg-2); min-width: 0; }
+.feed-line.flag .body { color: var(--amber); }
+.feed-line.win .body { color: var(--green); font-weight: 600; }
+.feed-line.retreat .body { color: var(--violet); }
+
+/* Below the stage's own breakpoint the two faces stack instead of sharing a width neither can use. */
+@media (max-width: 900px) {
+  .pane.right.trace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 1fr) minmax(180px, 1fr);
+  }
+}
+
 /* ═══ the HUD layer ═══════════════════════════════════════════════════════════
    Everything above is the instrument's semantics; this is its costume. Kept in one place so it can be
    lifted out whole, and deliberately additive — nothing here changes what a colour or a shape means.

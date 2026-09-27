@@ -3,7 +3,10 @@
  *
  * Three views over one run: Run (a live or loaded run, driven by one cursor), Library (every run kept),
  * Compare (two of them at once). The rule the whole layout follows is that the visualization is the
- * product — map, tree and ledger take the screen, and the config that produced them is one toggle away.
+ * product — the world, the candidate trace and the feed take the screen, and the config that produced
+ * them is one toggle away. (`TreePanel`/`LogPanel` still exist and still read the same projection: the
+ * tree is the search's *shape* after the fact, the trace is its live face. Swapping them back is the one
+ * block below.)
  *
  * The cursor is the only piece of state shared between panels. Clicking a ledger row, a tree node or the
  * scrubber all move it, and the map, the tree, the ledger and the inspector are all projections of it, so
@@ -29,9 +32,8 @@ import { Welcome } from "./shell/Welcome";
 import { Transport } from "./shell/Transport";
 import { ComparePanel } from "./panels/ComparePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
-import { LogPanel } from "./panels/LogPanel";
+import { LiveTrace } from "./panels/LiveTrace";
 import { MapPanel } from "./panels/MapPanel";
-import { TreePanel } from "./panels/TreePanel";
 import { formatElapsed, formatTokens, outcomeLabel, outcomeTone, pct } from "./core/format";
 import { loadSettings, saveSettings } from "./core/settings";
 import { canRememberKey, forgetKey as forgetStoredKey, loadRememberedKey, rememberKey } from "./core/keyring";
@@ -458,17 +460,12 @@ export function App() {
                         hoverCell={hover === null ? null : shown.decisions[hover]?.cell ?? null}
                         page={page} />
 
-          <div className="pane right">
-            <section className="pane" aria-label="search tree">
-              <TreePanel tree={shown.tree} decisions={shown.decisions} cursor={playback.cursor} onSeek={playback.at}
-                         onHover={setHover} peek={hover} live={running} />
-            </section>
-            <section className="pane" aria-label="decisions">
-              <LogPanel decisions={shown.decisions} trust={shown.trust} cursor={playback.cursor}
-                        bookmarks={playback.bookmarks} onSeek={playback.at} onBookmark={playback.toggleBookmark}
-                        onHover={setHover} peek={hover} />
-            </section>
-            </div>
+          {/* The audit column is now the live trace — a radar of the candidates being weighed and a feed
+              of every turn as it lands — rather than the tree above the ledger. Same projection, same
+              cursor; only the face is different. */}
+          <div className="pane right trace">
+            <LiveTrace decisions={shown.decisions} cursor={playback.cursor} live={running} />
+          </div>
             </>
           )}
         </main>
